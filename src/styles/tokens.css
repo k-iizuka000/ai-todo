@@ -1,0 +1,239 @@
+/**
+ * デザイントークン定義
+ * カラーパレットとスタイルの一元管理
+ */
+
+@layer base {
+  :root {
+    /* Base Colors */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    /* Card Colors */
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    /* Popover Colors */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    /* Primary Colors */
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+
+    /* Secondary Colors */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+
+    /* Muted Colors */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    /* Accent Colors */
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+
+    /* Destructive Colors */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Border & Input Colors */
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+
+    /* Border Radius */
+    --radius: 0.5rem;
+
+    /* Task Status Colors */
+    --status-todo: 220 15% 60%;
+    --status-in-progress: 210 100% 60%;
+    --status-done: 120 60% 50%;
+    --status-archived: 30 20% 40%;
+
+    /* Priority Colors */
+    --priority-low: 120 40% 60%;
+    --priority-medium: 45 100% 60%;
+    --priority-high: 25 100% 60%;
+    --priority-urgent: 0 80% 60%;
+    --priority-critical: 0 100% 50%;
+
+    /* Semantic Colors */
+    --success: 120 60% 50%;
+    --warning: 45 100% 60%;
+    --error: 0 84% 60%;
+    --info: 210 100% 60%;
+
+    /* Spacing Scale */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+
+    /* Typography Scale */
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+    --font-size-3xl: 1.875rem;
+    --font-size-4xl: 2.25rem;
+
+    /* Line Heights */
+    --line-height-tight: 1.25;
+    --line-height-snug: 1.375;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.625;
+    --line-height-loose: 2;
+
+    /* Font Weights */
+    --font-weight-light: 300;
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    --font-weight-extrabold: 800;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-base: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+    /* Z-Index Scale */
+    --z-dropdown: 1000;
+    --z-sticky: 1020;
+    --z-fixed: 1030;
+    --z-modal-backdrop: 1040;
+    --z-modal: 1050;
+    --z-popover: 1060;
+    --z-tooltip: 1070;
+  }
+
+  .dark {
+    /* Dark Theme Colors */
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+
+    /* Dark Theme Task Status Colors */
+    --status-todo: 220 15% 70%;
+    --status-in-progress: 210 100% 70%;
+    --status-done: 120 60% 60%;
+    --status-archived: 30 20% 50%;
+
+    /* Dark Theme Priority Colors */
+    --priority-low: 120 40% 70%;
+    --priority-medium: 45 100% 70%;
+    --priority-high: 25 100% 70%;
+    --priority-urgent: 0 80% 70%;
+    --priority-critical: 0 100% 60%;
+  }
+}
+
+/* Utility Classes */
+@layer utilities {
+  /* Status Colors */
+  .status-todo {
+    @apply text-status-todo;
+  }
+  
+  .status-in-progress {
+    @apply text-status-in-progress;
+  }
+  
+  .status-done {
+    @apply text-status-done;
+  }
+  
+  .status-archived {
+    @apply text-status-archived;
+  }
+
+  /* Priority Colors */
+  .priority-low {
+    @apply text-priority-low;
+  }
+  
+  .priority-medium {
+    @apply text-priority-medium;
+  }
+  
+  .priority-high {
+    @apply text-priority-high;
+  }
+  
+  .priority-urgent {
+    @apply text-priority-urgent;
+  }
+  
+  .priority-critical {
+    @apply text-priority-critical;
+  }
+
+  /* Background Status Colors */
+  .bg-status-todo {
+    @apply bg-status-todo/20;
+  }
+  
+  .bg-status-in-progress {
+    @apply bg-status-in-progress/20;
+  }
+  
+  .bg-status-done {
+    @apply bg-status-done/20;
+  }
+  
+  .bg-status-archived {
+    @apply bg-status-archived/20;
+  }
+
+  /* Background Priority Colors */
+  .bg-priority-low {
+    @apply bg-priority-low/20;
+  }
+  
+  .bg-priority-medium {
+    @apply bg-priority-medium/20;
+  }
+  
+  .bg-priority-high {
+    @apply bg-priority-high/20;
+  }
+  
+  .bg-priority-urgent {
+    @apply bg-priority-urgent/20;
+  }
+  
+  .bg-priority-critical {
+    @apply bg-priority-critical/20;
+  }
+}

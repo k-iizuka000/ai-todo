@@ -6,6 +6,9 @@ import ProtectedRoute, { AuthenticatedRedirect } from '@/components/auth/Protect
 import Dashboard from '@/pages/Dashboard';
 import Tasks from '@/pages/Tasks';
 import TaskDetailDemo from '@/pages/TaskDetailDemo';
+import { ProjectManagement } from '@/pages/ProjectManagement';
+import Calendar from '@/pages/Calendar';
+import Analytics from '@/pages/Analytics';
 import NotFound from '@/pages/NotFound';
 import LoginForm from '@/pages/auth/LoginForm';
 import SignupForm from '@/pages/auth/SignupForm';
@@ -60,38 +63,23 @@ const AppRouter: React.FC = () => {
           
           {/* Tasks routes */}
           <Route path="tasks" element={<Tasks />} />
+          <Route path="tasks/:taskId" element={<Tasks />} />
           <Route path="tasks/today" element={<Tasks />} />
+          <Route path="tasks/today/:taskId" element={<Tasks />} />
           <Route path="tasks/important" element={<Tasks />} />
+          <Route path="tasks/important/:taskId" element={<Tasks />} />
           <Route path="tasks/completed" element={<Tasks />} />
+          <Route path="tasks/completed/:taskId" element={<Tasks />} />
           <Route path="tasks/demo" element={<TaskDetailDemo />} />
           
-          {/* Other routes - placeholder components */}
-          <Route path="projects" element={
-            <div className="p-6">
-              <h1 className="text-2xl font-bold text-gray-900 mb-6">プロジェクト</h1>
-              <div className="card">
-                <p className="text-gray-600">プロジェクト機能は後のフェーズで実装予定です。</p>
-              </div>
-            </div>
-          } />
+          {/* Project routes */}
+          <Route path="projects" element={<ProjectManagement />} />
           
-          <Route path="calendar" element={
-            <div className="p-6">
-              <h1 className="text-2xl font-bold text-gray-900 mb-6">カレンダー</h1>
-              <div className="card">
-                <p className="text-gray-600">カレンダー機能は後のフェーズで実装予定です。</p>
-              </div>
-            </div>
-          } />
+          {/* Calendar routes */}
+          <Route path="calendar" element={<Calendar />} />
           
-          <Route path="analytics" element={
-            <div className="p-6">
-              <h1 className="text-2xl font-bold text-gray-900 mb-6">分析</h1>
-              <div className="card">
-                <p className="text-gray-600">分析機能は後のフェーズで実装予定です。</p>
-              </div>
-            </div>
-          } />
+          {/* Analytics routes */}
+          <Route path="analytics" element={<Analytics />} />
           
           {/* Settings routes with nested layout */}
           <Route path="settings" element={<SettingsLayout />}>

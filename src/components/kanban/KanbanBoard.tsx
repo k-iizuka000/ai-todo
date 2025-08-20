@@ -2,7 +2,7 @@
  * メインカンバンボードコンポーネント
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { 
   DndContext, 
   DragEndEvent, 
@@ -18,13 +18,25 @@ import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Task, TaskStatus } from '@/types/task';
 import { KanbanColumn } from './KanbanColumn';
 import { mockTasks } from '@/mock/tasks';
+import { isTaskStatus, isValidTask, TypeGuardError } from '@/utils/typeGuards';
 
+/**
+ * KanbanBoardコンポーネントのProps
+ */
 interface KanbanBoardProps {
+  /** 表示するタスクリスト（デフォルト：モックデータ） */
   tasks?: Task[];
+  /** タスク移動時のコールバック */
   onTaskMove?: (taskId: string, newStatus: TaskStatus) => void;
+  /** タスククリック時のコールバック */
   onTaskClick?: (task: Task) => void;
+  /** タスク追加時のコールバック */
   onAddTask?: (status: TaskStatus) => void;
+  /** サブタスク完了切り替え時のコールバック */
+  onSubtaskToggle?: (taskId: string, subtaskId: string) => void;
+  /** コンパクト表示モード */
   compact?: boolean;
+  /** 追加のCSSクラス */
   className?: string;
 }
 
@@ -39,23 +51,67 @@ const COLUMN_TITLES: Record<TaskStatus, string> = {
   archived: 'Archived'
 };
 
+// ドラッグ＆ドロップ設定
+const DRAG_ACTIVATION_DISTANCE = 8; // ピクセル単位でのドラッグ開始距離
+const DRAG_PREVIEW_OPACITY = 0.9; // ドラッグプレビューの透明度
+const DRAG_CARD_OPACITY = 0.5; // ドラッグ中のカードの透明度
+
+/**
+ * カンバンボードメインコンポーネント
+ * 
+ * dnd-kitを使用したドラッグ&ドロップ機能付きのカンバンボード。
+ * タスクの状態変更、リオーダリング、サブタスク管理などの機能を提供。
+ * エラーハンドリングと型安全性を重視した実装。
+ * 
+ * 主な機能:
+ * - タスクのドラッグ&ドロップによるステータス変更
+ * - 同一カラム内でのタスクの順序変更
+ * - サブタスクの完了状態切り替え
+ * - コンパクト表示モードの切り替え
+ * - アクセシビリティ対応
+ * 
+ * @param props KanbanBoardコンポーネントのプロパティ
+ * @returns KanbanBoardコンポーネント
+ */
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   tasks = mockTasks,
   onTaskMove,
   onTaskClick,
   onAddTask,
+  onSubtaskToggle,
   compact = false,
   className = ''
 }) => {
-  const [taskList, setTaskList] = useState<Task[]>(tasks);
+  // 型安全な初期化
+  const validatedTasks = useMemo(() => {
+    try {
+      return tasks.filter((task, index) => {
+        if (!isValidTask(task)) {
+          console.warn(`Invalid task at index ${index}:`, task);
+          return false;
+        }
+        return true;
+      });
+    } catch (error) {
+      console.error('Error validating tasks:', error);
+      return [];
+    }
+  }, [tasks]);
+
+  const [taskList, setTaskList] = useState<Task[]>(validatedTasks);
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
+
+  // propsのタスクが変更された時にtaskListを同期
+  useEffect(() => {
+    setTaskList(validatedTasks);
+  }, [validatedTasks]);
 
   // dnd-kitのセンサー設定
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // 8px移動で開始
+        distance: DRAG_ACTIVATION_DISTANCE,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -82,7 +138,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   }, [taskList]);
 
   // タスクの折り畳み状態を切り替え
-  const handleToggleTaskCollapse = (taskId: string) => {
+  const handleToggleTaskCollapse = useCallback((taskId: string) => {
     setCollapsedTasks(prev => {
       const newSet = new Set(prev);
       if (newSet.has(taskId)) {
@@ -92,86 +148,154 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       }
       return newSet;
     });
-  };
+  }, []);
+
+  // サブタスクの完了状態を切り替え
+  const handleSubtaskToggle = useCallback((taskId: string, subtaskId: string) => {
+    try {
+      setTaskList(prev => prev.map(task => {
+        if (task.id !== taskId) return task;
+        
+        const subtaskToUpdate = task.subtasks.find(sub => sub.id === subtaskId);
+        if (!subtaskToUpdate) {
+          console.warn(`Subtask with id ${subtaskId} not found in task ${taskId}`);
+          return task;
+        }
+
+        const updatedSubtasks = task.subtasks.map(subtask => 
+          subtask.id === subtaskId 
+            ? { ...subtask, completed: !subtask.completed, updatedAt: new Date() }
+            : subtask
+        );
+
+        return {
+          ...task,
+          subtasks: updatedSubtasks,
+          updatedAt: new Date()
+        };
+      }));
+
+      // 外部コールバックがあれば呼び出し
+      if (onSubtaskToggle) {
+        try {
+          onSubtaskToggle(taskId, subtaskId);
+        } catch (callbackError) {
+          console.error('Error in onSubtaskToggle callback:', callbackError);
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling subtask:', error);
+    }
+  }, [onSubtaskToggle]);
 
   // ドラッグ開始
-  const handleDragStart = (event: DragStartEvent) => {
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     const draggedTask = taskList.find(task => task.id === event.active.id);
     setDraggedTask(draggedTask || null);
-  };
+  }, [taskList]);
 
   // ドラッグ中（リアルタイム移動）
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    try {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
 
-    const activeTask = taskList.find(task => task.id === active.id);
-    if (!activeTask) return;
+      const activeTask = taskList.find(task => task.id === active.id);
+      if (!activeTask) {
+        console.warn(`Task with id ${active.id} not found during drag over`);
+        return;
+      }
 
-    // 新しいステータスを判定
-    let newStatus: TaskStatus;
-    if (COLUMN_ORDER.includes(over.id as TaskStatus)) {
-      // カラム上にドロップ
-      newStatus = over.id as TaskStatus;
-    } else {
-      // 他のタスク上にドロップ - そのタスクのステータスを使用
-      const overTask = taskList.find(task => task.id === over.id);
-      if (!overTask) return;
-      newStatus = overTask.status;
+      // 新しいステータスを判定（型安全）
+      let newStatus: TaskStatus;
+      if (isTaskStatus(over.id) && COLUMN_ORDER.includes(over.id)) {
+        // カラム上にドロップ
+        newStatus = over.id;
+      } else {
+        // 他のタスク上にドロップ - そのタスクのステータスを使用
+        const overTask = taskList.find(task => task.id === over.id);
+        if (!overTask || !isValidTask(overTask)) {
+          console.warn(`Target task with id ${over.id} not found or invalid during drag over`);
+          return;
+        }
+        newStatus = overTask.status;
+      }
+
+      // ステータスが変わる場合のみ更新
+      if (activeTask.status !== newStatus) {
+        setTaskList(prev => prev.map(task => 
+          task.id === active.id 
+            ? { ...task, status: newStatus, updatedAt: new Date() }
+            : task
+        ));
+      }
+    } catch (error) {
+      console.error('Error during drag over:', error);
     }
-
-    // ステータスが変わる場合のみ更新
-    if (activeTask.status !== newStatus) {
-      setTaskList(prev => prev.map(task => 
-        task.id === active.id 
-          ? { ...task, status: newStatus, updatedAt: new Date() }
-          : task
-      ));
-    }
-  };
+  }, [taskList]);
 
   // ドラッグ終了
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setDraggedTask(null);
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    try {
+      const { active, over } = event;
+      setDraggedTask(null);
 
-    if (!over) return;
-
-    const activeTask = taskList.find(task => task.id === active.id);
-    if (!activeTask) return;
-
-    // 最終的なステータスを確定
-    let finalStatus: TaskStatus = activeTask.status;
-    if (COLUMN_ORDER.includes(over.id as TaskStatus)) {
-      finalStatus = over.id as TaskStatus;
-    } else {
-      const overTask = taskList.find(task => task.id === over.id);
-      if (overTask) {
-        finalStatus = overTask.status;
+      if (!over) {
+        console.warn('Drag ended without valid drop target');
+        return;
       }
-    }
 
-    // 外部コールバック呼び出し
-    if (activeTask.status !== finalStatus && onTaskMove) {
-      onTaskMove(activeTask.id, finalStatus);
-    }
-
-    // 同じカラム内でのリオーダリング
-    if (activeTask.status === finalStatus && over.id !== active.id) {
-      const columnTasks = tasksByStatus[finalStatus];
-      const oldIndex = columnTasks.findIndex(task => task.id === active.id);
-      const newIndex = columnTasks.findIndex(task => task.id === over.id);
-      
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const reorderedTasks = arrayMove(columnTasks, oldIndex, newIndex);
-        setTaskList(prev => {
-          const updatedTasks = [...prev];
-          const allOtherTasks = updatedTasks.filter(task => task.status !== finalStatus);
-          return [...allOtherTasks, ...reorderedTasks];
-        });
+      const activeTask = taskList.find(task => task.id === active.id);
+      if (!activeTask) {
+        console.error(`Task with id ${active.id} not found during drag end`);
+        return;
       }
+
+      // 最終的なステータスを確定（型安全）
+      let finalStatus: TaskStatus = activeTask.status;
+      if (isTaskStatus(over.id) && COLUMN_ORDER.includes(over.id)) {
+        finalStatus = over.id;
+      } else {
+        const overTask = taskList.find(task => task.id === over.id);
+        if (overTask && isValidTask(overTask)) {
+          finalStatus = overTask.status;
+        } else {
+          console.warn(`Target task with id ${over.id} not found or invalid during drag end`);
+        }
+      }
+
+      // 外部コールバック呼び出し
+      if (activeTask.status !== finalStatus && onTaskMove) {
+        try {
+          onTaskMove(activeTask.id, finalStatus);
+        } catch (callbackError) {
+          console.error('Error in onTaskMove callback:', callbackError);
+        }
+      }
+
+      // 同じカラム内でのリオーダリング
+      if (activeTask.status === finalStatus && over.id !== active.id) {
+        const columnTasks = tasksByStatus[finalStatus];
+        const oldIndex = columnTasks.findIndex(task => task.id === active.id);
+        const newIndex = columnTasks.findIndex(task => task.id === over.id);
+        
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const reorderedTasks = arrayMove(columnTasks, oldIndex, newIndex);
+          setTaskList(prev => {
+            const updatedTasks = [...prev];
+            const allOtherTasks = updatedTasks.filter(task => task.status !== finalStatus);
+            return [...allOtherTasks, ...reorderedTasks];
+          });
+        } else {
+          console.warn(`Invalid indices for reordering: oldIndex=${oldIndex}, newIndex=${newIndex}`);
+        }
+      }
+    } catch (error) {
+      console.error('Critical error during drag end:', error);
+      // ドラッグ状態をリセット
+      setDraggedTask(null);
     }
-  };
+  }, [taskList, tasksByStatus, onTaskMove]);
 
   return (
     <div className={`h-full ${className}`}>
@@ -190,25 +314,33 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-4'
           }
         `}>
-          {COLUMN_ORDER.map((status) => (
-            <KanbanColumn
-              key={status}
-              status={status}
-              title={COLUMN_TITLES[status]}
-              tasks={tasksByStatus[status]}
-              onTaskClick={onTaskClick}
-              onAddTask={() => onAddTask && onAddTask(status)}
-              onToggleTaskCollapse={handleToggleTaskCollapse}
-              compact={compact}
-              collapsedTasks={collapsedTasks}
-              className="min-h-0" // グリッド内での高さ制限
-            />
-          ))}
+          {COLUMN_ORDER.map((status) => {
+            const handleAddTask = onAddTask ? () => onAddTask(status) : undefined;
+            
+            return (
+              <KanbanColumn
+                key={status}
+                status={status}
+                title={COLUMN_TITLES[status]}
+                tasks={tasksByStatus[status]}
+                onTaskClick={onTaskClick}
+                onAddTask={handleAddTask}
+                onToggleTaskCollapse={handleToggleTaskCollapse}
+                onSubtaskToggle={handleSubtaskToggle}
+                compact={compact}
+                collapsedTasks={collapsedTasks}
+                className="min-h-0" // グリッド内での高さ制限
+              />
+            );
+          })}
         </div>
 
         {/* ドラッグプレビュー */}
         {draggedTask && (
-          <div className="fixed top-4 left-4 z-50 opacity-90 pointer-events-none">
+          <div 
+            className="fixed top-4 left-4 z-50 pointer-events-none"
+            style={{ opacity: DRAG_PREVIEW_OPACITY }}
+          >
             <div className="bg-white border-2 border-blue-400 rounded-lg p-3 shadow-lg">
               <div className="font-medium text-sm text-gray-900">
                 {draggedTask.title}

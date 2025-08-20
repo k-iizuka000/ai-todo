@@ -3,19 +3,20 @@
  */
 
 import React, { useState } from 'react';
-import { Task, Priority, TaskStatus } from '../../types/task';
+import { Task, TaskDetail, Priority, TaskStatus } from '../../types/task';
+import { TaskDetailTabs } from './TaskDetailTabs';
 import SubTaskList from './SubTaskList';
 import ProgressIndicator from './ProgressIndicator';
 
 interface TaskDetailViewProps {
   /** 表示するタスク */
-  task: Task;
+  task: TaskDetail;
   /** 編集可能かどうか */
   editable?: boolean;
   /** 詳細表示モード */
   mode?: 'compact' | 'full';
   /** タスク更新時のコールバック */
-  onTaskUpdate?: (taskId: string, updates: Partial<Task>) => void;
+  onTaskUpdate?: (taskId: string, updates: Partial<TaskDetail>) => void;
   /** サブタスク操作のコールバック */
   onSubtaskToggle?: (subtaskId: string, completed: boolean) => void;
   onSubtaskAdd?: (title: string) => void;
@@ -38,7 +39,8 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
   onClose
 }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [editedTask, setEditedTask] = useState<Partial<Task>>(task);
+  const [editedTask, setEditedTask] = useState<Partial<TaskDetail>>(task);
+  const [activeTab, setActiveTab] = useState<'subtasks' | 'comments' | 'history'>('subtasks');
 
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
@@ -121,14 +123,18 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
     }
   };
 
-  const completedSubtasks = task.subtasks.filter(subtask => subtask.completed).length;
-  const totalSubtasks = task.subtasks.length;
+  const completedSubtasks = task.childTasks.filter(subtask => subtask.status === 'done').length;
+  const totalSubtasks = task.childTasks.length;
   const progress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
 
+  const handleTaskDetailUpdate = (updates: Partial<TaskDetail>) => {
+    onTaskUpdate?.(task.id, updates);
+  };
+
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden flex flex-col h-[80vh]">
       {/* ヘッダー */}
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             {isEditing ? (
@@ -216,12 +222,12 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
         </div>
       </div>
 
-      {/* メインコンテンツ */}
-      <div className="px-6 py-4">
-        {/* 基本情報グリッド */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          {/* 左カラム */}
-          <div className="space-y-4">
+      {/* メインコンテンツ - 2カラムレイアウト */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* 左カラム - メイン情報 */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {/* 基本情報 */}
+          <div className="space-y-6">
             {/* 説明 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -231,14 +237,52 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
                 <textarea
                   value={editedTask.description || ''}
                   onChange={(e) => setEditedTask({ ...editedTask, description: e.target.value })}
-                  rows={3}
+                  rows={4}
                   className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="タスクの詳細説明を入力..."
                 />
               ) : (
-                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap min-h-[100px] p-3 border border-gray-200 dark:border-gray-600 rounded-md">
                   {task.description || '説明がありません'}
                 </p>
+              )}
+            </div>
+
+            {/* 詳細情報グリッド */}
+            <div className="grid grid-cols-2 gap-6">
+              {/* 期限 */}
+              {task.dueDate && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    期限
+                  </label>
+                  <p className="text-gray-900 dark:text-gray-100 p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                    {new Date(task.dueDate).toLocaleString('ja-JP')}
+                  </p>
+                </div>
+              )}
+
+              {/* 時間見積・実績 */}
+              {(task.estimatedHours || task.actualHours) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    時間
+                  </label>
+                  <div className="space-y-1 text-sm p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                    {task.estimatedHours && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">見積:</span>
+                        <span className="text-gray-900 dark:text-gray-100">{task.estimatedHours}h</span>
+                      </div>
+                    )}
+                    {task.actualHours && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">実績:</span>
+                        <span className="text-gray-900 dark:text-gray-100">{task.actualHours}h</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -265,88 +309,55 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
                 </div>
               </div>
             )}
-          </div>
 
-          {/* 右カラム */}
-          <div className="space-y-4">
-            {/* 期限 */}
-            {task.dueDate && (
+            {/* 添付ファイル */}
+            {task.attachments.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  期限
+                  添付ファイル
                 </label>
-                <p className="text-gray-900 dark:text-gray-100">
-                  {new Date(task.dueDate).toLocaleString()}
-                </p>
-              </div>
-            )}
-
-            {/* 時間見積・実績 */}
-            {(task.estimatedHours || task.actualHours) && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  時間
-                </label>
-                <div className="space-y-1 text-sm">
-                  {task.estimatedHours && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">見積時間:</span>
-                      <span className="text-gray-900 dark:text-gray-100">{task.estimatedHours}時間</span>
+                <div className="space-y-2">
+                  {task.attachments.map(attachment => (
+                    <div key={attachment.id} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-700 rounded border">
+                      <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/20 rounded flex items-center justify-center">
+                        <span className="text-blue-600 text-xs">📎</span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{attachment.fileName}</p>
+                        <p className="text-xs text-gray-500">
+                          {Math.round(attachment.fileSize / 1024)}KB • 
+                          {attachment.uploadedAt.toLocaleDateString('ja-JP')}
+                        </p>
+                      </div>
                     </div>
-                  )}
-                  {task.actualHours && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 dark:text-gray-400">実績時間:</span>
-                      <span className="text-gray-900 dark:text-gray-100">{task.actualHours}時間</span>
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* 作成・更新情報 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                作成・更新情報
-              </label>
-              <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                <div>作成日: {new Date(task.createdAt).toLocaleString()}</div>
-                <div>更新日: {new Date(task.updatedAt).toLocaleString()}</div>
+            {/* メタ情報 */}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-600">
+              <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
+                <div>
+                  <span className="font-medium">作成:</span><br />
+                  {new Date(task.createdAt).toLocaleString('ja-JP')}
+                </div>
+                <div>
+                  <span className="font-medium">更新:</span><br />
+                  {new Date(task.updatedAt).toLocaleString('ja-JP')}
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* サブタスクセクション */}
-        {(totalSubtasks > 0 || editable) && (
-          <div className="space-y-4">
-            {/* サブタスク進捗 */}
-            {totalSubtasks > 0 && (
-              <div className="bg-gray-50 dark:bg-gray-750 p-4 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-                  サブタスク進捗状況
-                </h3>
-                <ProgressIndicator
-                  completed={completedSubtasks}
-                  total={totalSubtasks}
-                  size="large"
-                  label={`全体進捗: ${progress}%`}
-                />
-              </div>
-            )}
-
-            {/* サブタスクリスト */}
-            <SubTaskList
-              subtasks={task.subtasks}
-              onSubtaskToggle={onSubtaskToggle}
-              onSubtaskDelete={onSubtaskDelete}
-              onSubtaskAdd={onSubtaskAdd}
-              editable={editable}
-              collapsible={mode === 'compact'}
-              initialCollapsed={mode === 'compact'}
-            />
-          </div>
-        )}
+        {/* 右カラム - タブ */}
+        <TaskDetailTabs
+          task={task}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onUpdate={handleTaskDetailUpdate}
+        />
       </div>
     </div>
   );

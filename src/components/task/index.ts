@@ -38,6 +38,7 @@ export type {
 
 // タスク詳細コンポーネント群のエクスポート
 export { default as TaskDetailView } from './TaskDetailView'
+export { TaskDetailTabs } from './TaskDetailTabs'
 export { default as TaskHierarchy } from './TaskHierarchy'
 export { default as SubTaskList } from './SubTaskList'
 export { default as ProgressIndicator } from './ProgressIndicator'

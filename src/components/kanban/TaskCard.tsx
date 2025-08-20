@@ -2,7 +2,7 @@
  * タスクカードコンポーネント（フル表示版）
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Task, Priority } from '@/types/task';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -10,15 +10,29 @@ import { ChevronDown, ChevronRight, Calendar, Clock } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+/**
+ * TaskCardコンポーネントのProps
+ */
 interface TaskCardProps {
+  /** 表示するタスクオブジェクト */
   task: Task;
+  /** サブタスクリストの折りたたみ状態（外部制御時） */
   isCollapsed?: boolean;
+  /** サブタスクの折りたたみ切り替えコールバック */
   onToggleCollapse?: (taskId: string) => void;
+  /** サブタスク完了状態切り替えコールバック */
+  onSubtaskToggle?: (taskId: string, subtaskId: string) => void;
+  /** タスクカードクリック時のコールバック */
   onClick?: (task: Task) => void;
+  /** コンパクト表示モード */
   compact?: boolean;
 }
 
-// 優先度に応じた色設定
+/**
+ * 優先度に応じたCSSクラスを返す
+ * @param priority タスクの優先度
+ * @returns 優先度に対応したTailwind CSSクラス
+ */
 const getPriorityColor = (priority: Priority): string => {
   switch (priority) {
     case 'low':
@@ -34,7 +48,11 @@ const getPriorityColor = (priority: Priority): string => {
   }
 };
 
-// 優先度のラベル
+/**
+ * 優先度の日本語ラベルを返す
+ * @param priority タスクの優先度
+ * @returns 優先度の日本語表記
+ */
 const getPriorityLabel = (priority: Priority): string => {
   switch (priority) {
     case 'low':
@@ -50,19 +68,31 @@ const getPriorityLabel = (priority: Priority): string => {
   }
 };
 
-// 期限の状態を判定
+// 期限判定の設定
+const DUE_DATE_WARNING_DAYS = 2; // 期限警告日数
+const MS_PER_DAY = 1000 * 60 * 60 * 24; // 1日のミリ秒数
+
+/**
+ * 期限の状態を判定する
+ * @param dueDate タスクの期限日
+ * @returns 期限状態（期限切れ、期限間近、通常）
+ */
 const getDueDateStatus = (dueDate?: Date): 'overdue' | 'due-soon' | 'normal' => {
   if (!dueDate) return 'normal';
   
   const now = new Date();
-  const diffDays = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const diffDays = Math.ceil((dueDate.getTime() - now.getTime()) / MS_PER_DAY);
   
   if (diffDays < 0) return 'overdue';
-  if (diffDays <= 2) return 'due-soon';
+  if (diffDays <= DUE_DATE_WARNING_DAYS) return 'due-soon';
   return 'normal';
 };
 
-// 期限バッジの色
+/**
+ * 期限状態に応じたバッジの色を返す
+ * @param status 期限の状態
+ * @returns 期限状態に対応したTailwind CSSクラス
+ */
 const getDueDateColor = (status: 'overdue' | 'due-soon' | 'normal'): string => {
   switch (status) {
     case 'overdue':
@@ -74,7 +104,11 @@ const getDueDateColor = (status: 'overdue' | 'due-soon' | 'normal'): string => {
   }
 };
 
-// 日付フォーマット
+/**
+ * 日付を日本語形式でフォーマットする
+ * @param date フォーマット対象の日付
+ * @returns 日本語形式の日付文字列（例：12/25 火）
+ */
 const formatDate = (date: Date): string => {
   return new Intl.DateTimeFormat('ja-JP', {
     month: 'numeric',
@@ -83,16 +117,47 @@ const formatDate = (date: Date): string => {
   }).format(date);
 };
 
-export const TaskCard: React.FC<TaskCardProps> = ({
+// ドラッグ状態のスタイル設定
+const DRAG_OPACITY = 0.5;
+const DRAG_SHADOW = 'shadow-lg';
+
+// 表示設定
+const MAX_VISIBLE_TAGS = 2; // 表示する最大タグ数
+
+/**
+ * タスクカードコンポーネント
+ * 
+ * ドラッグ&ドロップ対応のタスクカード。
+ * サブタスクの表示/非表示、優先度バッジ、期限表示などの機能を提供。
+ * コンパクトモードでは一部の情報を省略して表示。
+ * 
+ * @param props TaskCardコンポーネントのプロパティ
+ * @returns React.memoでメモ化されたTaskCardコンポーネント
+ */
+export const TaskCard: React.FC<TaskCardProps> = React.memo(({
   task,
   isCollapsed = false,
   onToggleCollapse,
+  onSubtaskToggle,
   onClick,
   compact = false
 }) => {
   const [localCollapsed, setLocalCollapsed] = useState(isCollapsed);
-  const hasSubtasks = task.subtasks && task.subtasks.length > 0;
-  const completedSubtasks = task.subtasks?.filter(sub => sub.completed).length || 0;
+  
+  // メモ化された計算値
+  const taskData = useMemo(() => {
+    const hasSubtasks = task.subtasks && task.subtasks.length > 0;
+    const completedSubtasks = task.subtasks?.filter(sub => sub.completed).length || 0;
+    const dueDateStatus = getDueDateStatus(task.dueDate);
+    const isCollapsedState = onToggleCollapse ? isCollapsed : localCollapsed;
+    
+    return {
+      hasSubtasks,
+      completedSubtasks,
+      dueDateStatus,
+      isCollapsedState
+    };
+  }, [task.subtasks, task.dueDate, isCollapsed, localCollapsed, onToggleCollapse]);
   
   const {
     attributes,
@@ -108,51 +173,73 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     transition,
   };
 
-  const handleToggleCollapse = (e: React.MouseEvent) => {
+  // メモ化されたコールバック関数
+  const handleToggleCollapse = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (onToggleCollapse) {
       onToggleCollapse(task.id);
     } else {
       setLocalCollapsed(!localCollapsed);
     }
-  };
+  }, [onToggleCollapse, task.id, localCollapsed]);
 
-  const handleCardClick = () => {
+  const handleCardClick = useCallback(() => {
     onClick?.(task);
-  };
+  }, [onClick, task]);
 
-  const dueDateStatus = getDueDateStatus(task.dueDate);
-  const isCollapsedState = onToggleCollapse ? isCollapsed : localCollapsed;
+  const handleSubtaskChange = useCallback((subtaskId: string) => {
+    onSubtaskToggle?.(task.id, subtaskId);
+  }, [onSubtaskToggle, task.id]);
 
   return (
     <Card
       ref={setNodeRef}
-      style={style}
+      style={{
+        ...style,
+        opacity: isDragging ? DRAG_OPACITY : 1,
+      }}
       {...attributes}
       {...listeners}
       className={`
         p-4 cursor-pointer transition-all duration-200 hover:shadow-md border
-        ${isDragging ? 'opacity-50 shadow-lg' : ''}
+        ${isDragging ? DRAG_SHADOW : ''}
         ${compact ? 'p-3' : ''}
       `}
       onClick={handleCardClick}
+      role="article"
+      aria-label={`タスク: ${task.title}`}
+      aria-describedby={`task-${task.id}-details`}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCardClick();
+        }
+      }}
     >
       {/* メインヘッダー */}
-      <div className="space-y-3">
+      <div className="space-y-3" id={`task-${task.id}-details`}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h4 className={`font-medium text-gray-900 line-clamp-2 ${compact ? 'text-sm' : ''}`}>
+            <h4 
+              className={`font-medium text-gray-900 line-clamp-2 ${compact ? 'text-sm' : ''}`}
+              id={`task-${task.id}-title`}
+            >
               {task.title}
             </h4>
           </div>
           
           {/* サブタスク折り畳みボタン */}
-          {hasSubtasks && (
+          {taskData.hasSubtasks && (
             <button
               onClick={handleToggleCollapse}
               className="flex-shrink-0 p-1 rounded hover:bg-gray-100 text-gray-500"
+              aria-expanded={!taskData.isCollapsedState}
+              aria-controls={`task-${task.id}-subtasks`}
+              aria-label={`サブタスクを${taskData.isCollapsedState ? '展開' : '折りたたみ'}`}
+              title={`サブタスクを${taskData.isCollapsedState ? '展開' : '折りたたみ'}`}
             >
-              {isCollapsedState ? (
+              {taskData.isCollapsedState ? (
                 <ChevronRight className="h-4 w-4" />
               ) : (
                 <ChevronDown className="h-4 w-4" />
@@ -163,17 +250,22 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
         {/* 説明文（コンパクト時は非表示） */}
         {!compact && task.description && (
-          <p className="text-sm text-gray-600 line-clamp-2">
+          <p 
+            className="text-sm text-gray-600 line-clamp-2"
+            id={`task-${task.id}-description`}
+          >
             {task.description}
           </p>
         )}
 
         {/* バッジエリア */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="タスクの詳細情報">
           {/* 優先度バッジ */}
           <Badge 
             variant="outline" 
             className={`${getPriorityColor(task.priority)} text-xs`}
+            role="status"
+            aria-label={`優先度: ${getPriorityLabel(task.priority)}`}
           >
             {getPriorityLabel(task.priority)}
           </Badge>
@@ -182,15 +274,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           {task.dueDate && (
             <Badge 
               variant="outline" 
-              className={`${getDueDateColor(dueDateStatus)} text-xs flex items-center gap-1`}
+              className={`${getDueDateColor(taskData.dueDateStatus)} text-xs flex items-center gap-1`}
+              role="status"
+              aria-label={`期限: ${formatDate(task.dueDate)}${taskData.dueDateStatus === 'overdue' ? ' (期限切れ)' : taskData.dueDateStatus === 'due-soon' ? ' (期限間近)' : ''}`}
             >
-              <Calendar className="h-3 w-3" />
+              <Calendar className="h-3 w-3" aria-hidden="true" />
               {formatDate(task.dueDate)}
             </Badge>
           )}
 
           {/* タグ */}
-          {!compact && task.tags.slice(0, 2).map((tag) => (
+          {!compact && task.tags.slice(0, MAX_VISIBLE_TAGS).map((tag) => (
             <Badge
               key={tag.id}
               variant="outline"
@@ -208,10 +302,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
         {/* 進捗情報 */}
         <div className="flex items-center justify-between text-xs text-gray-500">
-          {hasSubtasks && (
+          {taskData.hasSubtasks && (
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              <span>{completedSubtasks}/{task.subtasks.length} 完了</span>
+              <span>{taskData.completedSubtasks}/{task.subtasks.length} 完了</span>
             </div>
           )}
           
@@ -224,23 +318,34 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         </div>
 
         {/* サブタスク一覧（展開時） */}
-        {hasSubtasks && !isCollapsedState && !compact && (
-          <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
+        {taskData.hasSubtasks && !taskData.isCollapsedState && !compact && (
+          <div 
+            className="space-y-2 mt-3 pt-3 border-t border-gray-100"
+            id={`task-${task.id}-subtasks`}
+            role="group"
+            aria-label="サブタスク一覧"
+          >
             {task.subtasks.map((subtask) => (
               <div
                 key={subtask.id}
                 className="flex items-center gap-2 text-sm"
+                role="listitem"
               >
                 <input
                   type="checkbox"
                   checked={subtask.completed}
-                  onChange={() => {}} // TODO: サブタスク完了処理
+                  onChange={() => handleSubtaskChange(subtask.id)}
                   className="rounded text-blue-600 focus:ring-blue-500"
                   onClick={(e) => e.stopPropagation()}
+                  aria-label={`サブタスク: ${subtask.title}${subtask.completed ? ' (完了済み)' : ' (未完了)'}`}
+                  id={`subtask-${subtask.id}`}
                 />
-                <span className={`flex-1 ${subtask.completed ? 'line-through text-gray-500' : 'text-gray-700'}`}>
+                <label 
+                  htmlFor={`subtask-${subtask.id}`}
+                  className={`flex-1 cursor-pointer ${subtask.completed ? 'line-through text-gray-500' : 'text-gray-700'}`}
+                >
                   {subtask.title}
-                </span>
+                </label>
               </div>
             ))}
           </div>
@@ -248,4 +353,4 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       </div>
     </Card>
   );
-};
+});

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { 
   Card, 
   CardContent, 
@@ -12,23 +13,89 @@ import {
   Modal 
 } from '@/components/ui';
 import { Plus, Search, Filter, Columns, List } from 'lucide-react';
-import type { Task, TaskStatus } from '@/types/task';
+import type { Task, TaskStatus, Subtask, TaskDetail } from '@/types/task';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
+import TaskDetailView from '@/components/task/TaskDetailView';
 import { mockTasks } from '@/mock/tasks';
+import { mockTaskDetails, mockTodayTasks, getTaskDetail } from '@/mock/taskDetails';
 
 const Tasks: React.FC = () => {
+  const location = useLocation();
+  const params = useParams();
+  const navigate = useNavigate();
+  
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
+  const [selectedTask, setSelectedTask] = useState<TaskDetail | null>(null);
+  const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
+  
+  // URLからタスクページの種類を判定
+  const pageType = location.pathname.includes('/today') ? 'today' : 
+                   location.pathname.includes('/important') ? 'important' :
+                   location.pathname.includes('/completed') ? 'completed' : 'all';
+  
+  // 表示するタスクを決定
+  const getDisplayTasks = (): Task[] => {
+    switch (pageType) {
+      case 'today':
+        return mockTodayTasks; // 今日のタスク
+      case 'important':
+        return mockTasks.filter(task => task.priority === 'urgent' || task.priority === 'high');
+      case 'completed':
+        return mockTasks.filter(task => task.status === 'done');
+      default:
+        return mockTasks;
+    }
+  };
+  
+  const displayTasks = getDisplayTasks();
+  
+  // ページタイトルを決定
+  const getPageTitle = (): string => {
+    switch (pageType) {
+      case 'today':
+        return '今日のタスク';
+      case 'important':
+        return '重要なタスク';
+      case 'completed':
+        return '完了済みタスク';
+      default:
+        return 'タスク管理';
+    }
+  };
+
+  // URLパラメータからタスク詳細を表示する効果
+  useEffect(() => {
+    const pathParts = location.pathname.split('/');
+    const taskId = pathParts[pathParts.length - 1];
+    
+    // taskIdがUUID形式の場合、タスク詳細を表示
+    if (taskId && taskId.startsWith('task-') && !showTaskDetailModal) {
+      const taskDetail = getTaskDetail(taskId);
+      if (taskDetail) {
+        setSelectedTask(taskDetail);
+        setShowTaskDetailModal(true);
+      }
+    }
+  }, [location.pathname, showTaskDetailModal]);
 
   const handleTaskMove = (_taskId: string, _newStatus: TaskStatus) => {
     console.log(`Task ${_taskId} moved to ${_newStatus}`);
     // TODO: タスクのステータス更新処理
   };
 
-  const handleTaskClick = (_task: Task) => {
-    console.log('Task clicked:', _task);
-    // TODO: タスク詳細モーダル表示
+  const handleTaskClick = (task: Task) => {
+    console.log('Task clicked:', task);
+    const taskDetail = getTaskDetail(task.id);
+    if (taskDetail) {
+      setSelectedTask(taskDetail);
+      setShowTaskDetailModal(true);
+      // URLを更新してタスク詳細表示を反映
+      const currentPath = location.pathname;
+      const newPath = currentPath.endsWith('/') ? `${currentPath}${task.id}` : `${currentPath}/${task.id}`;
+      navigate(newPath, { replace: true });
+    }
   };
 
   const handleAddTask = (_status: TaskStatus) => {
@@ -37,10 +104,49 @@ const Tasks: React.FC = () => {
     // TODO: 指定ステータスでのタスク作成
   };
 
+  const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
+    console.log('Task update:', taskId, updates);
+    // TODO: タスクの更新処理（Mockの場合はログ出力のみ）
+  };
+
+  const handleSubtaskToggle = (subtaskId: string, completed: boolean) => {
+    console.log('Subtask toggle:', subtaskId, completed);
+    // TODO: サブタスクの完了状態切り替え
+  };
+
+  const handleSubtaskAdd = (title: string) => {
+    console.log('Subtask add:', title);
+    // TODO: サブタスクの追加
+  };
+
+  const handleSubtaskDelete = (subtaskId: string) => {
+    console.log('Subtask delete:', subtaskId);
+    // TODO: サブタスクの削除
+  };
+
+  const handleTaskDelete = (taskId: string) => {
+    console.log('Task delete:', taskId);
+    // TODO: タスクの削除
+    setShowTaskDetailModal(false);
+    setSelectedTask(null);
+  };
+
+  const handleCloseTaskDetail = () => {
+    setShowTaskDetailModal(false);
+    setSelectedTask(null);
+    
+    // URLからタスクIDを削除して元のページに戻る
+    const pathParts = location.pathname.split('/');
+    if (pathParts[pathParts.length - 1].startsWith('task-')) {
+      const newPath = pathParts.slice(0, -1).join('/');
+      navigate(newPath, { replace: true });
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-foreground">タスク管理</h1>
+        <h1 className="text-2xl font-bold text-foreground">{getPageTitle()}</h1>
         <div className="flex gap-2">
           {/* 表示モード切り替え */}
           <div className="flex border rounded-lg p-1">
@@ -89,7 +195,7 @@ const Tasks: React.FC = () => {
       <div className="flex-1 min-h-0">
         {viewMode === 'kanban' ? (
           <KanbanBoard
-            tasks={mockTasks}
+            tasks={displayTasks}
             onTaskMove={handleTaskMove}
             onTaskClick={handleTaskClick}
             onAddTask={handleAddTask}
@@ -97,8 +203,8 @@ const Tasks: React.FC = () => {
           />
         ) : (
           <div className="space-y-4">
-            {mockTasks.map((task) => (
-              <Card key={task.id} variant="interactive">
+            {displayTasks.map((task) => (
+              <Card key={task.id} variant="interactive" onClick={() => handleTaskClick(task)}>
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <CardTitle className="text-lg">{task.title}</CardTitle>
@@ -169,6 +275,29 @@ const Tasks: React.FC = () => {
             タスクを作成
           </Button>
         </div>
+      </Modal>
+
+      {/* タスク詳細モーダル */}
+      <Modal
+        open={showTaskDetailModal}
+        onOpenChange={setShowTaskDetailModal}
+        title=""
+        size="xl"
+        className="max-w-4xl"
+      >
+        {selectedTask && (
+          <TaskDetailView
+            task={selectedTask}
+            editable={true}
+            mode="full"
+            onTaskUpdate={handleTaskUpdate}
+            onSubtaskToggle={handleSubtaskToggle}
+            onSubtaskAdd={handleSubtaskAdd}
+            onSubtaskDelete={handleSubtaskDelete}
+            onTaskDelete={handleTaskDelete}
+            onClose={handleCloseTaskDetail}
+          />
+        )}
       </Modal>
     </div>
   );

@@ -15,7 +15,7 @@ interface TaskCardCompactProps {
  * コンパクト版のタスクカード
  * TaskCardコンポーネントのcompact=trueラッパー
  */
-export const TaskCardCompact: React.FC<TaskCardCompactProps> = ({
+export const TaskCardCompact: React.FC<TaskCardCompactProps> = React.memo(({
   task,
   onClick
 }) => {
@@ -27,4 +27,4 @@ export const TaskCardCompact: React.FC<TaskCardCompactProps> = ({
       isCollapsed={true} // コンパクト版では常に折り畳み
     />
   );
-};
+});

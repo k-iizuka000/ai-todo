@@ -26,9 +26,12 @@ export type ProjectRole =
 
 // プロジェクトメンバーの型定義
 export interface ProjectMember {
+  id: string;
   userId: string;
+  userName: string;
   role: ProjectRole;
   joinedAt: Date;
+  avatar?: string;
 }
 
 // プロジェクトの進捗統計
@@ -37,6 +40,10 @@ export interface ProjectStats {
   completedTasks: number;
   inProgressTasks: number;
   todoTasks: number;
+  completionRate: number;
+  overdueCount: number;
+  dueThisWeek: number;
+  averageCompletionTime: number; // 時間単位
   progressPercentage: number;
   estimatedHours: number;
   actualHours: number;
@@ -132,4 +139,24 @@ export interface ProjectListOptions {
 // プロジェクト詳細表示用（統計情報込み）
 export interface ProjectWithStats extends Project {
   stats: ProjectStats;
+}
+
+// === 拡張型定義（プロジェクト詳細機能用） ===
+
+// プロジェクトビュー設定
+export interface ProjectView {
+  id: string;
+  name: string;
+  viewType: 'kanban' | 'list' | 'timeline' | 'grid';
+  filters: any; // TaskFilter型を参照する場合は import が必要
+  sortBy: any; // TaskSort型を参照する場合は import が必要
+  savedAt: Date;
+}
+
+// 拡張されたプロジェクト型（統計・メンバー・最近のタスクを含む）
+export interface ProjectWithFullDetails extends Project {
+  stats: ProjectStats;
+  members: ProjectMember[];
+  recentTasks: any[]; // Task[]型を参照する場合は import が必要
+  views: ProjectView[];
 }

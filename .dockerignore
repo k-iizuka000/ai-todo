@@ -1,0 +1,207 @@
+# ===========================================
+# .dockerignore
+# Dockerビルド時に除外するファイル・ディレクトリ
+# ===========================================
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# 依存関係ロックファイル（package-lock.jsonは含める）
+yarn.lock
+pnpm-lock.yaml
+
+# ===========================================
+# 開発・ビルド関連
+# ===========================================
+
+# ビルド出力
+dist/
+build/
+.vite/
+.turbo/
+
+# 開発サーバー
+.vite-cache/
+vite.config.js.timestamp-*
+
+# TypeScript
+*.tsbuildinfo
+
+# ===========================================
+# 環境設定・機密情報
+# ===========================================
+
+# 環境変数ファイル
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+
+# ただし、例ファイルは除外しない
+!.env.example
+
+# API Keys / Secrets
+*.pem
+*.key
+secrets/
+
+# ===========================================
+# バージョン管理
+# ===========================================
+
+.git/
+.gitignore
+.github/
+.gitattributes
+
+# ===========================================
+# IDE・エディタ
+# ===========================================
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+
+# Vim
+*.swp
+*.swo
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# ===========================================
+# OS固有ファイル
+# ===========================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ===========================================
+# ログ・キャッシュ
+# ===========================================
+
+# ログファイル
+logs/
+*.log
+log/
+
+# キャッシュ
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# Coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# ===========================================
+# テスト関連
+# ===========================================
+
+# テスト結果
+test-results/
+playwright-report/
+junit.xml
+coverage/
+
+# E2E テスト
+tests/screenshots/
+tests/videos/
+
+# ===========================================
+# ドキュメント・作業ファイル
+# ===========================================
+
+# Markdown（READMEは除く）
+docs/
+*.md
+!README.md
+
+# 作業ディレクトリ
+tasks/
+temp/
+tmp/
+scratch/
+
+# デザインファイル
+*.sketch
+*.fig
+*.xd
+*.psd
+
+# ===========================================
+# Docker関連
+# ===========================================
+
+# Dockerfile（本体は含める）
+docker-compose.override.yml
+docker-compose.*.yml
+!docker-compose.yml
+!docker-compose.prod.yml
+
+# Docker関連
+.dockerignore
+
+# ===========================================
+# その他
+# ===========================================
+
+# バックアップファイル
+*.backup
+*.bak
+*.tmp
+
+# アーカイブ
+*.zip
+*.tar.gz
+*.rar
+
+# データベース
+*.db
+*.sqlite
+*.sqlite3
+
+# 設定ファイル（プロジェクト固有）
+.prettierrc.*
+.eslintrc.*
+postcss.config.*
+tailwind.config.*
+!vite.config.ts
+!tsconfig.json
+
+# ローカル設定
+.local/
+local/

@@ -1,0 +1,70 @@
+# macOS
+.DS_Store
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+logs/
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Docker
+*.pid
+docker-compose.override.yml
+
+# VS Code
+.vscode/
+
+# Build output
+/dist/
+/build/
+
+# Others
+*.swp
+*.swo
+*.tmp
+*.bak
+*.orig
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Coverage
+coverage/
+*.cover
+
+# Test output
+junit.xml
+
+# IDEs
+.idea/
+*.iml
+*.sublime-workspace
+*.sublime-project
+
+# Misc
+Thumbs.db
+
+.claude/
+tasks/
+docs/
+tasks/
+tests/
+reviews/
+reports/
+learning/
+
+AGENTS.md
+CLAUDE.md

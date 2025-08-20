@@ -1,0 +1,82 @@
+# Docker Compose: 開発環境設定
+# 使用方法:
+#   開発開始: docker-compose up
+#   バックグラウンド実行: docker-compose up -d
+#   停止: docker-compose down
+#   リビルド: docker-compose up --build
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # メインアプリケーション: React + Vite
+  # ===========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: ai-todo-dev
+    ports:
+      - "5173:5173"  # Vite開発サーバー
+    volumes:
+      # ソースコードのホットリロード対応
+      - .:/app
+      - /app/node_modules  # node_modulesは永続化（キャッシュ効率化）
+      - /app/.git         # Gitディレクトリは除外
+    environment:
+      - NODE_ENV=development
+      - VITE_HOST=0.0.0.0
+      - VITE_PORT=5173
+      - CHOKIDAR_USEPOLLING=true  # ファイル変更監視（Macで必要な場合）
+    env_file:
+      - .env.local  # 環境変数ファイル（作成必要）
+    networks:
+      - ai-todo-network
+    restart: unless-stopped
+    stdin_open: true  # インタラクティブモード対応
+    tty: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ===========================================
+  # 開発ツール: Storybook（オプション）
+  # ===========================================
+  storybook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: ai-todo-storybook
+    ports:
+      - "6006:6006"  # Storybook
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: ["npm", "run", "storybook"]
+    networks:
+      - ai-todo-network
+    profiles:
+      - tools  # 必要時のみ起動: docker-compose --profile tools up
+    depends_on:
+      - app
+
+# ===========================================
+# ボリューム設定
+# ===========================================
+volumes:
+  node_modules:
+    driver: local
+
+# ===========================================
+# ネットワーク設定
+# ===========================================
+networks:
+  ai-todo-network:
+    driver: bridge

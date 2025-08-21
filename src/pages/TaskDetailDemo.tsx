@@ -4,14 +4,14 @@
 
 import React, { useState } from 'react';
 import { TaskDetailView, TaskHierarchy, SubTaskList, ProgressIndicator } from '../components/task';
-import { mockTasks } from '../mock/tasks';
-import { Task, Subtask } from '../types/task';
+import { mockTaskDetails } from '../mock/taskDetails';
+import { TaskDetail, Subtask } from '../types/task';
 
 const TaskDetailDemo: React.FC = () => {
-  const [selectedTask, setSelectedTask] = useState<Task>(mockTasks[0]);
-  const [tasks] = useState<Task[]>(mockTasks.slice(0, 3));
+  const [selectedTask, setSelectedTask] = useState<TaskDetail>(mockTaskDetails[0]);
+  const [tasks] = useState<TaskDetail[]>(mockTaskDetails.slice(0, 3));
 
-  const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
+  const handleTaskUpdate = (taskId: string, updates: Partial<TaskDetail>) => {
     console.log('タスク更新:', taskId, updates);
     // 実際の実装では、ここでタスクを更新します
   };
@@ -78,7 +78,13 @@ const TaskDetailDemo: React.FC = () => {
             <div>
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">読み取り専用</h3>
               <SubTaskList
-                subtasks={selectedTask.subtasks}
+                subtasks={(selectedTask.childTasks || []).map(task => ({
+                  id: task.id,
+                  title: task.title,
+                  completed: task.status === 'done',
+                  createdAt: task.createdAt,
+                  updatedAt: task.updatedAt
+                }))}
                 onSubtaskToggle={handleSubtaskToggle}
                 collapsible={true}
               />
@@ -86,7 +92,13 @@ const TaskDetailDemo: React.FC = () => {
             <div>
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">編集可能</h3>
               <SubTaskList
-                subtasks={selectedTask.subtasks}
+                subtasks={(selectedTask.childTasks || []).map(task => ({
+                  id: task.id,
+                  title: task.title,
+                  completed: task.status === 'done',
+                  createdAt: task.createdAt,
+                  updatedAt: task.updatedAt
+                }))}
                 onSubtaskToggle={handleSubtaskToggle}
                 onSubtaskAdd={handleSubtaskAdd}
                 onSubtaskDelete={handleSubtaskDelete}
@@ -106,7 +118,16 @@ const TaskDetailDemo: React.FC = () => {
             {tasks.map((task, index) => (
               <TaskHierarchy
                 key={task.id}
-                task={task}
+                task={{
+                  ...task,
+                  subtasks: (task.childTasks || []).map(child => ({
+                    id: child.id,
+                    title: child.title,
+                    completed: child.status === 'done',
+                    createdAt: child.createdAt,
+                    updatedAt: child.updatedAt
+                  }))
+                }}
                 level={index}
                 onTaskClick={(taskId) => console.log('タスククリック:', taskId)}
                 onSubtaskToggle={handleSubtaskToggle}
@@ -130,12 +151,12 @@ const TaskDetailDemo: React.FC = () => {
               <select
                 value={selectedTask.id}
                 onChange={(e) => {
-                  const task = mockTasks.find(t => t.id === e.target.value);
+                  const task = mockTaskDetails.find(t => t.id === e.target.value);
                   if (task) setSelectedTask(task);
                 }}
                 className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               >
-                {mockTasks.slice(0, 5).map(task => (
+                {mockTaskDetails.slice(0, 5).map(task => (
                   <option key={task.id} value={task.id}>
                     {task.title}
                   </option>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Card, 
   CardContent, 
@@ -10,7 +11,7 @@ import {
   PriorityBadge,
   Input
 } from '@/components/ui';
-import { ChevronLeft, ChevronRight, Plus, List, Calendar as CalendarIcon, Filter, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, List, Calendar as CalendarIcon, Filter, Search, Clock } from 'lucide-react';
 import type { Task } from '@/types/task';
 import type { CalendarEvent, CalendarView, CalendarFilter } from '@/types/calendar';
 import { 
@@ -60,6 +61,7 @@ const isSameMonth = (date: Date, targetMonth: Date): boolean => {
 };
 
 const Calendar: React.FC = () => {
+  const navigate = useNavigate();
   const [calendarView, setCalendarView] = useState<CalendarView>(defaultCalendarView);
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'list'>('month');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -109,6 +111,12 @@ const Calendar: React.FC = () => {
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
     setCalendarView({ ...calendarView, selectedDate: date });
+  };
+
+  // 日時スケジュール画面への遷移
+  const handleScheduleClick = (date: Date) => {
+    const dateString = formatDate(date);
+    navigate(`/schedule?date=${dateString}`);
   };
 
   const getEventsForDate = (date: Date): CalendarEvent[] => {
@@ -295,20 +303,38 @@ const Calendar: React.FC = () => {
                     <div
                       key={index}
                       className={`
-                        min-h-[80px] p-1 border rounded-md cursor-pointer transition-colors
+                        min-h-[80px] p-1 border rounded-md transition-colors relative group
                         ${isCurrentMonth ? 'bg-background' : 'bg-muted/30'}
                         ${isTodayDate ? 'bg-primary/10 border-primary' : 'border-border'}
                         ${selectedDate && formatDate(selectedDate) === formatDate(day) ? 'ring-2 ring-primary' : ''}
                         hover:bg-muted/50
                       `}
-                      onClick={() => handleDateClick(day)}
                     >
-                      <div className={`
-                        text-sm font-medium mb-1
-                        ${isCurrentMonth ? 'text-foreground' : 'text-muted-foreground'}
-                        ${isTodayDate ? 'text-primary font-bold' : ''}
-                      `}>
-                        {day.getDate()}
+                      <div className="flex items-center justify-between mb-1">
+                        <div 
+                          className={`
+                            text-sm font-medium cursor-pointer
+                            ${isCurrentMonth ? 'text-foreground' : 'text-muted-foreground'}
+                            ${isTodayDate ? 'text-primary font-bold' : ''}
+                          `}
+                          onClick={() => handleDateClick(day)}
+                        >
+                          {day.getDate()}
+                        </div>
+                        
+                        {/* 日時スケジュールボタン */}
+                        {isCurrentMonth && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleScheduleClick(day);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-primary/20"
+                            title="日時スケジュールを表示"
+                          >
+                            <Clock className="h-3 w-3 text-primary" />
+                          </button>
+                        )}
                       </div>
                       
                       {/* イベント表示 */}
@@ -344,14 +370,24 @@ const Calendar: React.FC = () => {
           {selectedDate && (
             <Card>
               <CardHeader>
-                <CardTitle>
-                  {selectedDate.toLocaleDateString('ja-JP', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    weekday: 'long'
-                  })} のタスク
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>
+                    {selectedDate.toLocaleDateString('ja-JP', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'long'
+                    })} のタスク
+                  </CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleScheduleClick(selectedDate)}
+                  >
+                    <Clock className="h-4 w-4 mr-2" />
+                    日時スケジュール
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {getEventsForDate(selectedDate).length > 0 ? (

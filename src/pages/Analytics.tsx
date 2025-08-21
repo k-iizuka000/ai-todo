@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ErrorHandler } from '@/utils/dataValidation';
 import { 
   Card, 
   CardContent, 
@@ -28,6 +29,7 @@ import {
   getProjectCompletionChartData,
   getTimeDistributionChartData,
   getWeeklyProductivityData,
+  getWeeklyProductivityDataForAnalytics,
   getPriorityDistributionData,
   getMonthlyCompletionData
 } from '@/mock/analyticsData';
@@ -35,15 +37,66 @@ import {
 const Analytics: React.FC = () => {
   const [timeRange, setTimeRange] = useState<AnalyticsPeriod>('month');
   const [selectedMetric, setSelectedMetric] = useState<'overview' | 'projects' | 'productivity' | 'time'>('overview');
+  const [error, setError] = useState<string | null>(null);
 
-  // 分析データの取得
-  const dashboard = mockAnalyticsDashboard;
-  const completionTrendData = getCompletionTrendChartData();
-  const projectCompletionData = getProjectCompletionChartData();
-  const timeDistributionData = getTimeDistributionChartData();
-  const weeklyProductivityData = getWeeklyProductivityData();
-  const priorityDistributionData = getPriorityDistributionData();
-  const monthlyCompletionData = getMonthlyCompletionData();
+  // 分析データの取得（エラーハンドリング付き）
+  const dashboard = ErrorHandler.handleSync(
+    () => mockAnalyticsDashboard,
+    {
+      metrics: { period: 'month', startDate: new Date(), endDate: new Date(), tasksCreated: 0, tasksCompleted: 0, averageCompletionTime: 0, productivityScore: 0 },
+      trends: [],
+      projectPerformance: [],
+      projectStats: { active: 0, completed: 0, planning: 0, onHold: 0, archived: 0, total: 0 },
+      projectDetails: [],
+      timeDistribution: [],
+      upcomingDeadlines: [],
+      bottlenecks: []
+    },
+    'ダッシュボードデータの取得に失敗しました',
+    (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
+  );
+
+  const completionTrendData = ErrorHandler.handleSync(
+    () => getCompletionTrendChartData(),
+    [],
+    '完了トレンドデータの取得に失敗しました',
+    (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
+  );
+
+  const projectCompletionData = ErrorHandler.handleSync(
+    () => getProjectCompletionChartData(),
+    [],
+    'プロジェクト完了データの取得に失敗しました',
+    (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
+  );
+
+  const timeDistributionData = ErrorHandler.handleSync(
+    () => getTimeDistributionChartData(),
+    [],
+    '時間配分データの取得に失敗しました',
+    (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
+  );
+
+  const weeklyProductivityData = ErrorHandler.handleSync(
+    () => getWeeklyProductivityDataForAnalytics(),
+    [],
+    '週次生産性データの取得に失敗しました',
+    (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
+  );
+
+  const priorityDistributionData = ErrorHandler.handleSync(
+    () => getPriorityDistributionData(),
+    [],
+    '優先度分布データの取得に失敗しました',
+    (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
+  );
+
+  const monthlyCompletionData = ErrorHandler.handleSync(
+    () => getMonthlyCompletionData(),
+    [],
+    '月次完了データの取得に失敗しました',
+    (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
+  );
 
   // 期間選択による説明テキストの生成
   const getPeriodDescription = (period: AnalyticsPeriod) => {
@@ -127,6 +180,25 @@ const Analytics: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
+      {/* エラー表示 */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center">
+            <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
+            <span className="text-red-800 font-medium">エラー</span>
+          </div>
+          <p className="text-red-700 mt-1">{error}</p>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="mt-2"
+            onClick={() => setError(null)}
+          >
+            閉じる
+          </Button>
+        </div>
+      )}
+
       {/* ヘッダー */}
       <div className="flex justify-between items-center">
         <div>
@@ -307,32 +379,39 @@ const Analytics: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {weeklyProductivityData.map((data, index) => (
-                <div key={index} className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">{data.period}</span>
-                    <span className={`text-sm font-bold ${
-                      data.efficiency > 100 ? 'text-green-600' : 
-                      data.efficiency > 90 ? 'text-yellow-600' : 'text-red-600'
-                    }`}>
-                      {data.efficiency}%
-                    </span>
+              {weeklyProductivityData.map((data, index) => {
+                // データの妥当性チェック
+                const efficiency = typeof data.efficiency === 'number' ? data.efficiency : 0;
+                const estimatedHours = typeof data.estimatedHours === 'number' ? data.estimatedHours : 0;
+                const actualHours = typeof data.actualHours === 'number' ? data.actualHours : 0;
+                
+                return (
+                  <div key={index} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">{data.period}</span>
+                      <span className={`text-sm font-bold ${
+                        efficiency > 100 ? 'text-green-600' : 
+                        efficiency > 90 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {efficiency}%
+                      </span>
+                    </div>
+                    <div className="flex gap-2 text-xs text-muted-foreground">
+                      <span>見積: {estimatedHours}h</span>
+                      <span>実績: {actualHours}h</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${
+                          efficiency > 100 ? 'bg-green-500' :
+                          efficiency > 90 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${Math.min(efficiency, 100)}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className="flex gap-2 text-xs text-muted-foreground">
-                    <span>見積: {data.estimatedHours}h</span>
-                    <span>実績: {data.actualHours}h</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className={`h-2 rounded-full ${
-                        data.efficiency > 100 ? 'bg-green-500' :
-                        data.efficiency > 90 ? 'bg-yellow-500' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${Math.min(data.efficiency, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -419,7 +498,11 @@ const Analytics: React.FC = () => {
             <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
               <h3 className="font-medium text-blue-800">生産性の傾向</h3>
               <p className="text-sm text-blue-700 mt-1">
-                今週の作業効率は平均{Math.round(weeklyProductivityData.reduce((sum, d) => sum + d.efficiency, 0) / weeklyProductivityData.length)}%です。
+                今週の作業効率は平均{
+                  weeklyProductivityData.length > 0 
+                    ? Math.round(weeklyProductivityData.reduce((sum, d) => sum + (typeof d.efficiency === 'number' ? d.efficiency : 0), 0) / weeklyProductivityData.length)
+                    : 0
+                }%です。
                 見積もり精度の向上が推奨されます。
               </p>
             </div>

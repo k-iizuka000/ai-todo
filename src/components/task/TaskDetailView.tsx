@@ -7,6 +7,7 @@ import { Task, TaskDetail, Priority, TaskStatus } from '../../types/task';
 import { TaskDetailTabs } from './TaskDetailTabs';
 import SubTaskList from './SubTaskList';
 import ProgressIndicator from './ProgressIndicator';
+import { DataValidationService, safeArrayAccess } from '../../utils/dataValidation';
 
 interface TaskDetailViewProps {
   /** 表示するタスク */
@@ -38,8 +39,11 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
   onTaskDelete,
   onClose
 }) => {
+  // データバリデーションを適用
+  const validatedTask = DataValidationService.validateTaskDetail(task);
+  
   const [isEditing, setIsEditing] = useState(false);
-  const [editedTask, setEditedTask] = useState<Partial<TaskDetail>>(task);
+  const [editedTask, setEditedTask] = useState<Partial<TaskDetail>>(validatedTask);
   const [activeTab, setActiveTab] = useState<'subtasks' | 'comments' | 'history'>('subtasks');
 
   const getPriorityColor = (priority: Priority) => {
@@ -104,7 +108,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
 
   const handleSave = () => {
     if (editedTask.title?.trim()) {
-      onTaskUpdate?.(task.id, {
+      onTaskUpdate?.(validatedTask.id, {
         ...editedTask,
         updatedAt: new Date()
       });
@@ -119,16 +123,16 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
 
   const handleDelete = () => {
     if (window.confirm('このタスクを削除しますか？この操作は取り消せません。')) {
-      onTaskDelete?.(task.id);
+      onTaskDelete?.(validatedTask.id);
     }
   };
 
-  const completedSubtasks = task.childTasks.filter(subtask => subtask.status === 'done').length;
-  const totalSubtasks = task.childTasks.length;
+  const completedSubtasks = validatedTask.childTasks.filter(subtask => subtask.status === 'done').length;
+  const totalSubtasks = validatedTask.childTasks.length;
   const progress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
 
   const handleTaskDetailUpdate = (updates: Partial<TaskDetail>) => {
-    onTaskUpdate?.(task.id, updates);
+    onTaskUpdate?.(validatedTask.id, updates);
   };
 
   return (
@@ -147,9 +151,9 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
               />
             ) : (
               <h1 className={`text-xl font-semibold text-gray-900 dark:text-gray-100 ${
-                task.status === 'done' ? 'line-through opacity-75' : ''
+                validatedTask.status === 'done' ? 'line-through opacity-75' : ''
               }`}>
-                {task.title}
+                {validatedTask.title}
               </h1>
             )}
           </div>

@@ -7,9 +7,12 @@ import type {
   TaskMetrics, 
   ProductivityTrend, 
   ProjectPerformance, 
+  ProjectStats,
+  ProjectDetail,
   TimeDistribution, 
   Bottleneck,
-  ChartDataPoint
+  ChartDataPoint,
+  WeeklyProductivityData
 } from '@/types/analytics';
 import { mockTasks } from './tasks';
 import { mockProjectsWithStats } from './projectsWithStats';
@@ -146,11 +149,59 @@ const generateUpcomingDeadlines = (): any[] => {
   return upcoming;
 };
 
+// プロジェクト統計生成
+const generateProjectStats = (): ProjectStats => {
+  const totalProjects = mockProjectsWithStats.length;
+  
+  // プロジェクトの進捗率に基づいてステータスを判定
+  const activeProjects = mockProjectsWithStats.filter(p => 
+    p.stats.progressPercentage > 0 && p.stats.progressPercentage < 100
+  ).length;
+  
+  const completedProjects = mockProjectsWithStats.filter(p => 
+    p.stats.progressPercentage >= 100
+  ).length;
+  
+  const planningProjects = mockProjectsWithStats.filter(p => 
+    p.stats.progressPercentage === 0
+  ).length;
+  
+  // 残りはon_holdとする
+  const onHoldProjects = Math.max(0, totalProjects - activeProjects - completedProjects - planningProjects);
+  
+  return {
+    active: activeProjects,
+    completed: completedProjects,
+    planning: planningProjects,
+    onHold: onHoldProjects,
+    archived: 0, // アーカイブされたプロジェクトはとりあえず0
+    total: totalProjects
+  };
+};
+
+// プロジェクト詳細データ生成
+const generateProjectDetails = (): ProjectDetail[] => {
+  return mockProjectsWithStats.map(project => ({
+    id: project.id,
+    name: project.name,
+    icon: project.icon || '📁',
+    totalTasks: project.stats.totalTasks,
+    completedTasks: project.stats.completedTasks,
+    inProgressTasks: project.stats.inProgressTasks || Math.floor(project.stats.totalTasks * 0.3),
+    todoTasks: project.stats.totalTasks - project.stats.completedTasks - Math.floor(project.stats.totalTasks * 0.3),
+    progressPercentage: project.stats.completionRate,
+    estimatedHours: project.stats.estimatedHours || Math.floor(project.stats.totalTasks * 8),
+    actualHours: project.stats.actualHours || Math.floor(project.stats.completedTasks * 6)
+  }));
+};
+
 // メインの分析ダッシュボードデータ
 export const mockAnalyticsDashboard: AnalyticsDashboard = {
   metrics: generateTaskMetrics(),
   trends: generateProductivityTrends(),
   projectPerformance: generateProjectPerformance(),
+  projectStats: generateProjectStats(),
+  projectDetails: generateProjectDetails(),
   timeDistribution: generateTimeDistribution(),
   upcomingDeadlines: generateUpcomingDeadlines(),
   bottlenecks: generateBottlenecks()
@@ -242,4 +293,27 @@ export const getMonthlyCompletionData = (): ChartDataPoint[] => {
   }
   
   return monthlyData;
+};
+
+// 週次生産性データ（Analytics.tsxで使用される）
+export const getWeeklyProductivityDataForAnalytics = (): WeeklyProductivityData[] => {
+  const weeklyData: WeeklyProductivityData[] = [];
+  
+  for (let i = 3; i >= 0; i--) {
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - (i * 7) - 6);
+    
+    const estimatedHours = Math.floor(Math.random() * 10) + 30; // 30-40時間
+    const actualHours = Math.floor(Math.random() * 15) + 25; // 25-40時間
+    const efficiency = Math.round((estimatedHours / actualHours) * 100);
+    
+    weeklyData.push({
+      period: `第${4 - i}週`,
+      efficiency: Math.min(efficiency, 120), // 最大120%に制限
+      estimatedHours,
+      actualHours
+    });
+  }
+  
+  return weeklyData;
 };

@@ -67,26 +67,35 @@ const Tasks: React.FC = () => {
 
   // URLパラメータからタスク詳細を表示する効果
   useEffect(() => {
+    let isMounted = true; // メモリリーク防止用のフラグ
+    
     const pathParts = location.pathname.split('/');
     const taskId = pathParts[pathParts.length - 1];
     
     // taskIdがUUID形式の場合、タスク詳細を表示
-    if (taskId && taskId.startsWith('task-') && !showTaskDetailModal) {
+    if (taskId && taskId.startsWith('task-')) {
       const taskDetail = getTaskDetail(taskId);
-      if (taskDetail) {
+      if (taskDetail && !showTaskDetailModal && isMounted) {
         setSelectedTask(taskDetail);
         setShowTaskDetailModal(true);
       }
+    } else if (showTaskDetailModal && !taskId.startsWith('task-') && isMounted) {
+      // URLにタスクIDがない場合はモーダルを閉じる
+      setShowTaskDetailModal(false);
+      setSelectedTask(null);
     }
+    
+    // クリーンアップ関数
+    return () => {
+      isMounted = false;
+    };
   }, [location.pathname, showTaskDetailModal]);
 
   const handleTaskMove = (_taskId: string, _newStatus: TaskStatus) => {
-    console.log(`Task ${_taskId} moved to ${_newStatus}`);
     // TODO: タスクのステータス更新処理
   };
 
   const handleTaskClick = (task: Task) => {
-    console.log('Task clicked:', task);
     const taskDetail = getTaskDetail(task.id);
     if (taskDetail) {
       setSelectedTask(taskDetail);
@@ -99,39 +108,34 @@ const Tasks: React.FC = () => {
   };
 
   const handleAddTask = (_status: TaskStatus) => {
-    console.log(`Add task to ${_status}`);
     setShowCreateModal(true);
     // TODO: 指定ステータスでのタスク作成
   };
 
   const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
-    console.log('Task update:', taskId, updates);
     // TODO: タスクの更新処理（Mockの場合はログ出力のみ）
   };
 
   const handleSubtaskToggle = (subtaskId: string, completed: boolean) => {
-    console.log('Subtask toggle:', subtaskId, completed);
     // TODO: サブタスクの完了状態切り替え
   };
 
   const handleSubtaskAdd = (title: string) => {
-    console.log('Subtask add:', title);
     // TODO: サブタスクの追加
   };
 
   const handleSubtaskDelete = (subtaskId: string) => {
-    console.log('Subtask delete:', subtaskId);
     // TODO: サブタスクの削除
   };
 
   const handleTaskDelete = (taskId: string) => {
-    console.log('Task delete:', taskId);
     // TODO: タスクの削除
     setShowTaskDetailModal(false);
     setSelectedTask(null);
   };
 
   const handleCloseTaskDetail = () => {
+    // 状態を強制的にリセット
     setShowTaskDetailModal(false);
     setSelectedTask(null);
     
@@ -280,7 +284,14 @@ const Tasks: React.FC = () => {
       {/* タスク詳細モーダル */}
       <Modal
         open={showTaskDetailModal}
-        onOpenChange={setShowTaskDetailModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCloseTaskDetail();
+          } else {
+            // 明示的にtrueが来た場合は状態を確認
+            setShowTaskDetailModal(true);
+          }
+        }}
         title=""
         size="xl"
         className="max-w-4xl"

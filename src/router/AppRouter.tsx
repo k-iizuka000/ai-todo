@@ -8,7 +8,9 @@ import Tasks from '@/pages/Tasks';
 import TaskDetailDemo from '@/pages/TaskDetailDemo';
 import { ProjectManagement } from '@/pages/ProjectManagement';
 import Calendar from '@/pages/Calendar';
+import DailyScheduleView from '@/pages/DailyScheduleView';
 import Analytics from '@/pages/Analytics';
+import ScheduleErrorBoundary from '@/components/schedule/ScheduleErrorBoundary';
 import NotFound from '@/pages/NotFound';
 import LoginForm from '@/pages/auth/LoginForm';
 import SignupForm from '@/pages/auth/SignupForm';
@@ -77,6 +79,16 @@ const AppRouter: React.FC = () => {
           
           {/* Calendar routes */}
           <Route path="calendar" element={<Calendar />} />
+          
+          {/* Schedule routes */}
+          <Route 
+            path="schedule" 
+            element={
+              <ScheduleErrorBoundary>
+                <DailyScheduleView />
+              </ScheduleErrorBoundary>
+            } 
+          />
           
           {/* Analytics routes */}
           <Route path="analytics" element={<Analytics />} />

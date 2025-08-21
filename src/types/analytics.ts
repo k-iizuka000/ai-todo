@@ -61,11 +61,37 @@ export interface Bottleneck {
   actualHours?: number;
 }
 
+// プロジェクト統計
+export interface ProjectStats {
+  active: number;
+  completed: number;
+  planning: number;
+  onHold: number;
+  archived: number;
+  total: number;
+}
+
+// プロジェクト詳細
+export interface ProjectDetail {
+  id: string;
+  name: string;
+  icon: string;
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  todoTasks: number;
+  progressPercentage: number;
+  estimatedHours: number;
+  actualHours: number;
+}
+
 // 分析ダッシュボード
 export interface AnalyticsDashboard {
   metrics: TaskMetrics;
   trends: ProductivityTrend[];
   projectPerformance: ProjectPerformance[];
+  projectStats: ProjectStats; // 必須フィールドとして追加
+  projectDetails: ProjectDetail[]; // 必須フィールドとして追加
   timeDistribution: TimeDistribution[];
   upcomingDeadlines: any[]; // Task[] - 循環import回避のためany
   bottlenecks: Bottleneck[];
@@ -77,6 +103,14 @@ export interface ChartDataPoint {
   y: number;
   label?: string;
   color?: string;
+}
+
+// 週次生産性データ
+export interface WeeklyProductivityData {
+  period: string;
+  efficiency: number;
+  estimatedHours: number;
+  actualHours: number;
 }
 
 // チャート設定

@@ -34,6 +34,11 @@ export const routes: RouteConfig[] = [
     icon: 'Calendar',
   },
   {
+    path: '/schedule',
+    label: '日時スケジュール',
+    icon: 'Clock',
+  },
+  {
     path: '/analytics',
     label: '分析',
     icon: 'BarChart3',

@@ -136,7 +136,7 @@ export const mockTaskDetails: TaskDetail[] = mockTasks.slice(0, 6).map((task, in
   attachments: mockAttachments.filter(attachment => attachment.taskId === task.id),
   history: mockHistory.filter(history => history.taskId === task.id),
   parentTask: undefined,
-  childTasks: task.subtasks.map((subtask, subIndex) => ({
+  childTasks: (task.subtasks || []).map((subtask, subIndex) => ({
     id: subtask.id,
     title: subtask.title,
     description: `${subtask.title}の詳細説明です。このサブタスクは親タスク「${task.title}」の一部として実行されます。`,

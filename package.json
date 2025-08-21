@@ -7,7 +7,18 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "issue": "node issues/scripts/issue-manager.js",
+    "issue:create": "node issues/scripts/issue-manager.js create",
+    "issue:list": "node issues/scripts/issue-manager.js list",
+    "issue:stats": "node issues/scripts/issue-manager.js stats",
+    "issue:analyze": "node issues/scripts/issue-analyzer.js analyze",
+    "workflow:execute": "node issues/scripts/agent-orchestrator.js execute",
+    "workflow:status": "node issues/scripts/progress-tracker.js dashboard",
+    "progress:dashboard": "node issues/scripts/progress-tracker.js dashboard",
+    "security:scan": "node issues/scripts/security-checker.js scan",
+    "security:check": "node issues/scripts/security-checker.js scan --verbose",
+    "ai:agent": "node issues/scripts/agent-orchestrator.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

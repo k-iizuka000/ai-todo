@@ -13,7 +13,8 @@ import {
 } from '@/components/ui';
 import { ChevronLeft, ChevronRight, Plus, List, Calendar as CalendarIcon, Filter, Search, Clock } from 'lucide-react';
 import type { Task } from '@/types/task';
-import type { CalendarEvent, CalendarView, CalendarFilter } from '@/types/calendar';
+import type { CalendarEvent, CalendarView, CalendarFilter, SubtaskCalendarEvent } from '@/types/calendar';
+import SubtaskEvent from '@/components/calendar/SubtaskEvent';
 import { 
   allCalendarEvents, 
   getTodaysEvents, 
@@ -22,6 +23,7 @@ import {
   defaultCalendarView,
   defaultCalendarFilter 
 } from '@/mock/calendarData';
+import { useTaskStore } from '@/stores/taskStore';
 
 // カレンダー表示用の日付ユーティリティ
 const getDaysInMonth = (year: number, month: number): Date[] => {
@@ -62,6 +64,7 @@ const isSameMonth = (date: Date, targetMonth: Date): boolean => {
 
 const Calendar: React.FC = () => {
   const navigate = useNavigate();
+  const { updateSubtask } = useTaskStore();
   const [calendarView, setCalendarView] = useState<CalendarView>(defaultCalendarView);
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'list'>('month');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -72,7 +75,7 @@ const Calendar: React.FC = () => {
   const calendarDays = getDaysInMonth(calendarView.currentDate.getFullYear(), calendarView.currentDate.getMonth());
   
   // イベントを日付ごとに分類
-  const eventsByDate = allCalendarEvents.reduce((acc: Record<string, CalendarEvent[]>, event) => {
+  const eventsByDate = allCalendarEvents.reduce((acc: Record<string, (CalendarEvent | SubtaskCalendarEvent)[]>, event) => {
     const dateKey = formatDate(event.start);
     if (!acc[dateKey]) {
       acc[dateKey] = [];
@@ -90,6 +93,9 @@ const Calendar: React.FC = () => {
       return false;
     }
     if (!filter.showCompleted && event.status === 'done') {
+      return false;
+    }
+    if (!filter.showSubtasks && 'isSubtask' in event && event.isSubtask) {
       return false;
     }
     if (filter.priorities && filter.priorities.length > 0 && !filter.priorities.includes(event.priority)) {
@@ -119,7 +125,7 @@ const Calendar: React.FC = () => {
     navigate(`/schedule?date=${dateString}`);
   };
 
-  const getEventsForDate = (date: Date): CalendarEvent[] => {
+  const getEventsForDate = (date: Date): (CalendarEvent | SubtaskCalendarEvent)[] => {
     return eventsByDate[formatDate(date)] || [];
   };
 
@@ -133,6 +139,38 @@ const Calendar: React.FC = () => {
     setFilter({ ...filter, ...newFilter });
   };
 
+  // サブタスクのステータス変更処理
+  const handleSubtaskStatusChange = (parentTaskId: string, subtaskId: string, currentStatus: Task['status']) => {
+    // ステータスのサイクル: todo -> in_progress -> done -> todo
+    let nextStatus: Task['status'];
+    switch (currentStatus) {
+      case 'todo':
+        nextStatus = 'in_progress';
+        break;
+      case 'in_progress':
+        nextStatus = 'done';
+        break;
+      case 'done':
+        nextStatus = 'todo';
+        break;
+      default:
+        nextStatus = 'todo';
+    }
+    
+    updateSubtask(parentTaskId, subtaskId, { status: nextStatus });
+  };
+
+  // サブタスク詳細画面への遷移
+  const handleSubtaskClick = (parentTaskId: string, subtaskId: string) => {
+    // サブタスク詳細画面に遷移（親タスク情報付き）
+    navigate(`/tasks/${parentTaskId}?subtask=${subtaskId}`);
+  };
+
+  // 親タスク画面への遷移
+  const handleParentTaskClick = (parentTaskId: string) => {
+    navigate(`/tasks/${parentTaskId}`);
+  };
+
   const monthNames = [
     '1月', '2月', '3月', '4月', '5月', '6月',
     '7月', '8月', '9月', '10月', '11月', '12月'
@@ -141,7 +179,7 @@ const Calendar: React.FC = () => {
   const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
 
   // 期限が近いイベントを取得（7日以内）
-  const getUpcomingEvents = (): CalendarEvent[] => {
+  const getUpcomingEvents = (): (CalendarEvent | SubtaskCalendarEvent)[] => {
     const today = new Date();
     const nextWeek = new Date();
     nextWeek.setDate(today.getDate() + 7);
@@ -158,7 +196,7 @@ const Calendar: React.FC = () => {
   const upcomingEvents = getUpcomingEvents();
   
   // 期限切れのイベントを取得
-  const getOverdueEvents = (): CalendarEvent[] => {
+  const getOverdueEvents = (): (CalendarEvent | SubtaskCalendarEvent)[] => {
     const today = new Date();
     return filteredEvents.filter(event => {
       if (event.status === 'done') return false;
@@ -220,6 +258,14 @@ const Calendar: React.FC = () => {
             className={filter.showCompleted ? 'bg-primary/10' : ''}
           >
             完了済みを表示
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleFilterChange({ showSubtasks: !filter.showSubtasks })}
+            className={filter.showSubtasks ? 'bg-primary/10' : ''}
+          >
+            サブタスクを表示
           </Button>
           <Button variant="outline" size="sm">
             <Filter className="h-4 w-4 mr-2" />
@@ -340,18 +386,42 @@ const Calendar: React.FC = () => {
                       {/* イベント表示 */}
                       <div className="space-y-1">
                         {dayEvents.slice(0, 2).map((event) => (
-                          <div
-                            key={event.id}
-                            className="text-xs p-1 rounded truncate"
-                            style={{
-                              backgroundColor: `${event.color}20`,
-                              color: event.color,
-                              borderLeft: `3px solid ${event.color}`
-                            }}
-                            title={event.title}
-                          >
-                            {event.allDay ? event.title : `${event.start.getHours()}:${String(event.start.getMinutes()).padStart(2, '0')} ${event.title}`}
-                          </div>
+                          'isSubtask' in event && event.isSubtask ? (
+                            <SubtaskEvent
+                              key={event.id}
+                              id={event.id}
+                              subtask={event.subtask}
+                              parentTaskTitle={event.parentTaskTitle}
+                              parentTaskId={event.parentTaskId}
+                              color={event.color}
+                              priority={event.priority}
+                              status={event.status}
+                              allDay={event.allDay}
+                              showParentInfo={false} // カレンダーでは親情報を簡略化
+                              onClick={() => {
+                                handleSubtaskClick(event.parentTaskId, event.subtaskId);
+                              }}
+                              onStatusChange={() => {
+                                handleSubtaskStatusChange(event.parentTaskId, event.subtaskId, event.status);
+                              }}
+                              onParentTaskClick={() => {
+                                handleParentTaskClick(event.parentTaskId);
+                              }}
+                            />
+                          ) : (
+                            <div
+                              key={event.id}
+                              className="text-xs p-1 rounded truncate"
+                              style={{
+                                backgroundColor: `${event.color}20`,
+                                color: event.color,
+                                borderLeft: `3px solid ${event.color}`
+                              }}
+                              title={event.title}
+                            >
+                              {event.allDay ? event.title : `${event.start.getHours()}:${String(event.start.getMinutes()).padStart(2, '0')} ${event.title}`}
+                            </div>
+                          )
                         ))}
                         {dayEvents.length > 2 && (
                           <div className="text-xs text-muted-foreground">
@@ -404,7 +474,17 @@ const Calendar: React.FC = () => {
                               style={{ backgroundColor: event.color }}
                             />
                             <h4 className="font-medium">{event.title}</h4>
+                            {'isSubtask' in event && event.isSubtask && (
+                              <Badge variant="secondary" className="text-xs">
+                                サブタスク
+                              </Badge>
+                            )}
                           </div>
+                          {'isSubtask' in event && event.isSubtask && (
+                            <p className="text-sm text-muted-foreground mb-1">
+                              親タスク: {event.parentTaskTitle}
+                            </p>
+                          )}
                           {!event.allDay && (
                             <p className="text-sm text-muted-foreground">
                               {event.start.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} - 
@@ -456,7 +536,17 @@ const Calendar: React.FC = () => {
                             style={{ backgroundColor: event.color }}
                           />
                           <h4 className="font-medium">{event.title}</h4>
+                          {'isSubtask' in event && event.isSubtask && (
+                            <Badge variant="secondary" className="text-xs">
+                              サブタスク
+                            </Badge>
+                          )}
                         </div>
+                        {'isSubtask' in event && event.isSubtask && (
+                          <p className="text-sm text-muted-foreground mb-1">
+                            親タスク: {event.parentTaskTitle}
+                          </p>
+                        )}
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-sm text-muted-foreground">
                             {event.start.toLocaleDateString('ja-JP')}
@@ -507,7 +597,17 @@ const Calendar: React.FC = () => {
                             style={{ backgroundColor: event.color }}
                           />
                           <h4 className="font-medium text-red-800 dark:text-red-400">{event.title}</h4>
+                          {'isSubtask' in event && event.isSubtask && (
+                            <Badge variant="secondary" className="text-xs">
+                              サブタスク
+                            </Badge>
+                          )}
                         </div>
+                        {'isSubtask' in event && event.isSubtask && (
+                          <p className="text-sm text-red-600 dark:text-red-400 mb-1">
+                            親タスク: {event.parentTaskTitle}
+                          </p>
+                        )}
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-sm text-red-600 dark:text-red-400">
                             期限: {event.start.toLocaleDateString('ja-JP')}

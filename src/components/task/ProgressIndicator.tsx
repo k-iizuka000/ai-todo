@@ -4,7 +4,7 @@
 
 import React from 'react';
 
-interface ProgressIndicatorProps {
+export interface ProgressIndicatorProps {
   /** 完了数 */
   completed: number;
   /** 総数 */

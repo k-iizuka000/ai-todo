@@ -2,7 +2,7 @@
  * カレンダー表示機能の型定義
  */
 
-import type { Priority, TaskStatus } from './task';
+import type { Priority, TaskStatus, Subtask } from './task';
 
 // カレンダーイベント型
 export interface CalendarEvent {
@@ -16,6 +16,16 @@ export interface CalendarEvent {
   priority: Priority;
   status: TaskStatus;
   description?: string;
+}
+
+// サブタスクイベント型
+export interface SubtaskCalendarEvent extends Omit<CalendarEvent, 'taskId'> {
+  taskId: string;
+  subtaskId: string;
+  subtask: Subtask;
+  parentTaskTitle: string;
+  parentTaskId: string;
+  isSubtask: true;
 }
 
 // カレンダービュー設定
@@ -32,6 +42,7 @@ export interface CalendarFilter {
   priorities?: Priority[];
   showCompleted: boolean;
   showOverdue?: boolean;
+  showSubtasks?: boolean;
 }
 
 // カレンダー表示オプション

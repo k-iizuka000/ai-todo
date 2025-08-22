@@ -24,6 +24,7 @@ export interface Subtask {
   id: string;
   title: string;
   completed: boolean;
+  dueDate?: Date;  // 追加：期限日
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,6 +72,7 @@ export interface UpdateTaskInput {
   projectId?: string;
   assigneeId?: string;
   tags?: Tag[];
+  subtasks?: Subtask[];
   dueDate?: Date;
   estimatedHours?: number;
   actualHours?: number;
@@ -184,4 +186,42 @@ export interface CreateSubtaskInput {
   assigneeId?: string;
   dueDate?: Date;
   estimatedHours?: number;
+}
+
+// === グループ1: データモデル拡張 ===
+
+// 拡張されたサブタスク型
+export interface ExtendedSubtask {
+  id: string;
+  parentTaskId: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;        // 新規: ステータス管理
+  priority: Priority;        // 新規: 優先度
+  assigneeId?: string;       // 新規: 担当者
+  tags: Tag[];              // 新規: タグ
+  dueDate?: Date;           // 新規: 期限
+  estimatedHours?: number;
+  actualHours?: number;
+  order: number;            // 新規: 表示順
+  completed: boolean;       // 既存のSubtask型との互換性のため
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  updatedBy: string;
+}
+
+// タスク型の拡張
+export interface HierarchicalTaskV2 extends Omit<Task, 'subtasks'> {
+  subtasks: ExtendedSubtask[];
+  // 親タスクのステータス（サブタスクから自動計算）
+  derivedStatus?: TaskStatus;
+  hasSubtasks: boolean;
+  subtaskStats: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    todo: number;
+    completionRate: number;
+  };
 }

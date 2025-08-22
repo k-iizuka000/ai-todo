@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { Subtask } from '../../types/task';
 import ProgressIndicator from './ProgressIndicator';
 
-interface SubTaskListProps {
+export interface SubTaskListProps {
   /** サブタスクリスト */
   subtasks: Subtask[];
   /** サブタスク完了状態変更時のコールバック */

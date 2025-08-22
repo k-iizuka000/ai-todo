@@ -12,13 +12,15 @@ import {
   PriorityBadge,
   Modal 
 } from '@/components/ui';
-import { Plus, Search, Filter, Columns, List, X } from 'lucide-react';
+import { Plus, Search, Filter, Columns, List, X, Split } from 'lucide-react';
 import { TagBadge } from '@/components/tag/TagBadge';
 import { useTagStore } from '@/stores/tagStore';
 import type { Task, TaskStatus, TaskDetail } from '@/types/task';
 import { Tag } from '@/types/tag';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import TaskDetailView from '@/components/task/TaskDetailView';
+import { TaskListView } from '@/components/task';
+import { SubtaskKanban } from '@/components/subtask';
 import { mockTasks, mockTags } from '@/mock/tasks';
 import { mockTodayTasks, getTaskDetail } from '@/mock/taskDetails';
 
@@ -28,7 +30,7 @@ const Tasks: React.FC = () => {
   
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
+  const [viewMode, setViewMode] = useState<'tasks' | 'subtasks' | 'split'>('split');
   const [selectedTask, setSelectedTask] = useState<TaskDetail | null>(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -312,18 +314,28 @@ const Tasks: React.FC = () => {
           {/* 表示モード切り替え */}
           <div className="flex border rounded-lg p-1">
             <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              variant={viewMode === 'tasks' ? 'default' : 'ghost'}
               size="sm"
-              onClick={() => setViewMode('list')}
+              onClick={() => setViewMode('tasks')}
+              title="親タスクのみ表示"
             >
               <List className="h-4 w-4" />
             </Button>
             <Button
-              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+              variant={viewMode === 'subtasks' ? 'default' : 'ghost'}
               size="sm"
-              onClick={() => setViewMode('kanban')}
+              onClick={() => setViewMode('subtasks')}
+              title="サブタスクのみ表示"
             >
               <Columns className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'split' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('split')}
+              title="分割ビュー"
+            >
+              <Split className="h-4 w-4" />
             </Button>
           </div>
           <Button onClick={() => setShowCreateModal(true)}>
@@ -454,7 +466,52 @@ const Tasks: React.FC = () => {
 
       {/* コンテンツエリア */}
       <div className="flex-1 min-h-0">
-        {viewMode === 'kanban' ? (
+        {viewMode === 'split' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-12rem)]">
+            {/* 左側: 親タスクリスト */}
+            <div className="flex flex-col">
+              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg mb-4">
+                <h2 className="font-medium text-gray-700 dark:text-gray-300">
+                  親タスク ({displayTasks.length})
+                </h2>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <TaskListView
+                  tasks={displayTasks}
+                  onTaskClick={handleTaskClick}
+                  onTagClick={handleTagSelect}
+                  className="max-h-full overflow-y-auto"
+                />
+              </div>
+            </div>
+            
+            {/* 右側: サブタスクカンバン */}
+            <div className="flex flex-col">
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg mb-4">
+                <h2 className="font-medium text-blue-700 dark:text-blue-300">
+                  サブタスク管理
+                </h2>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <SubtaskKanban
+                  className="h-full"
+                />
+              </div>
+            </div>
+          </div>
+        ) : viewMode === 'tasks' ? (
+          <TaskListView
+            tasks={displayTasks}
+            onTaskClick={handleTaskClick}
+            onTagClick={handleTagSelect}
+            className="h-[calc(100vh-12rem)] overflow-y-auto"
+          />
+        ) : viewMode === 'subtasks' ? (
+          <SubtaskKanban
+            className="h-[calc(100vh-12rem)]"
+          />
+        ) : (
+          // フォールバック: 従来のカンバンボード
           <KanbanBoard
             tasks={displayTasks}
             onTaskMove={handleTaskMove}
@@ -463,40 +520,6 @@ const Tasks: React.FC = () => {
             onTagClick={handleTagSelect}
             className="h-[calc(100vh-12rem)]"
           />
-        ) : (
-          <div className="space-y-4">
-            {displayTasks.map((task) => (
-              <Card key={task.id} variant="interactive" onClick={() => handleTaskClick(task)}>
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg">{task.title}</CardTitle>
-                    <div className="flex gap-2">
-                      <StatusBadge status={task.status} />
-                      <PriorityBadge priority={task.priority} />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-3">{task.description}</p>
-                  <div className="flex items-center gap-2">
-                    {task.tags.map((tag) => (
-                      <TagBadge 
-                        key={tag.id} 
-                        tag={tag} 
-                        size="sm"
-                        onClick={() => handleTagSelect(tag.id)}
-                      />
-                    ))}
-                    {task.dueDate && (
-                      <span className="text-sm text-muted-foreground ml-auto">
-                        期限: {task.dueDate.toLocaleDateString('ja-JP')}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         )}
       </div>
 
@@ -561,11 +584,7 @@ const Tasks: React.FC = () => {
           <TaskDetailView
             task={selectedTask}
             editable={true}
-            mode="full"
             onTaskUpdate={handleTaskUpdate}
-            onSubtaskToggle={handleSubtaskToggle}
-            onSubtaskAdd={handleSubtaskAdd}
-            onSubtaskDelete={handleSubtaskDelete}
             onTaskDelete={handleTaskDelete}
             onClose={handleCloseTaskDetail}
           />

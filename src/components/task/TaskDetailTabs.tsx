@@ -4,8 +4,9 @@
 
 import React, { useState } from 'react';
 import { Button, Input, Badge } from '@/components/ui';
-import { Plus, MessageCircle, Clock, Paperclip, Trash2 } from 'lucide-react';
-import type { TaskDetail, TaskComment, TaskHistory, CreateSubtaskInput } from '@/types/task';
+import { Plus, MessageCircle, Trash2 } from 'lucide-react';
+import type { TaskDetail, TaskComment, ExtendedSubtask } from '@/types/task';
+import { useTaskStore } from '../../stores/taskStore';
 
 interface TaskDetailTabsProps {
   task: TaskDetail;
@@ -23,48 +24,56 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newComment, setNewComment] = useState('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  
+  // Zustandストアからサブタスク管理機能を取得
+  const { addSubtask } = useTaskStore();
+  
+  // ExtendedSubtaskとしてサブタスクを取得
+  const extendedSubtasks = (task.subtasks as unknown as ExtendedSubtask[]) || [];
 
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
     
-    const newSubtask = {
-      id: `subtask-${Date.now()}`,
+    // Zustandストアを使用してサブタスクを追加
+    addSubtask(task.id, {
       title: newSubtaskTitle,
       description: '',
-      status: 'todo' as const,
-      priority: 'medium' as const,
-      projectId: task.projectId,
-      assigneeId: task.assigneeId,
-      tags: [],
-      subtasks: [],
-      dueDate: undefined,
-      estimatedHours: undefined,
-      actualHours: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      createdBy: 'current-user',
-      updatedBy: 'current-user'
-    };
-
-    const updatedChildTasks = [...task.childTasks, newSubtask];
-    onUpdate?.({ childTasks: updatedChildTasks });
+      priority: 'medium'
+    });
     
     setNewSubtaskTitle('');
     setIsAddingSubtask(false);
   };
 
   const handleSubtaskStatusToggle = (subtaskId: string) => {
-    const updatedChildTasks = task.childTasks.map(subtask =>
-      subtask.id === subtaskId
-        ? { ...subtask, status: subtask.status === 'done' ? 'todo' : 'done' as const }
-        : subtask
+    // ExtendedSubtaskのステータス更新はTaskDetailView側で処理
+    // ここでは依存関係のため、簡単な切り替えだけ実装
+    const subtask = extendedSubtasks.find(s => s.id === subtaskId);
+    if (!subtask) return;
+    
+    // ステータスをサイクルさせる
+    const newStatus = 
+      subtask.status === 'todo' ? 'in_progress' :
+      subtask.status === 'in_progress' ? 'done' :
+      'todo';
+      
+    // TaskDetailを通じて更新するためのユーティリティ関数
+    const updatedSubtasks = extendedSubtasks.map(s => 
+      s.id === subtaskId 
+        ? { ...s, status: newStatus, completed: newStatus === 'done' }
+        : s
     );
-    onUpdate?.({ childTasks: updatedChildTasks });
+    
+    onUpdate?.({ 
+      subtasks: updatedSubtasks as unknown as TaskDetail['subtasks']
+    });
   };
 
   const handleDeleteSubtask = (subtaskId: string) => {
-    const updatedChildTasks = task.childTasks.filter(subtask => subtask.id !== subtaskId);
-    onUpdate?.({ childTasks: updatedChildTasks });
+    const updatedSubtasks = extendedSubtasks.filter(subtask => subtask.id !== subtaskId);
+    onUpdate?.({ 
+      subtasks: updatedSubtasks as unknown as TaskDetail['subtasks']
+    });
   };
 
   const handleAddComment = () => {
@@ -120,8 +129,8 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
     }
   };
 
-  const completedSubtasks = task.childTasks.filter(subtask => subtask.status === 'done').length;
-  const totalSubtasks = task.childTasks.length;
+  const completedSubtasks = extendedSubtasks.filter(subtask => subtask.status === 'done').length;
+  const totalSubtasks = extendedSubtasks.length;
 
   return (
     <div className="w-96 flex flex-col border-l bg-gray-50 dark:bg-gray-800">
@@ -185,14 +194,21 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
 
             {/* サブタスク一覧 */}
             <div className="space-y-2">
-              {task.childTasks.map((subtask) => (
+              {extendedSubtasks.map((subtask) => (
                 <div key={subtask.id} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border">
-                  <input
-                    type="checkbox"
-                    checked={subtask.status === 'done'}
-                    onChange={() => handleSubtaskStatusToggle(subtask.id)}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                  />
+                  <button
+                    onClick={() => handleSubtaskStatusToggle(subtask.id)}
+                    className={`w-4 h-4 border-2 rounded flex items-center justify-center text-xs font-bold ${
+                      subtask.status === 'done' 
+                        ? 'bg-green-500 border-green-500 text-white'
+                        : subtask.status === 'in_progress'
+                        ? 'bg-yellow-500 border-yellow-500 text-white'
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    {subtask.status === 'done' ? '✓' : 
+                     subtask.status === 'in_progress' ? '○' : ''}
+                  </button>
                   <div className="flex-1">
                     <span
                       className={`text-sm ${
@@ -203,14 +219,24 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
                     >
                       {subtask.title}
                     </span>
-                    {subtask.priority !== 'medium' && (
-                      <Badge 
-                        variant={subtask.priority === 'high' || subtask.priority === 'urgent' ? 'destructive' : 'secondary'}
-                        className="ml-2 text-xs"
-                      >
-                        {subtask.priority}
-                      </Badge>
+                    {subtask.description && (
+                      <p className="text-xs text-gray-500 mt-1">{subtask.description}</p>
                     )}
+                    <div className="flex items-center gap-2 mt-1">
+                      {subtask.priority !== 'medium' && (
+                        <Badge 
+                          variant={subtask.priority === 'high' || subtask.priority === 'urgent' ? 'destructive' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {subtask.priority}
+                        </Badge>
+                      )}
+                      {subtask.dueDate && (
+                        <span className="text-xs text-gray-500">
+                          {subtask.dueDate.toLocaleDateString('ja-JP')}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <Button
                     variant="ghost"

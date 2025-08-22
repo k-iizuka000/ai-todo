@@ -4,10 +4,10 @@
 
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import { Task, TaskFilter, TaskSort, CreateTaskInput, UpdateTaskInput, TaskListOptions } from '../types/task';
+import { Task, TaskFilter, TaskSort, CreateTaskInput, UpdateTaskInput, TaskListOptions, ExtendedSubtask, HierarchicalTaskV2, TaskStatus } from '../types/task';
 import { mockTasks } from '../mock/tasks';
 
-// タスクストアの状態型定義
+// タスクストアの状態型定義 - グループ1で拡張
 interface TaskState {
   // 状態
   tasks: Task[];
@@ -17,12 +17,31 @@ interface TaskState {
   isLoading: boolean;
   error: string | null;
   
+  // === グループ1: サブタスク管理機能追加 ===
+  viewMode: 'tasks' | 'subtasks' | 'hierarchy';
+  
   // アクション
   setTasks: (tasks: Task[]) => void;
   addTask: (taskInput: CreateTaskInput) => void;
   updateTask: (id: string, taskInput: UpdateTaskInput) => void;
   deleteTask: (id: string) => void;
   selectTask: (id: string | null) => void;
+  
+  // サブタスク管理
+  updateSubtask: (taskId: string, subtaskId: string, updates: Partial<ExtendedSubtask>) => void;
+  addSubtask: (taskId: string, subtask: CreateSubtaskInput) => void;
+  deleteSubtask: (taskId: string, subtaskId: string) => void;
+  reorderSubtasks: (taskId: string, subtaskIds: string[]) => void;
+  
+  // 親タスク自動更新
+  updateParentTaskStatus: (taskId: string) => void;
+  
+  // ビュー管理
+  setViewMode: (mode: 'tasks' | 'subtasks' | 'hierarchy') => void;
+  
+  // フィルタリング
+  getSubtasksForCalendar: (date?: Date) => ExtendedSubtask[];
+  getSubtasksByStatus: (status: TaskStatus) => ExtendedSubtask[];
   
   // フィルター・ソート関連
   setFilter: (filter: Partial<TaskFilter>) => void;
@@ -49,6 +68,16 @@ interface TaskState {
   resetStore: () => void;
 }
 
+// サブタスク作成用Input型（グループ1で追加）
+interface CreateSubtaskInput {
+  title: string;
+  description?: string;
+  priority?: string;
+  assigneeId?: string;
+  dueDate?: Date;
+  estimatedHours?: number;
+}
+
 // デフォルトのフィルター設定
 const defaultFilter: TaskFilter = {
   status: undefined,
@@ -72,6 +101,11 @@ const generateId = (): string => {
   return `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
+// サブタスク用IDジェネレーター（グループ1で追加）
+const generateSubtaskId = (): string => {
+  return `subtask-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
 // Zustandストアの作成
 export const useTaskStore = create<TaskState>()(
   devtools(
@@ -84,6 +118,9 @@ export const useTaskStore = create<TaskState>()(
         sort: defaultSort,
         isLoading: false,
         error: null,
+        
+        // === グループ1: 追加された初期状態 ===
+        viewMode: 'tasks',
 
         // 基本的なCRUD操作
         setTasks: (tasks) => {
@@ -335,8 +372,212 @@ export const useTaskStore = create<TaskState>()(
             filter: defaultFilter,
             sort: defaultSort,
             isLoading: false,
-            error: null
+            error: null,
+            viewMode: 'tasks'
           }, false, 'resetStore');
+        },
+
+        // === グループ1: サブタスク管理機能の実装 ===
+        
+        // サブタスク更新
+        updateSubtask: (taskId, subtaskId, updates) => {
+          const { tasks } = get();
+          const updatedTasks = tasks.map(task => {
+            if (task.id === taskId) {
+              const currentSubtasks = task.subtasks as unknown as ExtendedSubtask[];
+              const updatedSubtasks = currentSubtasks.map(subtask => {
+                if (subtask.id === subtaskId) {
+                  const updatedSubtask = { 
+                    ...subtask, 
+                    ...updates, 
+                    updatedAt: new Date(), 
+                    updatedBy: 'current-user' 
+                  };
+                  // statusに基づいてcompletedを自動更新
+                  if (updates.status) {
+                    updatedSubtask.completed = updates.status === 'done';
+                  }
+                  return updatedSubtask;
+                }
+                return subtask;
+              });
+              return { ...task, subtasks: updatedSubtasks as unknown as Task['subtasks'] };
+            }
+            return task;
+          });
+          
+          set({ tasks: updatedTasks }, false, 'updateSubtask');
+          
+          // 親タスクのステータスを自動更新
+          get().updateParentTaskStatus(taskId);
+        },
+
+        // サブタスク追加
+        addSubtask: (taskId, subtaskInput) => {
+          const { tasks } = get();
+          const task = tasks.find(t => t.id === taskId);
+          if (!task) return;
+
+          const currentSubtasks = task.subtasks as unknown as ExtendedSubtask[];
+          const newSubtask: ExtendedSubtask = {
+            id: generateSubtaskId(),
+            parentTaskId: taskId,
+            title: subtaskInput.title,
+            description: subtaskInput.description,
+            status: 'todo',
+            priority: (subtaskInput.priority as any) || 'medium',
+            assigneeId: subtaskInput.assigneeId,
+            tags: [],
+            dueDate: subtaskInput.dueDate,
+            estimatedHours: subtaskInput.estimatedHours,
+            actualHours: 0,
+            order: currentSubtasks.length,
+            completed: false,  // 既存のSubtask型との互換性のため
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            createdBy: 'current-user',
+            updatedBy: 'current-user'
+          };
+
+          const updatedTasks = tasks.map(t =>
+            t.id === taskId
+              ? { ...t, subtasks: [...currentSubtasks, newSubtask] as unknown as Task['subtasks'] }
+              : t
+          );
+
+          set({ tasks: updatedTasks }, false, 'addSubtask');
+          
+          // 親タスクのステータスを自動更新
+          get().updateParentTaskStatus(taskId);
+        },
+
+        // サブタスク削除
+        deleteSubtask: (taskId, subtaskId) => {
+          const { tasks } = get();
+          const updatedTasks = tasks.map(task => {
+            if (task.id === taskId) {
+              const currentSubtasks = task.subtasks as unknown as ExtendedSubtask[];
+              const filteredSubtasks = currentSubtasks.filter(
+                subtask => subtask.id !== subtaskId
+              );
+              return { ...task, subtasks: filteredSubtasks as unknown as Task['subtasks'] };
+            }
+            return task;
+          });
+
+          set({ tasks: updatedTasks }, false, 'deleteSubtask');
+          
+          // 親タスクのステータスを自動更新
+          get().updateParentTaskStatus(taskId);
+        },
+
+        // サブタスク並び替え
+        reorderSubtasks: (taskId, subtaskIds) => {
+          const { tasks } = get();
+          const updatedTasks = tasks.map(task => {
+            if (task.id === taskId) {
+              // 既存のsubtasksがExtendedSubtask型であることを確認
+              const currentSubtasks = task.subtasks as unknown as ExtendedSubtask[];
+              const subtasksMap = new Map(currentSubtasks.map(st => [st.id, st]));
+              const reorderedSubtasks = subtaskIds.map((id, index) => {
+                const subtask = subtasksMap.get(id);
+                return subtask ? { ...subtask, order: index } : null;
+              }).filter(Boolean) as ExtendedSubtask[];
+              
+              return { ...task, subtasks: reorderedSubtasks as unknown as Task['subtasks'] };
+            }
+            return task;
+          });
+
+          set({ tasks: updatedTasks }, false, 'reorderSubtasks');
+        },
+
+        // 親タスク自動更新ロジック
+        updateParentTaskStatus: (taskId) => {
+          const { tasks } = get();
+          const task = tasks.find(t => t.id === taskId);
+          if (!task || !task.subtasks.length) return;
+          
+          const subtasks = task.subtasks as unknown as ExtendedSubtask[];
+          const allCompleted = subtasks.every(s => s.status === 'done');
+          const anyInProgress = subtasks.some(s => s.status === 'in_progress');
+          
+          let newStatus: TaskStatus;
+          if (allCompleted) {
+            newStatus = 'done';
+          } else if (anyInProgress) {
+            newStatus = 'in_progress';
+          } else {
+            newStatus = 'todo';
+          }
+          
+          // HierarchicalTaskV2として扱い、derivedStatusを更新
+          const updatedTasks = tasks.map(t => {
+            if (t.id === taskId) {
+              const completedCount = subtasks.filter(s => s.status === 'done').length;
+              const inProgressCount = subtasks.filter(s => s.status === 'in_progress').length;
+              const todoCount = subtasks.filter(s => s.status === 'todo').length;
+              
+              // 元のTaskプロパティを保持しつつ、HierarchicalTaskV2の追加プロパティを設定
+              const hierarchicalTask: HierarchicalTaskV2 = {
+                ...t,
+                subtasks: subtasks,
+                derivedStatus: newStatus,
+                hasSubtasks: true,
+                subtaskStats: {
+                  total: subtasks.length,
+                  completed: completedCount,
+                  inProgress: inProgressCount,
+                  todo: todoCount,
+                  completionRate: subtasks.length > 0 ? Math.round((completedCount / subtasks.length) * 100) : 0
+                }
+              };
+              
+              // 通常のTask型として返すため、キャスト
+              return hierarchicalTask as unknown as Task;
+            }
+            return t;
+          });
+          
+          set({ tasks: updatedTasks }, false, 'updateParentTaskStatus');
+        },
+
+        // ビュー管理
+        setViewMode: (mode) => {
+          set({ viewMode: mode }, false, 'setViewMode');
+        },
+
+        // フィルタリング機能
+        getSubtasksForCalendar: (date) => {
+          const { tasks } = get();
+          const allSubtasks: ExtendedSubtask[] = [];
+          
+          tasks.forEach(task => {
+            const subtasks = task.subtasks as unknown as ExtendedSubtask[];
+            subtasks.forEach(subtask => {
+              if (!date || (subtask.dueDate && subtask.dueDate.toDateString() === date.toDateString())) {
+                allSubtasks.push(subtask);
+              }
+            });
+          });
+          
+          return allSubtasks;
+        },
+
+        getSubtasksByStatus: (status) => {
+          const { tasks } = get();
+          const allSubtasks: ExtendedSubtask[] = [];
+          
+          tasks.forEach(task => {
+            const subtasks = task.subtasks as unknown as ExtendedSubtask[];
+            subtasks.forEach(subtask => {
+              if (subtask.status === status) {
+                allSubtasks.push(subtask);
+              }
+            });
+          });
+          
+          return allSubtasks;
         }
       }),
       {

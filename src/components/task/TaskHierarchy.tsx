@@ -6,7 +6,7 @@ import React, { useState } from 'react';
 import { Task, Priority, TaskStatus } from '../../types/task';
 import ProgressIndicator from './ProgressIndicator';
 
-interface TaskHierarchyProps {
+export interface TaskHierarchyProps {
   /** 表示するタスク */
   task: Task;
   /** 階層レベル（0が最上位） */

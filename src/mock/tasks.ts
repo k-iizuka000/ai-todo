@@ -2,7 +2,7 @@
  * タスクのモックデータ
  */
 
-import { Task, TaskStatus, Priority, Subtask } from '../types/task';
+import { Task, TaskStatus, Subtask, ExtendedSubtask, HierarchicalTaskV2 } from '../types/task';
 import { Tag } from '../types/tag';
 
 // モックタグデータ
@@ -19,44 +19,171 @@ export const mockTags: Tag[] = [
   { id: 'tag-10', name: 'セキュリティ', color: '#F97316' }
 ];
 
-// モックサブタスクデータ
-const mockSubtasks: Subtask[] = [
+// ExtendedSubtaskのモックデータ
+const mockExtendedSubtasks: ExtendedSubtask[] = [
   {
     id: 'subtask-1',
+    parentTaskId: 'task-1',
     title: 'APIエンドポイントの設計',
+    description: 'RESTful APIエンドポイントの設計とOpenAPI仕様書の作成',
+    status: 'done',
+    priority: 'high',
+    assigneeId: 'user-1',
+    tags: [mockTags[1], mockTags[7]], // バックエンド, ドキュメント
+    dueDate: new Date('2024-01-16T23:59:59Z'),
+    estimatedHours: 8,
+    actualHours: 6,
+    order: 1,
     completed: true,
     createdAt: new Date('2024-01-15T09:00:00Z'),
-    updatedAt: new Date('2024-01-16T14:30:00Z')
+    updatedAt: new Date('2024-01-16T14:30:00Z'),
+    createdBy: 'user-1',
+    updatedBy: 'user-1'
   },
   {
     id: 'subtask-2',
+    parentTaskId: 'task-1',
     title: 'データベーススキーマの作成',
+    description: 'ユーザー認証に必要なデータベーステーブルの設計と作成',
+    status: 'done',
+    priority: 'high',
+    assigneeId: 'user-1',
+    tags: [mockTags[5]], // データベース
+    dueDate: new Date('2024-01-17T23:59:59Z'),
+    estimatedHours: 6,
+    actualHours: 8,
+    order: 2,
     completed: true,
     createdAt: new Date('2024-01-16T10:00:00Z'),
-    updatedAt: new Date('2024-01-17T16:00:00Z')
+    updatedAt: new Date('2024-01-17T16:00:00Z'),
+    createdBy: 'user-1',
+    updatedBy: 'user-1'
   },
   {
     id: 'subtask-3',
+    parentTaskId: 'task-1',
     title: 'バリデーション処理の実装',
+    description: '入力値検証、セッション管理、トークン処理の実装',
+    status: 'in_progress',
+    priority: 'high',
+    assigneeId: 'user-1',
+    tags: [mockTags[1], mockTags[9]], // バックエンド, セキュリティ
+    dueDate: new Date('2024-01-20T23:59:59Z'),
+    estimatedHours: 12,
+    actualHours: 8,
+    order: 3,
     completed: false,
     createdAt: new Date('2024-01-17T11:00:00Z'),
-    updatedAt: new Date('2024-01-17T11:00:00Z')
+    updatedAt: new Date('2024-01-18T16:00:00Z'),
+    createdBy: 'user-1',
+    updatedBy: 'user-1'
   },
   {
     id: 'subtask-4',
+    parentTaskId: 'task-2',
     title: 'コンポーネントの作成',
+    description: 'Reactコンポーネントの実装とプロップ定義',
+    status: 'done',
+    priority: 'medium',
+    assigneeId: 'user-2',
+    tags: [mockTags[0]], // フロントエンド
+    dueDate: new Date('2024-01-12T23:59:59Z'),
+    estimatedHours: 10,
+    actualHours: 12,
+    order: 1,
     completed: true,
     createdAt: new Date('2024-01-10T08:00:00Z'),
-    updatedAt: new Date('2024-01-12T15:30:00Z')
+    updatedAt: new Date('2024-01-12T15:30:00Z'),
+    createdBy: 'user-2',
+    updatedBy: 'user-2'
   },
   {
     id: 'subtask-5',
+    parentTaskId: 'task-2',
     title: 'スタイリングの調整',
+    description: 'CSS-in-JSとTailwind CSSを使用したスタイリング',
+    status: 'todo',
+    priority: 'low',
+    assigneeId: 'user-2',
+    tags: [mockTags[0], mockTags[4]], // フロントエンド, UI/UX
+    dueDate: new Date('2024-01-22T23:59:59Z'),
+    estimatedHours: 6,
+    actualHours: 0,
+    order: 2,
     completed: false,
     createdAt: new Date('2024-01-12T09:00:00Z'),
-    updatedAt: new Date('2024-01-12T09:00:00Z')
+    updatedAt: new Date('2024-01-12T09:00:00Z'),
+    createdBy: 'user-2',
+    updatedBy: 'user-2'
+  },
+  {
+    id: 'subtask-6',
+    parentTaskId: 'task-6',
+    title: 'プロジェクト作成フォームの設計',
+    description: 'プロジェクト作成に必要な入力フィールドとバリデーションの設計',
+    status: 'done',
+    priority: 'high',
+    assigneeId: 'user-2',
+    tags: [mockTags[0], mockTags[4]], // フロントエンド, UI/UX
+    dueDate: new Date('2024-01-15T23:59:59Z'),
+    estimatedHours: 8,
+    actualHours: 6,
+    order: 1,
+    completed: true,
+    createdAt: new Date('2024-01-12T08:00:00Z'),
+    updatedAt: new Date('2024-01-15T12:00:00Z'),
+    createdBy: 'user-2',
+    updatedBy: 'user-2'
+  },
+  {
+    id: 'subtask-7',
+    parentTaskId: 'task-6',
+    title: 'メンバー招待機能の実装',
+    description: 'プロジェクトメンバーの招待とロール管理機能',
+    status: 'in_progress',
+    priority: 'medium',
+    assigneeId: 'user-2',
+    tags: [mockTags[1], mockTags[3]], // バックエンド, 新機能
+    dueDate: new Date('2024-01-25T23:59:59Z'),
+    estimatedHours: 16,
+    actualHours: 8,
+    order: 2,
+    completed: false,
+    createdAt: new Date('2024-01-15T10:00:00Z'),
+    updatedAt: new Date('2024-01-21T14:45:00Z'),
+    createdBy: 'user-2',
+    updatedBy: 'user-2'
+  },
+  {
+    id: 'subtask-8',
+    parentTaskId: 'task-6',
+    title: '権限管理システムの構築',
+    description: 'プロジェクトレベルでの権限制御とアクセス管理',
+    status: 'todo',
+    priority: 'high',
+    assigneeId: 'user-2',
+    tags: [mockTags[1], mockTags[9]], // バックエンド, セキュリティ
+    dueDate: new Date('2024-02-05T23:59:59Z'),
+    estimatedHours: 12,
+    actualHours: 0,
+    order: 3,
+    completed: false,
+    createdAt: new Date('2024-01-20T14:00:00Z'),
+    updatedAt: new Date('2024-01-20T14:00:00Z'),
+    createdBy: 'user-2',
+    updatedBy: 'user-2'
   }
 ];
+
+// 互換性のためのレガシーサブタスクデータ（既存コードで使用されている場合）
+const mockSubtasks: Subtask[] = mockExtendedSubtasks.map(extSubtask => ({
+  id: extSubtask.id,
+  title: extSubtask.title,
+  completed: extSubtask.completed,
+  dueDate: extSubtask.dueDate,
+  createdAt: extSubtask.createdAt,
+  updatedAt: extSubtask.updatedAt
+}));
 
 // 10件以上のモックタスクデータ
 export const mockTasks: Task[] = [
@@ -159,7 +286,7 @@ export const mockTasks: Task[] = [
     projectId: 'project-1',
     assigneeId: 'user-2',
     tags: [mockTags[3], mockTags[1]],
-    subtasks: [],
+    subtasks: [mockSubtasks[5], mockSubtasks[6], mockSubtasks[7]], // task-6のサブタスク（subtask-6, subtask-7, subtask-8）を追加
     dueDate: new Date('2024-02-10T23:59:59Z'),
     estimatedHours: 32,
     actualHours: 16,
@@ -304,4 +431,124 @@ export const getPriorityStats = (tasks: Task[] = mockTasks) => {
   const low = tasks.filter(task => task.priority === 'low').length;
   
   return { urgent, high, medium, low };
+};
+
+// サブタスクの統計を計算するヘルパー関数
+const calculateSubtaskStats = (subtasks: ExtendedSubtask[]) => {
+  const total = subtasks.length;
+  const completed = subtasks.filter(s => s.status === 'done').length;
+  const inProgress = subtasks.filter(s => s.status === 'in_progress').length;
+  const todo = subtasks.filter(s => s.status === 'todo').length;
+  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+  
+  return { total, completed, inProgress, todo, completionRate };
+};
+
+// 親タスクの自動ステータス計算
+const calculateDerivedStatus = (subtasks: ExtendedSubtask[]): TaskStatus => {
+  if (subtasks.length === 0) return 'todo';
+  
+  const allCompleted = subtasks.every(s => s.status === 'done');
+  const anyInProgress = subtasks.some(s => s.status === 'in_progress');
+  
+  if (allCompleted) return 'done';
+  if (anyInProgress) return 'in_progress';
+  return 'todo';
+};
+
+// HierarchicalTaskV2のモックデータ
+export const mockHierarchicalTasks: HierarchicalTaskV2[] = [
+  {
+    ...mockTasks[0], // task-1
+    subtasks: mockExtendedSubtasks.filter(s => s.parentTaskId === 'task-1'),
+    hasSubtasks: true,
+    derivedStatus: calculateDerivedStatus(mockExtendedSubtasks.filter(s => s.parentTaskId === 'task-1')),
+    subtaskStats: calculateSubtaskStats(mockExtendedSubtasks.filter(s => s.parentTaskId === 'task-1'))
+  },
+  {
+    ...mockTasks[1], // task-2
+    subtasks: mockExtendedSubtasks.filter(s => s.parentTaskId === 'task-2'),
+    hasSubtasks: true,
+    derivedStatus: calculateDerivedStatus(mockExtendedSubtasks.filter(s => s.parentTaskId === 'task-2')),
+    subtaskStats: calculateSubtaskStats(mockExtendedSubtasks.filter(s => s.parentTaskId === 'task-2'))
+  },
+  {
+    ...mockTasks[2], // task-3
+    subtasks: [],
+    hasSubtasks: false,
+    subtaskStats: calculateSubtaskStats([])
+  },
+  {
+    ...mockTasks[3], // task-4
+    subtasks: [],
+    hasSubtasks: false,
+    subtaskStats: calculateSubtaskStats([])
+  },
+  {
+    ...mockTasks[4], // task-5
+    subtasks: [],
+    hasSubtasks: false,
+    subtaskStats: calculateSubtaskStats([])
+  },
+  {
+    ...mockTasks[5], // task-6
+    subtasks: mockExtendedSubtasks.filter(s => s.parentTaskId === 'task-6'),
+    hasSubtasks: true,
+    derivedStatus: calculateDerivedStatus(mockExtendedSubtasks.filter(s => s.parentTaskId === 'task-6')),
+    subtaskStats: calculateSubtaskStats(mockExtendedSubtasks.filter(s => s.parentTaskId === 'task-6'))
+  },
+  {
+    ...mockTasks[6], // task-7
+    subtasks: [],
+    hasSubtasks: false,
+    subtaskStats: calculateSubtaskStats([])
+  },
+  {
+    ...mockTasks[7], // task-8
+    subtasks: [],
+    hasSubtasks: false,
+    subtaskStats: calculateSubtaskStats([])
+  },
+  {
+    ...mockTasks[8], // task-9
+    subtasks: [],
+    hasSubtasks: false,
+    subtaskStats: calculateSubtaskStats([])
+  },
+  {
+    ...mockTasks[9], // task-10
+    subtasks: [],
+    hasSubtasks: false,
+    subtaskStats: calculateSubtaskStats([])
+  },
+  {
+    ...mockTasks[10], // task-11
+    subtasks: [],
+    hasSubtasks: false,
+    subtaskStats: calculateSubtaskStats([])
+  },
+  {
+    ...mockTasks[11], // task-12
+    subtasks: [],
+    hasSubtasks: false,
+    subtaskStats: calculateSubtaskStats([])
+  }
+];
+
+// ExtendedSubtaskを直接エクスポート
+export const mockExtendedSubtasksData = mockExtendedSubtasks;
+
+// サブタスクをIDで取得するヘルパー関数
+export const getSubtaskById = (subtaskId: string): ExtendedSubtask | undefined => {
+  return mockExtendedSubtasks.find(s => s.id === subtaskId);
+};
+
+// 特定のタスクのサブタスクを取得
+export const getSubtasksByTaskId = (taskId: string): ExtendedSubtask[] => {
+  return mockExtendedSubtasks.filter(s => s.parentTaskId === taskId);
+};
+
+// ステータス別のサブタスクを取得
+export const getSubtasksByStatus = (status: TaskStatus): ExtendedSubtask[] => {
+  return mockExtendedSubtasks.filter(s => s.status === status);
 };

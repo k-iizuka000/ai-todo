@@ -107,10 +107,13 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobileMenuOpen }) => {
             </span>
           </button>
 
-          {/* Settings */}
-          <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 hidden sm:block">
-            <Settings className="h-5 w-5 text-gray-600" />
-          </button>
+          {/* 
+            Settings button was removed (Issue #006) to reduce UI clutter and remove redundancy.
+            Settings functionality remains accessible through:
+            1. User menu dropdown (Settings option)
+            2. Sidebar navigation (Settings section)
+            This provides adequate access paths while maintaining a cleaner header layout.
+          */}
 
           {/* User profile */}
           <div className="relative" ref={userMenuRef}>

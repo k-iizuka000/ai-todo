@@ -23,7 +23,6 @@ services:
       # ソースコードのホットリロード対応
       - .:/app
       - /app/node_modules  # node_modulesは永続化（キャッシュ効率化）
-      - /app/.git         # Gitディレクトリは除外
     environment:
       - NODE_ENV=development
       - VITE_HOST=0.0.0.0

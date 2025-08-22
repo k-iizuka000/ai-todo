@@ -30,6 +30,8 @@ interface KanbanColumnProps {
   onToggleTaskCollapse?: (taskId: string) => void;
   /** サブタスク切り替え時のコールバック */
   onSubtaskToggle?: (taskId: string, subtaskId: string) => void;
+  /** タグクリック時のコールバック */
+  onTagClick?: (tagId: string) => void;
   /** コンパクト表示モード */
   compact?: boolean;
   /** 追加のCSSクラス */
@@ -66,6 +68,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
   onSettings,
   onToggleTaskCollapse,
   onSubtaskToggle,
+  onTagClick,
   compact = false,
   className = '',
   collapsedTasks = new Set(),
@@ -129,6 +132,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
                   <TaskCardCompact
                     task={task}
                     onClick={onTaskClick}
+                    onTagClick={onTagClick}
                   />
                 ) : (
                   <TaskCard
@@ -137,6 +141,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
                     onToggleCollapse={onToggleTaskCollapse}
                     onSubtaskToggle={onSubtaskToggle}
                     onClick={onTaskClick}
+                    onTagClick={onTagClick}
                   />
                 )}
               </div>

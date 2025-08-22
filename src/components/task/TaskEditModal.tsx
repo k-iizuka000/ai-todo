@@ -235,7 +235,6 @@ export const TaskEditModal: React.FC<TaskEditModalProps> = ({
             onCancel={handleCancel}
             submitLabel="更新"
             title=""
-            isEdit={true}
             loading={isLoading}
           />
         )}

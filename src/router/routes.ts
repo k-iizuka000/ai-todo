@@ -44,6 +44,11 @@ export const routes: RouteConfig[] = [
     icon: 'BarChart3',
   },
   {
+    path: '/tags',
+    label: 'タグの管理',
+    icon: 'Tag',
+  },
+  {
     path: '/settings',
     label: '設定',
     icon: 'Settings',

@@ -10,6 +10,7 @@ import { ProjectManagement } from '@/pages/ProjectManagement';
 import Calendar from '@/pages/Calendar';
 import DailyScheduleView from '@/pages/DailyScheduleView';
 import Analytics from '@/pages/Analytics';
+import TagManagement from '@/pages/TagManagement';
 import ScheduleErrorBoundary from '@/components/schedule/ScheduleErrorBoundary';
 import NotFound from '@/pages/NotFound';
 import LoginForm from '@/pages/auth/LoginForm';
@@ -92,6 +93,9 @@ const AppRouter: React.FC = () => {
           
           {/* Analytics routes */}
           <Route path="analytics" element={<Analytics />} />
+          
+          {/* Tags routes */}
+          <Route path="tags" element={<TagManagement />} />
           
           {/* Settings routes with nested layout */}
           <Route path="settings" element={<SettingsLayout />}>

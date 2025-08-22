@@ -7,6 +7,8 @@ import {
   Calendar, 
   BarChart3, 
   Settings,
+  Tag,
+  Clock,
   ChevronRight,
   LucideIcon
 } from 'lucide-react';
@@ -25,6 +27,8 @@ const iconMap: Record<string, LucideIcon> = {
   Calendar,
   BarChart3,
   Settings,
+  Tag,
+  Clock,
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Input, Textarea, FormField } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
-import { CreateTaskInput, UpdateTaskInput, Priority, Tag } from '@/types/task'
+import { CreateTaskInput, UpdateTaskInput, Priority } from '@/types/task'
+import { Tag } from '@/types/tag'
 import { ValidationMessages } from './ValidationMessages'
-import { Calendar, Clock, Tag as TagIcon } from 'lucide-react'
+import { TagSelector } from '@/components/tag/TagSelector'
+import { useTagStore } from '@/stores/tagStore'
+import { Calendar, Clock } from 'lucide-react'
 
 // フォーム用のバリデーションエラー型
 export interface ValidationErrors {
@@ -45,14 +46,6 @@ const PRIORITY_OPTIONS: Array<{ value: Priority; label: string; color: string }>
   { value: 'urgent', label: '緊急', color: 'bg-priority-urgent' },
 ]
 
-// デフォルトのタグ候補（実際の実装では外部から取得）
-const SUGGESTED_TAGS: Tag[] = [
-  { id: '1', name: 'バグ修正', color: 'red' },
-  { id: '2', name: '新機能', color: 'blue' },
-  { id: '3', name: 'ドキュメント', color: 'green' },
-  { id: '4', name: 'レビュー', color: 'yellow' },
-  { id: '5', name: 'テスト', color: 'purple' },
-]
 
 export const TaskForm: React.FC<TaskFormProps> = ({
   initialData,
@@ -62,6 +55,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({
   title,
   loading = false,
 }) => {
+  // タグストアからタグデータを取得
+  const { tags } = useTagStore()
   // フォームデータ
   const [formData, setFormData] = useState<TaskFormData>({
     title: '',
@@ -74,9 +69,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({
 
   // バリデーションエラー
   const [errors, setErrors] = useState<ValidationErrors>({})
-  
-  const [tagInput, setTagInput] = useState('')
-  const [showTagSuggestions, setShowTagSuggestions] = useState(false)
 
   // 初期データの設定
   useEffect(() => {
@@ -123,6 +115,11 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       }
     }
 
+    // タグ数のバリデーション
+    if (formData.tags.length > 10) {
+      newErrors.tags = ['タグは10個以内で設定してください']
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }, [formData])
@@ -167,30 +164,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     }
   }
 
-  // タグ追加処理
-  const handleAddTag = (tagName: string) => {
-    const trimmedName = tagName.trim()
-    if (!trimmedName) return
-
-    // 既存のタグと重複チェック
-    if (formData.tags.some(tag => tag.name === trimmedName)) {
-      return
-    }
-
-    const newTag: Tag = {
-      id: Date.now().toString(),
-      name: trimmedName,
-      color: 'gray',
-    }
-
-    handleFieldChange('tags', [...formData.tags, newTag])
-    setTagInput('')
-  }
-
-  // タグ削除処理
-  const handleRemoveTag = (tagId: string) => {
-    handleFieldChange('tags', formData.tags.filter(tag => tag.id !== tagId))
-  }
+  // タグ変更処理
+  const handleTagsChange = useCallback((newTags: Tag[]) => {
+    handleFieldChange('tags', newTags)
+  }, [handleFieldChange])
 
 
   return (
@@ -298,71 +275,17 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       <FormField
         label="タグ"
         error={errors.tags?.[0]}
-        hint="Enterキーで追加できます"
+        hint="タグを選択または新規作成してください（最大10個）"
       >
-        <div className="space-y-3">
-          {/* 既存のタグ表示 */}
-          {formData.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {formData.tags.map((tag) => (
-                <Badge
-                  key={tag.id}
-                  variant="secondary"
-                  className="flex items-center gap-1"
-                >
-                  {tag.name}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveTag(tag.id)}
-                    className="ml-1 text-muted-foreground hover:text-foreground"
-                  >
-                    ×
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          {/* タグ入力 */}
-          <div className="relative">
-            <Input
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  handleAddTag(tagInput)
-                }
-              }}
-              onFocus={() => setShowTagSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowTagSuggestions(false), 200)}
-              placeholder="新しいタグを入力..."
-              className="pl-10"
-            />
-            <TagIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          </div>
-
-          {/* タグ候補表示 */}
-          {showTagSuggestions && (
-            <Card className="absolute z-10 w-full mt-1 p-2 shadow-lg">
-              <div className="flex flex-wrap gap-1">
-                {SUGGESTED_TAGS.filter(tag => 
-                  !formData.tags.some(existing => existing.name === tag.name)
-                ).map((tag) => (
-                  <Button
-                    key={tag.id}
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={() => handleAddTag(tag.name)}
-                  >
-                    {tag.name}
-                  </Button>
-                ))}
-              </div>
-            </Card>
-          )}
-        </div>
+        <TagSelector
+          selectedTags={formData.tags}
+          availableTags={tags}
+          maxTags={10}
+          allowCreate={true}
+          onTagsChange={handleTagsChange}
+          editing={true}
+          placeholder="タグを追加..."
+        />
       </FormField>
 
       {/* バリデーションメッセージ */}

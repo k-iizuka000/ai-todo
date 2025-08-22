@@ -3,7 +3,8 @@
  * ランタイムでの型安全性を提供する
  */
 
-import { TaskStatus, Priority, Task, Subtask, Tag } from '@/types/task';
+import { TaskStatus, Priority, Task, Subtask } from '@/types/task';
+import { Tag } from '@/types/tag';
 
 /**
  * TaskStatus型のガード関数

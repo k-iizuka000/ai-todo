@@ -34,6 +34,8 @@ interface KanbanBoardProps {
   onAddTask?: (status: TaskStatus) => void;
   /** サブタスク完了切り替え時のコールバック */
   onSubtaskToggle?: (taskId: string, subtaskId: string) => void;
+  /** タグクリック時のコールバック */
+  onTagClick?: (tagId: string) => void;
   /** コンパクト表示モード */
   compact?: boolean;
   /** 追加のCSSクラス */
@@ -79,6 +81,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onTaskClick,
   onAddTask,
   onSubtaskToggle,
+  onTagClick,
   compact = false,
   className = ''
 }) => {
@@ -327,6 +330,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 onAddTask={handleAddTask}
                 onToggleTaskCollapse={handleToggleTaskCollapse}
                 onSubtaskToggle={handleSubtaskToggle}
+                onTagClick={onTagClick}
                 compact={compact}
                 collapsedTasks={collapsedTasks}
                 className="min-h-0" // グリッド内での高さ制限

@@ -55,7 +55,7 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex relative">
       {/* Sidebar */}
       <Sidebar 
         isOpen={isSidebarOpen} 
@@ -63,7 +63,7 @@ const MainLayout: React.FC = () => {
       />
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col lg:ml-0">
+      <div className="flex-1 flex flex-col">
         {/* Header */}
         <Header 
           onMenuClick={handleSidebarToggle}

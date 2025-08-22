@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スケジュールエラー再現テスト</title>
+</head>
+<body>
+    <h1>スケジュールエラー再現テスト</h1>
+    <div id="error-log"></div>
+    <button onclick="testScheduleError()">エラー再現テスト実行</button>
+    <button onclick="checkLocalStorage()">localStorage確認</button>
+    <button onclick="simulateStorageIssue()">localStorage問題シミュレート</button>
+
+    <script>
+        const errorLog = document.getElementById('error-log');
+        
+        function log(message) {
+            const div = document.createElement('div');
+            div.textContent = new Date().toLocaleTimeString() + ': ' + message;
+            errorLog.appendChild(div);
+        }
+
+        function testScheduleError() {
+            log('スケジュールエラーテストを開始...');
+            
+            // 現在の問題を再現するためのモック
+            const formatDate = (date) => {
+                try {
+                    return date.toISOString().split('T')[0];
+                } catch (error) {
+                    log('ERROR: ' + error.message + ' - date value: ' + JSON.stringify(date) + ' (type: ' + typeof date + ')');
+                    return new Date().toISOString().split('T')[0]; // フォールバック
+                }
+            };
+
+            // テストケース1: 正常なDateオブジェクト
+            try {
+                const normalDate = new Date();
+                const result = formatDate(normalDate);
+                log('正常なDate: ' + result);
+            } catch (e) {
+                log('正常なDateでエラー: ' + e.message);
+            }
+
+            // テストケース2: 文字列のDate（localStorage復元時の問題）
+            try {
+                const stringDate = "2025-08-22T05:39:26.140Z";
+                const result = formatDate(stringDate);
+                log('文字列Date: ' + result);
+            } catch (e) {
+                log('文字列Dateでエラー: ' + e.message);
+            }
+
+            // テストケース3: null/undefined
+            try {
+                const result = formatDate(null);
+                log('null Date: ' + result);
+            } catch (e) {
+                log('null Dateでエラー: ' + e.message);
+            }
+        }
+
+        function checkLocalStorage() {
+            log('localStorage内容を確認...');
+            
+            // スケジュール関連キーを確認
+            const keys = ['schedule-storage', 'task-storage'];
+            keys.forEach(key => {
+                const value = localStorage.getItem(key);
+                if (value) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        log(key + ': ' + JSON.stringify(parsed, null, 2));
+                        
+                        // currentDateの型を確認
+                        if (parsed.state && parsed.state.currentDate) {
+                            log(key + ' currentDate type: ' + typeof parsed.state.currentDate);
+                            log(key + ' currentDate value: ' + parsed.state.currentDate);
+                        }
+                    } catch (e) {
+                        log(key + ' パースエラー: ' + e.message);
+                    }
+                } else {
+                    log(key + ': not found');
+                }
+            });
+        }
+
+        function simulateStorageIssue() {
+            log('localStorage問題をシミュレート...');
+            
+            // 現在の問題を再現：DateオブジェクトがJSON.stringifyで文字列になる
+            const mockState = {
+                state: {
+                    currentDate: "2025-08-22T05:39:26.140Z",  // 文字列として保存された日付
+                    viewSettings: {
+                        date: "2025-08-22T05:39:26.140Z"      // 文字列として保存された日付
+                    }
+                },
+                version: 0
+            };
+            
+            localStorage.setItem('schedule-storage', JSON.stringify(mockState));
+            log('問題のあるデータをlocalStorageに保存しました');
+            
+            // 復元をシミュレート
+            const restored = JSON.parse(localStorage.getItem('schedule-storage'));
+            log('復元されたcurrentDateの型: ' + typeof restored.state.currentDate);
+            
+            // formatDate関数でエラーが発生するかテスト
+            const formatDate = (date) => {
+                return date.toISOString().split('T')[0];  // エラーが発生するバージョン
+            };
+            
+            try {
+                const result = formatDate(restored.state.currentDate);
+                log('formatDate成功: ' + result);
+            } catch (error) {
+                log('formatDateエラー発生: ' + error.message);
+                log('これが設計書で報告されているエラーです');
+            }
+        }
+
+        // ページロード時にチェック実行
+        window.addEventListener('load', function() {
+            log('ページロード完了 - エラー再現テストの準備完了');
+            checkLocalStorage();
+        });
+    </script>
+</body>
+</html>

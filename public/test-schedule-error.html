@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Store Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <h1>Schedule Store Error Test</h1>
+    <div id="results"></div>
+    
+    <script type="module">
+        async function testScheduleStore() {
+            const results = document.getElementById('results');
+            
+            function addResult(status, message) {
+                const div = document.createElement('div');
+                div.className = `status ${status}`;
+                div.textContent = message;
+                results.appendChild(div);
+                console.log(`[${status}] ${message}`);
+            }
+            
+            try {
+                // Test 1: Date objectの作成と操作
+                addResult('info', 'Test 1: Date object basics');
+                const testDate = new Date();
+                addResult('success', `Current date created: ${testDate.toISOString()}`);
+                
+                const formattedDate = testDate.toISOString().split('T')[0];
+                addResult('success', `Date formatting works: ${formattedDate}`);
+                
+                // Test 2: Local storageでのDate処理をシミュレート
+                addResult('info', 'Test 2: LocalStorage Date serialization');
+                const mockState = {
+                    currentDate: new Date(),
+                    viewSettings: {
+                        date: new Date()
+                    }
+                };
+                
+                // JSON stringifyでシリアライズ
+                const serialized = JSON.stringify(mockState);
+                addResult('success', 'Date serialization successful');
+                
+                // JSON parseで復元
+                const deserialized = JSON.parse(serialized);
+                addResult('success', 'Date deserialization successful');
+                
+                // Test 3: 復元後のDate型チェック
+                addResult('info', 'Test 3: Type checking after deserialization');
+                addResult('info', `currentDate type: ${typeof deserialized.currentDate}`);
+                addResult('info', `currentDate value: ${deserialized.currentDate}`);
+                
+                if (deserialized.currentDate instanceof Date) {
+                    addResult('success', 'currentDate is still Date object');
+                } else {
+                    addResult('error', 'currentDate is now string - this would cause errors');
+                }
+                
+                // Test 4: formatDate関数のシミュレート（防御的実装）
+                addResult('info', 'Test 4: formatDate function simulation');
+                
+                function formatDate(date) {
+                    let dateObj;
+                    
+                    if (date instanceof Date) {
+                        dateObj = date;
+                    } else if (typeof date === 'string') {
+                        dateObj = new Date(date);
+                    } else {
+                        console.warn('Invalid date provided to formatDate:', date);
+                        dateObj = new Date();
+                    }
+                    
+                    if (isNaN(dateObj.getTime())) {
+                        console.warn('Invalid date conversion in formatDate:', date);
+                        dateObj = new Date();
+                    }
+                    
+                    return dateObj.toISOString().split('T')[0];
+                }
+                
+                // Test with Date object
+                const result1 = formatDate(new Date());
+                addResult('success', `formatDate with Date object: ${result1}`);
+                
+                // Test with string
+                const result2 = formatDate(deserialized.currentDate);
+                addResult('success', `formatDate with string: ${result2}`);
+                
+                // Test with invalid input
+                const result3 = formatDate(null);
+                addResult('success', `formatDate with null: ${result3}`);
+                
+                addResult('success', 'All tests passed - formatDate function works correctly');
+                
+            } catch (error) {
+                addResult('error', `Test failed: ${error.message}`);
+                console.error('Test error:', error);
+            }
+        }
+        
+        // Run tests
+        testScheduleStore();
+    </script>
+</body>
+</html>

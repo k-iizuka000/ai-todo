@@ -5,6 +5,13 @@
 
 import { TaskStatus, Priority, Task, Subtask } from '@/types/task';
 import { Tag } from '@/types/tag';
+import { 
+  ScheduleItemType, 
+  ScheduleItemStatus, 
+  ScheduleItem, 
+  ScheduleViewSettings,
+  DailySchedule 
+} from '@/types/schedule';
 
 /**
  * TaskStatus型のガード関数
@@ -111,6 +118,165 @@ export const isNonEmptyString = (value: unknown): value is string => {
  */
 export const isValidDate = (value: unknown): value is Date => {
   return value instanceof Date && !isNaN(value.getTime());
+};
+
+/**
+ * Date型またはISO文字列形式の有効な日付かチェック
+ * @param value - チェックする値
+ * @returns Date型またはISO形式の文字列として有効な日付の場合true
+ */
+export const isDateOrDateString = (value: unknown): value is Date | string => {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return !isNaN(parsed.getTime());
+  }
+  return false;
+};
+
+/**
+ * ISO 8601形式の日付文字列かチェック
+ * @param value - チェックする値
+ * @returns ISO 8601形式の文字列の場合true
+ */
+export const isISODateString = (value: unknown): value is string => {
+  return typeof value === 'string' && 
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/.test(value);
+};
+
+/**
+ * Date型またはISO文字列を安全にDate型に変換
+ * @param value - 変換する値
+ * @returns 有効なDate型または現在日時（フォールバック）
+ */
+export const toSafeDate = (value: unknown): Date => {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  // フォールバック: 現在日時を返す
+  console.warn('Invalid date provided to toSafeDate, using current date:', value);
+  return new Date();
+};
+
+// === スケジュール関連の型ガード ===
+
+/**
+ * ScheduleItemType型のガード関数
+ * @param value - チェックする値
+ * @returns ScheduleItemTypeの場合true
+ */
+export const isScheduleItemType = (value: unknown): value is ScheduleItemType => {
+  return typeof value === 'string' && 
+    ['task', 'subtask', 'meeting', 'break', 'personal', 'blocked', 'focus', 'review'].includes(value);
+};
+
+/**
+ * ScheduleItemStatus型のガード関数
+ * @param value - チェックする値
+ * @returns ScheduleItemStatusの場合true
+ */
+export const isScheduleItemStatus = (value: unknown): value is ScheduleItemStatus => {
+  return typeof value === 'string' && 
+    ['planned', 'in_progress', 'completed', 'postponed', 'cancelled'].includes(value);
+};
+
+/**
+ * 時刻文字列（HH:mm形式）の型ガード
+ * @param value - チェックする値
+ * @returns HH:mm形式の文字列の場合true
+ */
+export const isTimeString = (value: unknown): value is string => {
+  return typeof value === 'string' && 
+    /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(value);
+};
+
+/**
+ * ScheduleItemオブジェクトの型ガード（基本検証）
+ * @param value - チェックする値
+ * @returns ScheduleItemの場合true
+ */
+export const isScheduleItem = (value: unknown): value is ScheduleItem => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const item = value as ScheduleItem;
+
+  return (
+    typeof item.id === 'string' &&
+    typeof item.timeBlockId === 'string' &&
+    isScheduleItemType(item.type) &&
+    typeof item.title === 'string' &&
+    isTimeString(item.startTime) &&
+    isTimeString(item.endTime) &&
+    typeof item.duration === 'number' &&
+    typeof item.color === 'string' &&
+    isScheduleItemStatus(item.status) &&
+    isPriority(item.priority) &&
+    item.createdAt instanceof Date &&
+    item.updatedAt instanceof Date &&
+    typeof item.createdBy === 'string'
+  );
+};
+
+/**
+ * ScheduleViewSettingsオブジェクトの型ガード
+ * @param value - チェックする値
+ * @returns ScheduleViewSettingsの場合true
+ */
+export const isScheduleViewSettings = (value: unknown): value is ScheduleViewSettings => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const settings = value as ScheduleViewSettings;
+
+  return (
+    typeof settings.viewType === 'string' &&
+    ['day', 'week', 'workweek'].includes(settings.viewType) &&
+    isDateOrDateString(settings.date) &&
+    typeof settings.timeRange === 'object' &&
+    settings.timeRange !== null &&
+    isTimeString(settings.timeRange.start) &&
+    isTimeString(settings.timeRange.end) &&
+    typeof settings.showWeekends === 'boolean' &&
+    typeof settings.showCompleted === 'boolean'
+  );
+};
+
+/**
+ * DailyScheduleオブジェクトの型ガード（基本検証）
+ * @param value - チェックする値
+ * @returns DailyScheduleの場合true
+ */
+export const isDailySchedule = (value: unknown): value is DailySchedule => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const schedule = value as DailySchedule;
+
+  return (
+    typeof schedule.id === 'string' &&
+    isDateOrDateString(schedule.date) &&
+    typeof schedule.userId === 'string' &&
+    Array.isArray(schedule.timeBlocks) &&
+    Array.isArray(schedule.scheduleItems) &&
+    schedule.scheduleItems.every(item => isScheduleItem(item)) &&
+    typeof schedule.totalEstimated === 'number' &&
+    typeof schedule.totalActual === 'number' &&
+    typeof schedule.utilization === 'number' &&
+    schedule.createdAt instanceof Date &&
+    schedule.updatedAt instanceof Date
+  );
 };
 
 /**

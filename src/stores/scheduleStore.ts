@@ -4,6 +4,7 @@
 
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import { customStorage } from '@/utils/customStorage';
 import {
   DailySchedule,
   ScheduleItem,
@@ -12,7 +13,6 @@ import {
   ScheduleSuggestion,
   ScheduleStatistics,
   CreateScheduleItemRequest,
-  UpdateScheduleItemRequest,
   ScheduleDragData,
   TimeSlot,
   ConflictResolution,
@@ -20,28 +20,42 @@ import {
   defaultScheduleViewSettings,
   scheduleItemColors
 } from '@/types/schedule';
-import { Task, Priority } from '@/types/task';
+import { Priority } from '@/types/task';
 import {
-  mockSchedules,
   getScheduleForDate,
   createEmptySchedule,
   calculateStatistics,
-  mockConflicts,
   mockSuggestions,
   unscheduledTasks
 } from '@/mock/scheduleData';
 
-// 未スケジュールタスクの型定義
+/**
+ * 未スケジュールタスクの型定義
+ * スケジュールに配置されていないタスクの情報を管理
+ * 
+ * @interface UnscheduledTask
+ */
 interface UnscheduledTask {
+  /** タスクの一意識別子 */
   id: string;
+  /** タスクのタイトル */
   title: string;
+  /** タスクの詳細説明（オプション） */
   description?: string;
+  /** タスクの優先度（high, medium, low） */
   priority: Priority;
+  /** 見積実行時間（分単位） */
   estimatedTime: number;
+  /** タスクに関連付けられたタグのリスト */
   tags: string[];
 }
 
-// スケジュールストアの状態型定義
+/**
+ * スケジュールストアの状態型定義
+ * Zustandストアで管理される日時スケジュール関連の全状態とアクションを定義
+ * 
+ * @interface ScheduleState
+ */
 interface ScheduleState {
   // === 状態 ===
   currentDate: Date;
@@ -104,28 +118,122 @@ interface ScheduleState {
   setError: (error: string | null) => void;
 }
 
-// IDジェネレーター
+/**
+ * スケジュールアイテム用の一意IDを生成する関数
+ * タイムスタンプとランダム文字列を組み合わせて衝突を回避
+ * 
+ * @returns スケジュール項目の一意識別子（例: "schedule-1640995200000-abc123def"）
+ */
 const generateId = (): string => {
   return `schedule-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
-// 日付文字列を生成
-const formatDate = (date: Date): string => {
-  return date.toISOString().split('T')[0];
+// === 型ガードとユーティリティ関数 ===
+
+/**
+ * Date型かどうかを判定する型ガード関数
+ * @param value - 判定対象の値
+ * @returns Date型の場合true、それ以外はfalse
+ */
+const isDate = (value: unknown): value is Date => {
+  return value instanceof Date && !isNaN(value.getTime());
 };
 
-// 時間文字列をパース
+/**
+ * 有効な日付文字列かどうかを判定する型ガード関数
+ * @param value - 判定対象の値
+ * @returns 有効な日付文字列の場合true、それ以外はfalse
+ */
+const isValidDateString = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false;
+  const date = new Date(value);
+  return !isNaN(date.getTime());
+};
+
+/**
+ * Date型または日付文字列かどうかを判定する型ガード関数
+ * @param value - 判定対象の値
+ * @returns Date型または有効な日付文字列の場合true、それ以外はfalse
+ */
+const isDateLike = (value: unknown): value is Date | string => {
+  return isDate(value) || isValidDateString(value);
+};
+
+/**
+ * 値を安全にDate型に変換するユーティリティ関数
+ * @param value - 変換対象の値
+ * @returns 変換されたDateオブジェクト、変換できない場合は現在時刻
+ */
+const toSafeDate = (value: unknown): Date => {
+  if (isDate(value)) {
+    return value;
+  }
+  
+  if (typeof value === 'string') {
+    const date = new Date(value);
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+  }
+  
+  // フォールバック: 現在時刻を返す
+  console.warn('Invalid date value provided, falling back to current date:', value);
+  return new Date();
+};
+
+/**
+ * 日付オブジェクトを安全にフォーマットする関数
+ * Date型以外の入力に対しても防御的に処理し、型ガードを使用する
+ * 
+ * @param date - Date型、日付文字列、またはその他の型の値
+ * @returns YYYY-MM-DD形式の日付文字列
+ * @throws なし（エラー時は現在日時を使用してフォールバック）
+ * 
+ * @example
+ * ```typescript
+ * formatDate(new Date()); // "2023-12-25"
+ * formatDate("2023-12-25"); // "2023-12-25"
+ * formatDate(null); // 現在日時の日付文字列（警告ログ出力）
+ * ```
+ */
+const formatDate = (date: Date | string | unknown): string => {
+  // 型ガードを使用した安全な変換
+  const safeDate = toSafeDate(date);
+  
+  // 型ガードで検証済みなので、安全にtoISOStringを呼び出し可能
+  return safeDate.toISOString().split('T')[0];
+};
+
+/**
+ * 時間文字列を時間と分に分解してパースする関数
+ * 
+ * @param timeStr - "HH:MM"形式の時間文字列（例: "14:30"）
+ * @returns 時間と分を含むオブジェクト
+ * @throws 無効な形式の場合、NaNが含まれる可能性があります
+ */
 const parseTime = (timeStr: string): { hours: number; minutes: number } => {
   const [hours, minutes] = timeStr.split(':').map(Number);
   return { hours, minutes };
 };
 
-// 時間の差を分単位で計算
+/**
+ * 2つの時間文字列の差を分単位で計算する関数
+ * 
+ * @param startTime - 開始時間の文字列（"HH:MM"形式）
+ * @param endTime - 終了時間の文字列（"HH:MM"形式）
+ * @returns 時間差（分単位）。負の値になる場合もある
+ * @example
+ * ```typescript
+ * getTimeDifferenceInMinutes("09:00", "10:30"); // 90（分）
+ * getTimeDifferenceInMinutes("14:30", "16:15"); // 105（分）
+ * ```
+ */
 const getTimeDifferenceInMinutes = (startTime: string, endTime: string): number => {
   const start = parseTime(startTime);
   const end = parseTime(endTime);
   return (end.hours * 60 + end.minutes) - (start.hours * 60 + start.minutes);
 };
+
 
 // Zustandストアの作成
 export const useScheduleStore = create<ScheduleState>()(
@@ -561,10 +669,10 @@ export const useScheduleStore = create<ScheduleState>()(
           }));
         },
         
-        syncWithTasks: async () => {
-          // タスクストアとの同期処理（簡易実装）
-          console.log('Syncing with tasks...');
-        },
+          syncWithTasks: async () => {
+            // タスクストアとの同期処理（簡易実装）
+            console.log('Syncing with tasks...');
+          },
         
         subscribeToUpdates: (date: Date) => {
           // リアルタイム更新の購読（簡易実装）
@@ -604,10 +712,25 @@ export const useScheduleStore = create<ScheduleState>()(
       }),
       {
         name: 'schedule-storage',
+        storage: customStorage,
         partialize: (state) => ({
           viewSettings: state.viewSettings,
           currentDate: state.currentDate
-        })
+        }),
+        onRehydrateStorage: () => (state) => {
+          if (state) {
+            // 復元されたstateでDate型の初期化を実行
+            // currentDateが文字列の場合、型ガード関数を使用してDate型に変換
+            if (typeof state.currentDate === 'string') {
+              state.currentDate = toSafeDate(state.currentDate);
+            }
+            
+            // viewSettings.dateも型ガード関数を使用して同様に処理
+            if (state.viewSettings?.date && typeof state.viewSettings.date === 'string') {
+              state.viewSettings.date = toSafeDate(state.viewSettings.date);
+            }
+          }
+        }
       }
     ),
     {

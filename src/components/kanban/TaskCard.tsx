@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { ChevronDown, ChevronRight, Calendar, Clock } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { TagBadge } from '@/components/tag/TagBadge';
 
 /**
  * TaskCardコンポーネントのProps
@@ -26,6 +27,8 @@ interface TaskCardProps {
   onClick?: (task: Task) => void;
   /** コンパクト表示モード */
   compact?: boolean;
+  /** タグクリック時のコールバック */
+  onTagClick?: (tagId: string) => void;
 }
 
 /**
@@ -140,7 +143,8 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
   onToggleCollapse,
   onSubtaskToggle,
   onClick,
-  compact = false
+  compact = false,
+  onTagClick
 }) => {
   const [localCollapsed, setLocalCollapsed] = useState(isCollapsed);
   
@@ -190,6 +194,10 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
   const handleSubtaskChange = useCallback((subtaskId: string) => {
     onSubtaskToggle?.(task.id, subtaskId);
   }, [onSubtaskToggle, task.id]);
+
+  const handleTagClick = useCallback((tagId: string) => {
+    onTagClick?.(tagId);
+  }, [onTagClick]);
 
   return (
     <Card
@@ -285,19 +293,24 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
 
           {/* タグ */}
           {!compact && task.tags.slice(0, MAX_VISIBLE_TAGS).map((tag) => (
-            <Badge
+            <TagBadge
               key={tag.id}
-              variant="outline"
-              className="text-xs"
-              style={{ 
-                borderColor: tag.color,
-                color: tag.color,
-                backgroundColor: `${tag.color}10`
-              }}
-            >
-              {tag.name}
-            </Badge>
+              tag={tag}
+              size="sm"
+              onClick={() => handleTagClick(tag.id)}
+            />
           ))}
+          
+          {/* 追加タグ数の表示 */}
+          {!compact && task.tags.length > MAX_VISIBLE_TAGS && (
+            <Badge
+              variant="outline"
+              className="text-xs text-gray-500"
+              title={`他に${task.tags.length - MAX_VISIBLE_TAGS}個のタグがあります: ${task.tags.slice(MAX_VISIBLE_TAGS).map(t => t.name).join(', ')}`}
+            >
+              +{task.tags.length - MAX_VISIBLE_TAGS}
+            </Badge>
+          )}
         </div>
 
         {/* 進捗情報 */}
@@ -354,3 +367,5 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
     </Card>
   );
 });
+
+TaskCard.displayName = 'TaskCard';

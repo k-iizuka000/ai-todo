@@ -8,6 +8,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Logs
+/.serena/
 logs/
 *.log
 
@@ -73,3 +74,4 @@ old/
 bk/
 
 issues/
+メモ.md

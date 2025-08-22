@@ -170,9 +170,7 @@ const TaskDetailDemo: React.FC = () => {
               <TaskDetailView
                 task={selectedTask}
                 editable={false}
-                mode="full"
                 onTaskUpdate={handleTaskUpdate}
-                onSubtaskToggle={handleSubtaskToggle}
               />
             </div>
 
@@ -182,11 +180,7 @@ const TaskDetailDemo: React.FC = () => {
               <TaskDetailView
                 task={selectedTask}
                 editable={true}
-                mode="full"
                 onTaskUpdate={handleTaskUpdate}
-                onSubtaskToggle={handleSubtaskToggle}
-                onSubtaskAdd={handleSubtaskAdd}
-                onSubtaskDelete={handleSubtaskDelete}
                 onTaskDelete={handleTaskDelete}
                 onClose={() => console.log('閉じる')}
               />

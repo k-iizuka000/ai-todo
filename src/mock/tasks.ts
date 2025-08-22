@@ -2,7 +2,8 @@
  * タスクのモックデータ
  */
 
-import { Task, TaskStatus, Priority, Tag, Subtask } from '../types/task';
+import { Task, TaskStatus, Priority, Subtask } from '../types/task';
+import { Tag } from '../types/tag';
 
 // モックタグデータ
 export const mockTags: Tag[] = [

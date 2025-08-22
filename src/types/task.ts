@@ -2,6 +2,8 @@
  * タスク管理システムの型定義
  */
 
+import { Tag } from './tag';
+
 // タスクの状態を表すenum
 export type TaskStatus = 
   | 'todo'       // 未着手
@@ -26,12 +28,7 @@ export interface Subtask {
   updatedAt: Date;
 }
 
-// タグの型定義
-export interface Tag {
-  id: string;
-  name: string;
-  color: string;
-}
+// タグの型定義は tag.ts から import する
 
 // メインのTask型定義
 export interface Task {

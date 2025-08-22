@@ -2,51 +2,48 @@
  * タスク詳細ビュー - 単一タスクの詳細情報を表示
  */
 
-import React, { useState } from 'react';
-import { Task, TaskDetail, Priority, TaskStatus } from '../../types/task';
+import React, { useState, useCallback, useMemo } from 'react';
+import { TaskDetail, Priority, TaskStatus } from '../../types/task';
+import { Tag } from '../../types/tag';
 import { TaskDetailTabs } from './TaskDetailTabs';
-import SubTaskList from './SubTaskList';
-import ProgressIndicator from './ProgressIndicator';
-import { DataValidationService, safeArrayAccess } from '../../utils/dataValidation';
+import { TagBadge, TagSelector } from '../tag';
+import { DataValidationService } from '../../utils/dataValidation';
 
-interface TaskDetailViewProps {
+export interface TaskDetailViewProps {
   /** 表示するタスク */
   task: TaskDetail;
   /** 編集可能かどうか */
   editable?: boolean;
-  /** 詳細表示モード */
-  mode?: 'compact' | 'full';
   /** タスク更新時のコールバック */
   onTaskUpdate?: (taskId: string, updates: Partial<TaskDetail>) => void;
-  /** サブタスク操作のコールバック */
-  onSubtaskToggle?: (subtaskId: string, completed: boolean) => void;
-  onSubtaskAdd?: (title: string) => void;
-  onSubtaskDelete?: (subtaskId: string) => void;
   /** タスク削除時のコールバック */
   onTaskDelete?: (taskId: string) => void;
   /** 閉じるボタンのコールバック */
   onClose?: () => void;
+  /** 利用可能なタグ */
+  availableTags?: Tag[];
 }
 
-const TaskDetailView: React.FC<TaskDetailViewProps> = ({
+const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   task,
   editable = false,
-  mode = 'full',
   onTaskUpdate,
-  onSubtaskToggle,
-  onSubtaskAdd,
-  onSubtaskDelete,
   onTaskDelete,
-  onClose
+  onClose,
+  availableTags = []
 }) => {
-  // データバリデーションを適用
-  const validatedTask = DataValidationService.validateTaskDetail(task);
+  // データバリデーションを適用（メモ化）
+  const validatedTask = useMemo(() => 
+    DataValidationService.validateTaskDetail(task), 
+    [task]
+  );
   
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState<Partial<TaskDetail>>(validatedTask);
   const [activeTab, setActiveTab] = useState<'subtasks' | 'comments' | 'history'>('subtasks');
+  const [isEditingTags, setIsEditingTags] = useState(false);
 
-  const getPriorityColor = (priority: Priority) => {
+  const getPriorityColor = useCallback((priority: Priority) => {
     switch (priority) {
       case 'urgent':
         return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 border-red-200';
@@ -59,9 +56,9 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
     }
-  };
+  }, []);
 
-  const getStatusColor = (status: TaskStatus) => {
+  const getStatusColor = useCallback((status: TaskStatus) => {
     switch (status) {
       case 'todo':
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
@@ -74,9 +71,9 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
     }
-  };
+  }, []);
 
-  const getStatusLabel = (status: TaskStatus) => {
+  const getStatusLabel = useCallback((status: TaskStatus) => {
     switch (status) {
       case 'todo':
         return '未着手';
@@ -89,9 +86,9 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       default:
         return status;
     }
-  };
+  }, []);
 
-  const getPriorityLabel = (priority: Priority) => {
+  const getPriorityLabel = useCallback((priority: Priority) => {
     switch (priority) {
       case 'urgent':
         return '緊急';
@@ -104,9 +101,9 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       default:
         return priority;
     }
-  };
+  }, []);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (editedTask.title?.trim()) {
       onTaskUpdate?.(validatedTask.id, {
         ...editedTask,
@@ -114,26 +111,23 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       });
       setIsEditing(false);
     }
-  };
+  }, [editedTask, onTaskUpdate, validatedTask.id]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     setEditedTask(task);
     setIsEditing(false);
-  };
+  }, [task]);
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
     if (window.confirm('このタスクを削除しますか？この操作は取り消せません。')) {
       onTaskDelete?.(validatedTask.id);
     }
-  };
+  }, [onTaskDelete, validatedTask.id]);
 
-  const completedSubtasks = validatedTask.childTasks.filter(subtask => subtask.status === 'done').length;
-  const totalSubtasks = validatedTask.childTasks.length;
-  const progress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
 
-  const handleTaskDetailUpdate = (updates: Partial<TaskDetail>) => {
+  const handleTaskDetailUpdate = useCallback((updates: Partial<TaskDetail>) => {
     onTaskUpdate?.(validatedTask.id, updates);
-  };
+  }, [onTaskUpdate, validatedTask.id]);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden flex flex-col h-[80vh]">
@@ -291,28 +285,83 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
             </div>
 
             {/* タグ */}
-            {task.tags.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   タグ
                 </label>
-                <div className="flex flex-wrap gap-2">
-                  {task.tags.map(tag => (
-                    <span
-                      key={tag.id}
-                      className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border"
-                      style={{
-                        backgroundColor: `${tag.color}20`,
-                        color: tag.color,
-                        borderColor: `${tag.color}40`
-                      }}
-                    >
-                      #{tag.name}
-                    </span>
-                  ))}
-                </div>
+                {editable && !isEditingTags && (
+                  <button
+                    onClick={() => setIsEditingTags(true)}
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    編集
+                  </button>
+                )}
               </div>
-            )}
+              
+              {isEditingTags ? (
+                <div>
+                  <TagSelector
+                    selectedTags={task.tags}
+                    availableTags={availableTags}
+                    onTagsChange={(tags) => {
+                      onTaskUpdate?.(validatedTask.id, { tags });
+                    }}
+                    editing={true}
+                    maxTags={10}
+                    allowCreate={true}
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => setIsEditingTags(false)}
+                      className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
+                    >
+                      完了
+                    </button>
+                    <button
+                      onClick={() => {
+                        // タグ編集をキャンセルして元の状態に戻す
+                        setIsEditingTags(false);
+                        // ここでタグを元の状態に戻すロジックが必要であれば追加
+                      }}
+                      className="px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500"
+                    >
+                      キャンセル
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {task.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {task.tags.map(tag => (
+                        <TagBadge
+                          key={tag.id}
+                          tag={tag}
+                          size="sm"
+                          onClick={() => {
+                            // タグクリックで関連タスク表示（将来の拡張用）
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      タグなし
+                      {editable && (
+                        <span
+                          className="ml-2 text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                          onClick={() => setIsEditingTags(true)}
+                        >
+                          追加
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* 添付ファイル */}
             {task.attachments.length > 0 && (
@@ -365,6 +414,8 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       </div>
     </div>
   );
-};
+});
+
+TaskDetailView.displayName = 'TaskDetailView';
 
 export default TaskDetailView;

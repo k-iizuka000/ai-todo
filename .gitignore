@@ -69,6 +69,8 @@ learning/
 AGENTS.md
 CLAUDE.md
 
+.serena/
+docker/
 old/
 bk/
 

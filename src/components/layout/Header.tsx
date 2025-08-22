@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Menu, Search, Bell, User, Settings, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { User as UserType } from '../../types/user';
+import { NotificationDropdown } from '../notification';
+import { mockNotifications } from '../../mock/notifications';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -11,8 +13,10 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobileMenuOpen }) => {
   const navigate = useNavigate();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [user, setUser] = useState<UserType | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Get user info from localStorage
@@ -27,10 +31,13 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobileMenuOpen }) => {
   }, []);
 
   useEffect(() => {
-    // Close menu when clicking outside
+    // Close menus when clicking outside
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
+      }
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationOpen(false);
       }
     };
 
@@ -53,7 +60,15 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobileMenuOpen }) => {
 
   const toggleUserMenu = () => {
     setIsUserMenuOpen(!isUserMenuOpen);
+    setIsNotificationOpen(false); // Close notification when opening user menu
   };
+
+  const toggleNotification = () => {
+    setIsNotificationOpen(!isNotificationOpen);
+    setIsUserMenuOpen(false); // Close user menu when opening notification
+  };
+
+  const unreadCount = mockNotifications.filter(n => !n.isRead).length;
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
@@ -100,12 +115,24 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, isMobileMenuOpen }) => {
           </button>
 
           {/* Notifications */}
-          <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative">
-            <Bell className="h-5 w-5 text-gray-600" />
-            <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-              3
-            </span>
-          </button>
+          <div className="relative" ref={notificationRef}>
+            <button 
+              onClick={toggleNotification}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 relative"
+            >
+              <Bell className="h-5 w-5 text-gray-600" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+            
+            <NotificationDropdown 
+              isOpen={isNotificationOpen}
+              onClose={() => setIsNotificationOpen(false)}
+            />
+          </div>
 
           {/* Settings */}
           <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 hidden sm:block">

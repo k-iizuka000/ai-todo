@@ -8,6 +8,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Logs
+/.serena/
 logs/
 *.log
 
@@ -69,8 +70,6 @@ learning/
 AGENTS.md
 CLAUDE.md
 
-.serena/
-docker/
 old/
 bk/
 

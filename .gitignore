@@ -9,6 +9,7 @@ yarn-error.log*
 
 # Logs
 /.serena/
+.serena/cache/typescript/document_symbols_cache_v23-06-25.pkl
 logs/
 *.log
 

@@ -1,10 +1,9 @@
 import React, { Suspense } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import AuthLayout from '@/components/auth/AuthLayout';
 import ProtectedRoute, { AuthenticatedRedirect } from '@/components/auth/ProtectedRoute';
 import Dashboard from '@/pages/Dashboard';
-import Tasks from '@/pages/Tasks';
 import TaskDetailDemo from '@/pages/TaskDetailDemo';
 import { ProjectManagement } from '@/pages/ProjectManagement';
 import Calendar from '@/pages/Calendar';
@@ -27,6 +26,15 @@ const LoadingSpinner: React.FC = () => (
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
   </div>
 );
+
+// Wildcard redirect component for backward compatibility
+const TasksWildcardRedirect: React.FC = () => {
+  const location = useLocation();
+  // Get the full path after /tasks
+  const tasksPath = location.pathname.replace(/^\/tasks/, '');
+  const dashboardPath = tasksPath ? `/dashboard${tasksPath}` : '/dashboard';
+  return <Navigate to={dashboardPath} replace />;
+};
 
 const AppRouter: React.FC = () => {
   return (
@@ -61,19 +69,23 @@ const AppRouter: React.FC = () => {
             </ProtectedRoute>
           }
         >
-          {/* Dashboard */}
-          <Route index element={<Dashboard />} />
+          {/* Redirect routes for backward compatibility */}
+          {/* Root redirect to dashboard */}
+          <Route path="" element={<Navigate to="/dashboard" replace />} />
           
-          {/* Tasks routes */}
-          <Route path="tasks" element={<Tasks />} />
-          <Route path="tasks/:taskId" element={<Tasks />} />
-          <Route path="tasks/today" element={<Tasks />} />
-          <Route path="tasks/today/:taskId" element={<Tasks />} />
-          <Route path="tasks/important" element={<Tasks />} />
-          <Route path="tasks/important/:taskId" element={<Tasks />} />
-          <Route path="tasks/completed" element={<Tasks />} />
-          <Route path="tasks/completed/:taskId" element={<Tasks />} />
-          <Route path="tasks/demo" element={<TaskDetailDemo />} />
+          {/* Wildcard tasks paths redirect to dashboard */}
+          <Route path="tasks/*" element={<TasksWildcardRedirect />} />
+
+          {/* Dashboard routes */}
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="dashboard/:taskId" element={<Dashboard />} />
+          <Route path="dashboard/today" element={<Dashboard />} />
+          <Route path="dashboard/today/:taskId" element={<Dashboard />} />
+          <Route path="dashboard/important" element={<Dashboard />} />
+          <Route path="dashboard/important/:taskId" element={<Dashboard />} />
+          <Route path="dashboard/completed" element={<Dashboard />} />
+          <Route path="dashboard/completed/:taskId" element={<Dashboard />} />
+          <Route path="dashboard/demo" element={<TaskDetailDemo />} />
           
           {/* Project routes */}
           <Route path="projects" element={<ProjectManagement />} />

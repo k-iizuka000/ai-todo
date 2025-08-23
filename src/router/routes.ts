@@ -7,18 +7,13 @@ export interface RouteConfig {
 
 export const routes: RouteConfig[] = [
   {
-    path: '/',
+    path: '/dashboard',
     label: 'ダッシュボード',
-    icon: 'Home',
-  },
-  {
-    path: '/tasks',
-    label: 'タスク管理',
     icon: 'CheckSquare',
     children: [
-      { path: '/tasks', label: '全てのタスク' },
-      { path: '/tasks/today', label: '今日のタスク' },
-      { path: '/tasks/demo', label: 'タスク詳細デモ' },
+      { path: '/dashboard', label: '全てのタスク' },
+      { path: '/dashboard/today', label: '今日のタスク' },
+      { path: '/dashboard/demo', label: 'タスク詳細デモ' },
     ],
   },
   {

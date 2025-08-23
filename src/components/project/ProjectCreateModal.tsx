@@ -140,6 +140,17 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
       title="新規プロジェクト作成"
       description="新しいプロジェクトの詳細を入力してください"
       size="lg"
+      footer={
+        <div className="flex justify-end space-x-2">
+          <Button variant="outline" onClick={handleClose}>
+            キャンセル
+          </Button>
+          <Button onClick={handleSubmit} className="flex items-center space-x-2">
+            <Save className="h-4 w-4" />
+            <span>作成</span>
+          </Button>
+        </div>
+      }
     >
       <div className="space-y-6">
         {/* 基本情報 */}
@@ -230,7 +241,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         {/* アイコン */}
         <div>
           <label className="block text-sm font-medium mb-2">アイコン</label>
-          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+          <div className="flex flex-wrap gap-2">
             {iconOptions.map((icon) => (
               <button
                 key={icon}
@@ -314,17 +325,6 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             ))}
           </div>
         </div>
-      </div>
-
-      {/* フッター */}
-      <div className="flex justify-end space-x-2 mt-6">
-        <Button variant="outline" onClick={handleClose}>
-          キャンセル
-        </Button>
-        <Button onClick={handleSubmit} className="flex items-center space-x-2">
-          <Save className="h-4 w-4" />
-          <span>作成</span>
-        </Button>
       </div>
     </Modal>
   );

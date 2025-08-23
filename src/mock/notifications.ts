@@ -47,7 +47,7 @@ const unsortedNotifications: Notification[] = [
     0,
     14,
     30,
-    '/tasks/task-1',
+    '/dashboard/task-1',
     { taskId: 'task-1', projectId: 'project-1' }
   ),
   createNotification(
@@ -60,7 +60,7 @@ const unsortedNotifications: Notification[] = [
     0,
     13,
     15,
-    '/tasks/task-4',
+    '/dashboard/task-4',
     { taskId: 'task-4', projectId: 'project-1', userId: 'user-2' }
   ),
   createNotification(
@@ -73,7 +73,7 @@ const unsortedNotifications: Notification[] = [
     0,
     11,
     45,
-    '/tasks/task-2',
+    '/dashboard/task-2',
     { taskId: 'task-2', projectId: 'project-1', userId: 'user-2' }
   ),
   createNotification(
@@ -86,7 +86,7 @@ const unsortedNotifications: Notification[] = [
     1,
     16,
     20,
-    '/tasks/task-6',
+    '/dashboard/task-6',
     { taskId: 'task-6', projectId: 'project-1', userId: 'user-3' }
   ),
   createNotification(
@@ -125,7 +125,7 @@ const unsortedNotifications: Notification[] = [
     2,
     15,
     30,
-    '/tasks/task-3',
+    '/dashboard/task-3',
     { taskId: 'task-3', projectId: 'project-2' }
   ),
   createNotification(
@@ -138,7 +138,7 @@ const unsortedNotifications: Notification[] = [
     3,
     8,
     45,
-    '/tasks/task-10',
+    '/dashboard/task-10',
     { taskId: 'task-10', projectId: 'project-2', userId: 'user-1' }
   ),
   createNotification(
@@ -151,7 +151,7 @@ const unsortedNotifications: Notification[] = [
     3,
     17,
     0,
-    '/tasks/task-1',
+    '/dashboard/task-1',
     { taskId: 'task-1', subtaskId: 'subtask-1', projectId: 'project-1' }
   ),
   createNotification(
@@ -164,7 +164,7 @@ const unsortedNotifications: Notification[] = [
     4,
     12,
     15,
-    '/tasks/task-7',
+    '/dashboard/task-7',
     { taskId: 'task-7', projectId: 'project-3', userId: 'user-2' }
   ),
   createNotification(
@@ -203,7 +203,7 @@ const unsortedNotifications: Notification[] = [
     6,
     16,
     45,
-    '/tasks/task-11',
+    '/dashboard/task-11',
     { taskId: 'task-11', projectId: 'project-3', overdue: true }
   ),
   createNotification(
@@ -216,7 +216,7 @@ const unsortedNotifications: Notification[] = [
     6,
     14,
     20,
-    '/tasks/task-12',
+    '/dashboard/task-12',
     { taskId: 'task-12', projectId: 'project-1' }
   ),
   createNotification(

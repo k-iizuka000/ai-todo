@@ -13,8 +13,6 @@ export const routes: RouteConfig[] = [
     children: [
       { path: '/dashboard', label: '全てのタスク' },
       { path: '/dashboard/today', label: '今日のタスク' },
-      { path: '/dashboard/important', label: '重要なタスク' },
-      { path: '/dashboard/completed', label: '完了済みタスク' },
       { path: '/dashboard/demo', label: 'タスク詳細デモ' },
     ],
   },

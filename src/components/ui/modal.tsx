@@ -32,11 +32,11 @@ const dialogContentVariants = cva(
   {
     variants: {
       size: {
-        default: "max-w-lg",
-        sm: "max-w-sm",
-        md: "max-w-md",
-        lg: "max-w-2xl",
-        xl: "max-w-4xl",
+        default: "max-w-lg max-h-[90vh]",
+        sm: "max-w-sm max-h-[85vh]",
+        md: "max-w-md max-h-[90vh]",
+        lg: "max-w-2xl max-h-[90vh]",
+        xl: "max-w-4xl max-h-[95vh]",
         full: "max-w-[95vw] max-h-[95vh]",
       },
     },
@@ -58,7 +58,19 @@ const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      className={cn(dialogContentVariants({ size, className }))}
+      className={cn(
+        dialogContentVariants({ size, className }),
+        "overflow-y-auto overflow-x-hidden"
+      )}
+      onPointerDownOutside={(event) => {
+        const originalEvent = event.detail.originalEvent;
+        const target = originalEvent.target as HTMLElement;
+        // スクロールバーのクリックは無視
+        if (originalEvent.offsetX > target.clientWidth || 
+            originalEvent.offsetY > target.clientHeight) {
+          event.preventDefault();
+        }
+      }}
       {...props}
     >
       {children}
@@ -150,15 +162,26 @@ const Modal: React.FC<ModalProps> = ({
 }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size={size} className={className}>
+      <DialogContent size={size} className={cn("flex flex-col", className)}>
+        {/* 固定ヘッダー */}
         {(title || description) && (
-          <DialogHeader>
+          <DialogHeader className="flex-shrink-0">
             {title && <DialogTitle>{title}</DialogTitle>}
             {description && <DialogDescription>{description}</DialogDescription>}
           </DialogHeader>
         )}
-        <div className="py-4">{children}</div>
-        {footer && <DialogFooter>{footer}</DialogFooter>}
+        
+        {/* スクロール可能なボディ - DialogContentレベルでスクロール管理するため内部スクロールを削除 */}
+        <div className="flex-1 py-4">
+          {children}
+        </div>
+        
+        {/* 固定フッター */}
+        {footer && (
+          <DialogFooter className="flex-shrink-0">
+            {footer}
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -18,7 +18,8 @@ import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Task, TaskStatus } from '@/types/task';
 import { KanbanColumn } from './KanbanColumn';
 import { mockTasks } from '@/mock/tasks';
-import { isTaskStatus, isValidTask, TypeGuardError } from '@/utils/typeGuards';
+import { isTaskStatus, isValidTask } from '@/utils/typeGuards';
+import { ProjectBadge } from '@/components/project/ProjectBadge';
 
 /**
  * KanbanBoardコンポーネントのProps
@@ -36,6 +37,8 @@ interface KanbanBoardProps {
   onSubtaskToggle?: (taskId: string, subtaskId: string) => void;
   /** タグクリック時のコールバック */
   onTagClick?: (tagId: string) => void;
+  /** プロジェクトクリック時のコールバック */
+  onProjectClick?: (projectId: string) => void;
   /** コンパクト表示モード */
   compact?: boolean;
   /** 追加のCSSクラス */
@@ -56,7 +59,6 @@ const COLUMN_TITLES: Record<TaskStatus, string> = {
 // ドラッグ＆ドロップ設定
 const DRAG_ACTIVATION_DISTANCE = 8; // ピクセル単位でのドラッグ開始距離
 const DRAG_PREVIEW_OPACITY = 0.9; // ドラッグプレビューの透明度
-const DRAG_CARD_OPACITY = 0.5; // ドラッグ中のカードの透明度
 
 /**
  * カンバンボードメインコンポーネント
@@ -82,6 +84,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onAddTask,
   onSubtaskToggle,
   onTagClick,
+  onProjectClick,
   compact = false,
   className = ''
 }) => {
@@ -331,6 +334,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 onToggleTaskCollapse={handleToggleTaskCollapse}
                 onSubtaskToggle={handleSubtaskToggle}
                 onTagClick={onTagClick}
+                onProjectClick={onProjectClick}
                 compact={compact}
                 collapsedTasks={collapsedTasks}
                 className="min-h-0" // グリッド内での高さ制限
@@ -339,15 +343,36 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           })}
         </div>
 
-        {/* ドラッグプレビュー */}
+        {/* ドラッグプレビュー - グループ4: プロジェクト表示維持対応 */}
         {draggedTask && (
           <div 
             className="fixed top-4 left-4 z-50 pointer-events-none"
             style={{ opacity: DRAG_PREVIEW_OPACITY }}
           >
-            <div className="bg-white border-2 border-blue-400 rounded-lg p-3 shadow-lg">
-              <div className="font-medium text-sm text-gray-900">
+            <div className="bg-white border-2 border-blue-400 rounded-lg p-3 shadow-lg max-w-xs">
+              <div className="font-medium text-sm text-gray-900 mb-2">
                 {draggedTask.title}
+              </div>
+              {/* ドラッグ時のプロジェクト表示維持 - ラベル表示改善 */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {draggedTask.projectId && (
+                    <ProjectBadge
+                      projectId={draggedTask.projectId}
+                      size="sm"
+                      variant="compact"
+                    />
+                  )}
+                  <div className="text-xs text-blue-600 font-medium">
+                    移動中...
+                  </div>
+                </div>
+                <div className="text-xs text-gray-400 font-mono">
+                  {draggedTask.priority === 'urgent' && '🔴'}
+                  {draggedTask.priority === 'high' && '🟠'}
+                  {draggedTask.priority === 'medium' && '🟡'}
+                  {draggedTask.priority === 'low' && '🟢'}
+                </div>
               </div>
             </div>
           </div>

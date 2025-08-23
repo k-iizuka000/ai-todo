@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, Calendar, Clock } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { TagBadge } from '@/components/tag/TagBadge';
+import { ProjectBadge } from '@/components/project/ProjectBadge';
 
 /**
  * TaskCardコンポーネントのProps
@@ -29,6 +30,8 @@ interface TaskCardProps {
   compact?: boolean;
   /** タグクリック時のコールバック */
   onTagClick?: (tagId: string) => void;
+  /** プロジェクトバッジクリック時のコールバック */
+  onProjectClick?: (projectId: string) => void;
 }
 
 /**
@@ -144,7 +147,8 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
   onSubtaskToggle,
   onClick,
   compact = false,
-  onTagClick
+  onTagClick,
+  onProjectClick
 }) => {
   const [localCollapsed, setLocalCollapsed] = useState(isCollapsed);
   
@@ -198,6 +202,12 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
   const handleTagClick = useCallback((tagId: string) => {
     onTagClick?.(tagId);
   }, [onTagClick]);
+
+  const handleProjectClick = useCallback(() => {
+    if (task.projectId) {
+      onProjectClick?.(task.projectId);
+    }
+  }, [onProjectClick, task.projectId]);
 
   return (
     <Card
@@ -267,7 +277,7 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
         )}
 
         {/* バッジエリア */}
-        <div className="flex flex-wrap gap-2" role="group" aria-label="タスクの詳細情報">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="タスクの詳細情報">
           {/* 優先度バッジ */}
           <Badge 
             variant="outline" 
@@ -277,6 +287,16 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
           >
             {getPriorityLabel(task.priority)}
           </Badge>
+
+          {/* プロジェクトバッジ */}
+          <ProjectBadge
+            projectId={task.projectId}
+            size="sm"
+            variant={compact ? 'compact' : 'default'}
+            onClick={task.projectId ? handleProjectClick : undefined}
+            showEmptyState={true}
+            emptyStateText="プロジェクトなし"
+          />
 
           {/* 期限バッジ */}
           {task.dueDate && (
@@ -291,8 +311,8 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
             </Badge>
           )}
 
-          {/* タグ */}
-          {!compact && task.tags.slice(0, MAX_VISIBLE_TAGS).map((tag) => (
+          {/* タグ（コンパクト時は表示制限） */}
+          {task.tags.slice(0, compact ? 1 : MAX_VISIBLE_TAGS).map((tag) => (
             <TagBadge
               key={tag.id}
               tag={tag}
@@ -301,14 +321,14 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
             />
           ))}
           
-          {/* 追加タグ数の表示 */}
-          {!compact && task.tags.length > MAX_VISIBLE_TAGS && (
+          {/* 追加タグ数の表示（コンパクト時も対応） */}
+          {task.tags.length > (compact ? 1 : MAX_VISIBLE_TAGS) && (
             <Badge
               variant="outline"
               className="text-xs text-gray-500"
-              title={`他に${task.tags.length - MAX_VISIBLE_TAGS}個のタグがあります: ${task.tags.slice(MAX_VISIBLE_TAGS).map(t => t.name).join(', ')}`}
+              title={`他に${task.tags.length - (compact ? 1 : MAX_VISIBLE_TAGS)}個のタグがあります: ${task.tags.slice(compact ? 1 : MAX_VISIBLE_TAGS).map(t => t.name).join(', ')}`}
             >
-              +{task.tags.length - MAX_VISIBLE_TAGS}
+              +{task.tags.length - (compact ? 1 : MAX_VISIBLE_TAGS)}
             </Badge>
           )}
         </div>

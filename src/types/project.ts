@@ -120,7 +120,9 @@ export type ProjectSortField =
   | 'priority'
   | 'createdAt'
   | 'updatedAt'
-  | 'deadline';
+  | 'deadline'
+  | 'startDate'
+  | 'endDate';
 
 export interface ProjectSort {
   field: ProjectSortField;

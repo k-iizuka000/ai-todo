@@ -1,14 +1,16 @@
 /**
  * カンバン列コンポーネント
+ * グループ4: 各カラムでの表示一貫性確保機能を含む
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Task, TaskStatus } from '@/types/task';
 import { ColumnHeader } from './ColumnHeader';
 import { TaskCard } from './TaskCard';
 import { TaskCardCompact } from './TaskCardCompact';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { useProjectHelper } from '@/stores/projectStore';
 
 /**
  * KanbanColumnコンポーネントのProps
@@ -32,6 +34,8 @@ interface KanbanColumnProps {
   onSubtaskToggle?: (taskId: string, subtaskId: string) => void;
   /** タグクリック時のコールバック */
   onTagClick?: (tagId: string) => void;
+  /** プロジェクトクリック時のコールバック */
+  onProjectClick?: (projectId: string) => void;
   /** コンパクト表示モード */
   compact?: boolean;
   /** 追加のCSSクラス */
@@ -69,11 +73,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
   onToggleTaskCollapse,
   onSubtaskToggle,
   onTagClick,
+  onProjectClick,
   compact = false,
   className = '',
   collapsedTasks = new Set(),
   isDraggedOver = false
 }) => {
+  // プロジェクトストアからプロジェクト情報取得用ヘルパーを取得
+  const { getProjectById } = useProjectHelper();
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
@@ -83,6 +90,57 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
 
   // メモ化されたタスクIDリスト
   const taskIds = useMemo(() => tasks.map(task => task.id), [tasks]);
+
+  // 各カラムでのプロジェクト表示一貫性チェック
+  const columnProjectConsistency = useMemo(() => {
+    const projectInfo = new Map<string, {
+      count: number;
+      project: any;
+      taskIds: string[];
+    }>();
+
+    tasks.forEach(task => {
+      if (task.projectId) {
+        const project = getProjectById(task.projectId);
+        if (project) {
+          if (!projectInfo.has(task.projectId)) {
+            projectInfo.set(task.projectId, {
+              count: 0,
+              project,
+              taskIds: []
+            });
+          }
+          const info = projectInfo.get(task.projectId)!;
+          info.count++;
+          info.taskIds.push(task.id);
+        }
+      }
+    });
+
+    return {
+      totalTasks: tasks.length,
+      tasksWithProjects: tasks.filter(t => t.projectId).length,
+      uniqueProjects: projectInfo.size,
+      projectBreakdown: Array.from(projectInfo.entries()).map(([projectId, info]) => ({
+        projectId,
+        projectName: info.project.name,
+        projectColor: info.project.color,
+        taskCount: info.count,
+        taskIds: info.taskIds
+      }))
+    };
+  }, [tasks, getProjectById]);
+
+  // 開発環境でのカラム表示一貫性ログ
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development' && tasks.length > 0) {
+      console.log(`Kanban Column "${title || status}" Project Consistency:`, {
+        status,
+        consistency: columnProjectConsistency,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [status, title, columnProjectConsistency, tasks.length]);
 
   return (
     <div 
@@ -133,6 +191,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
                     task={task}
                     onClick={onTaskClick}
                     onTagClick={onTagClick}
+                    onProjectClick={onProjectClick}
                   />
                 ) : (
                   <TaskCard
@@ -142,6 +201,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
                     onSubtaskToggle={onSubtaskToggle}
                     onClick={onTaskClick}
                     onTagClick={onTagClick}
+                    onProjectClick={onProjectClick}
                   />
                 )}
               </div>

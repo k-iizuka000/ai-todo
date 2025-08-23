@@ -298,6 +298,13 @@ const Dashboard: React.FC = () => {
     navigate(newUrl, { replace: true });
   }, [location.pathname, location.search, navigate]);
   
+  // プロジェクトクリック時のハンドラー（グループ4: Phase 3指摘事項対応）
+  const handleProjectClick = useCallback((projectId: string) => {
+    // プロジェクトページに遷移するか、プロジェクト詳細を表示する
+    // 現在の実装では、プロジェクト管理ページに遷移
+    navigate(`/projects/${projectId}`);
+  }, [navigate]);
+  
   // 選択中タグの表示用データ
   const selectedTagsData = useMemo(() => 
     selectedTags.map(tagId => mockTags.find(tag => tag.id === tagId)).filter(Boolean) as Tag[],
@@ -461,6 +468,7 @@ const Dashboard: React.FC = () => {
             onTaskClick={handleTaskClick}
             onAddTask={handleAddTask}
             onTagClick={handleTagSelect}
+            onProjectClick={handleProjectClick}
             className="h-[calc(100vh-12rem)]"
           />
         ) : (

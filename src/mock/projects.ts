@@ -7,27 +7,37 @@ import { Project, ProjectStatus, ProjectPriority, ProjectMember, ProjectStats, P
 // モックプロジェクトメンバー
 const mockProjectMembers: ProjectMember[] = [
   {
+    id: 'member-1',
     userId: 'user-1',
+    userName: '田中 太郎',
     role: 'owner',
     joinedAt: new Date('2024-01-01T09:00:00Z')
   },
   {
+    id: 'member-2',
     userId: 'user-2',
+    userName: '佐藤 花子',
     role: 'admin',
     joinedAt: new Date('2024-01-02T10:00:00Z')
   },
   {
+    id: 'member-3',
     userId: 'user-3',
+    userName: '鈴木 次郎',
     role: 'member',
     joinedAt: new Date('2024-01-03T11:00:00Z')
   },
   {
+    id: 'member-4',
     userId: 'user-4',
+    userName: '高橋 美咲',
     role: 'member',
     joinedAt: new Date('2024-01-10T14:00:00Z')
   },
   {
+    id: 'member-5',
     userId: 'user-5',
+    userName: '山田 健一',
     role: 'viewer',
     joinedAt: new Date('2024-01-15T16:00:00Z')
   }
@@ -167,6 +177,10 @@ export const mockProjectStats: Record<string, ProjectStats> = {
     completedTasks: 2,
     inProgressTasks: 3,
     todoTasks: 3,
+    completionRate: 25,
+    overdueCount: 1,
+    dueThisWeek: 2,
+    averageCompletionTime: 32.5,
     progressPercentage: 25,
     estimatedHours: 186,
     actualHours: 79
@@ -176,6 +190,10 @@ export const mockProjectStats: Record<string, ProjectStats> = {
     completedTasks: 0,
     inProgressTasks: 1,
     todoTasks: 3,
+    completionRate: 0,
+    overdueCount: 0,
+    dueThisWeek: 1,
+    averageCompletionTime: 0,
     progressPercentage: 0,
     estimatedHours: 80,
     actualHours: 4
@@ -185,6 +203,10 @@ export const mockProjectStats: Record<string, ProjectStats> = {
     completedTasks: 1,
     inProgressTasks: 0,
     todoTasks: 2,
+    completionRate: 33,
+    overdueCount: 0,
+    dueThisWeek: 1,
+    averageCompletionTime: 16,
     progressPercentage: 33,
     estimatedHours: 72,
     actualHours: 16
@@ -194,6 +216,10 @@ export const mockProjectStats: Record<string, ProjectStats> = {
     completedTasks: 0,
     inProgressTasks: 0,
     todoTasks: 0,
+    completionRate: 0,
+    overdueCount: 0,
+    dueThisWeek: 0,
+    averageCompletionTime: 0,
     progressPercentage: 0,
     estimatedHours: 0,
     actualHours: 0
@@ -203,6 +229,10 @@ export const mockProjectStats: Record<string, ProjectStats> = {
     completedTasks: 15,
     inProgressTasks: 0,
     todoTasks: 0,
+    completionRate: 100,
+    overdueCount: 0,
+    dueThisWeek: 0,
+    averageCompletionTime: 19.7,
     progressPercentage: 100,
     estimatedHours: 320,
     actualHours: 295
@@ -217,6 +247,10 @@ export const mockProjectsWithStats: ProjectWithStats[] = mockProjects.map(projec
     completedTasks: 0,
     inProgressTasks: 0,
     todoTasks: 0,
+    completionRate: 0,
+    overdueCount: 0,
+    dueThisWeek: 0,
+    averageCompletionTime: 0,
     progressPercentage: 0,
     estimatedHours: 0,
     actualHours: 0

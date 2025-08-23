@@ -53,24 +53,35 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const isExpanded = (path: string) => expandedItems.includes(path);
 
   React.useEffect(() => {
-    // ページが変わった時に該当する親メニューを展開
-    const currentRoute = routes.find(route => 
-      route.children && route.children.some(child => 
-        location.pathname === child.path || 
-        (child.path !== '/' && location.pathname.startsWith(child.path))
-      )
-    );
-    
-    if (currentRoute && !expandedItems.includes(currentRoute.path)) {
-      setExpandedItems(prev => [...prev, currentRoute.path]);
+    try {
+      // ページが変わった時に該当する親メニューを展開
+      const currentRoute = routes.find(route => 
+        route.children && route.children.some(child => 
+          location.pathname === child.path || 
+          (child.path !== '/' && location.pathname.startsWith(child.path))
+        )
+      );
+      
+      if (currentRoute && !expandedItems.includes(currentRoute.path)) {
+        setExpandedItems(prev => [...prev, currentRoute.path]);
+      }
+    } catch (error) {
+      console.error('Error handling route expansion:', error);
     }
   }, [location.pathname, expandedItems]);
 
   const renderNavItem = (route: typeof routes[0], level = 0) => {
-    const Icon = route.icon ? iconMap[route.icon] : null;
-    const hasChildren = route.children && route.children.length > 0;
-    const active = isActive(route.path);
-    const expanded = isExpanded(route.path);
+    try {
+      // 必要なプロパティの存在を確認
+      if (!route || !route.path || !route.label) {
+        console.warn('Invalid route configuration:', route);
+        return null;
+      }
+
+      const Icon = route.icon ? iconMap[route.icon] : null;
+      const hasChildren = route.children && route.children.length > 0;
+      const active = isActive(route.path);
+      const expanded = isExpanded(route.path);
 
     return (
       <div key={route.path}>
@@ -122,6 +133,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         )}
       </div>
     );
+    } catch (error) {
+      console.error('Error rendering navigation item:', error, route);
+      return (
+        <div key={route?.path || 'error'} className="px-3 py-2 text-sm text-red-500">
+          メニュー項目の読み込みエラー
+        </div>
+      );
+    }
   };
 
   return (
@@ -160,7 +179,26 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto max-h-[calc(100vh-8rem)]">
-            {routes.map(route => renderNavItem(route))}
+            {(() => {
+              try {
+                if (!routes || !Array.isArray(routes)) {
+                  console.error('Routes configuration is invalid:', routes);
+                  return (
+                    <div className="px-3 py-2 text-sm text-red-500">
+                      ナビゲーションの読み込みエラー
+                    </div>
+                  );
+                }
+                return routes.map(route => renderNavItem(route));
+              } catch (error) {
+                console.error('Error rendering navigation:', error);
+                return (
+                  <div className="px-3 py-2 text-sm text-red-500">
+                    ナビゲーションの読み込みエラー
+                  </div>
+                );
+              }
+            })()}
           </nav>
 
           {/* User section */}

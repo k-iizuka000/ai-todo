@@ -69,6 +69,10 @@ const AppRouter: React.FC = () => {
           <Route path="tasks/:taskId" element={<Tasks />} />
           <Route path="tasks/today" element={<Tasks />} />
           <Route path="tasks/today/:taskId" element={<Tasks />} />
+          {/* 
+            後方互換性維持: 「重要なタスク」「完了済みタスク」はサイドメニューから削除されたが、
+            直接URLアクセス、ブックマーク、外部リンクの互換性を保つため、ルート定義は維持する
+          */}
           <Route path="tasks/important" element={<Tasks />} />
           <Route path="tasks/important/:taskId" element={<Tasks />} />
           <Route path="tasks/completed" element={<Tasks />} />

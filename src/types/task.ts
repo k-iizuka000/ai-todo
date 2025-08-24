@@ -28,6 +28,14 @@ export interface Subtask {
   updatedAt: Date;
 }
 
+// タスクのスケジュール情報
+export interface TaskScheduleInfo {
+  scheduledDate?: Date;
+  scheduledStartTime?: string;  // HH:mm形式
+  scheduledEndTime?: string;    // HH:mm形式
+  scheduleItemId?: string;      // 関連するScheduleItemのID
+}
+
 // タグの型定義は tag.ts から import する
 
 // メインのTask型定義
@@ -48,6 +56,8 @@ export interface Task {
   updatedAt: Date;
   createdBy: string;
   updatedBy: string;
+  // スケジュール情報の追加
+  scheduleInfo?: TaskScheduleInfo;
 }
 
 // タスク作成用のInput型（必須フィールドのみ）

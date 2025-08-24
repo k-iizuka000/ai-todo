@@ -160,6 +160,24 @@ export interface ScheduleFilter {
   tags?: string[];
 }
 
+// ===== ドラッグ&ドロップ関連の型定義 =====
+
+/**
+ * 未スケジュールタスク用の拡張型
+ */
+export interface UnscheduledTaskData {
+  id: string;
+  title: string;
+  description?: string;
+  type: 'task' | 'subtask';
+  parentTaskId?: string;  // サブタスクの場合の親タスクID
+  priority: Priority;
+  estimatedTime: number;
+  tags: string[];
+  projectId?: string;
+  dueDate?: Date;
+}
+
 /**
  * ドラッグ&ドロップ操作用の型
  */
@@ -170,6 +188,14 @@ export interface ScheduleDragData {
   startTime?: string;
   endTime?: string;
   dragType: 'move' | 'resize-start' | 'resize-end';
+}
+
+/**
+ * 拡張されたドラッグデータ型
+ */
+export interface ExtendedScheduleDragData extends ScheduleDragData {
+  taskData?: UnscheduledTaskData;  // 未スケジュールタスクの詳細
+  sourceType: 'schedule' | 'unscheduled';  // ドラッグ元の種別
 }
 
 /**
@@ -353,4 +379,102 @@ export const priorityColors: Record<Priority, string> = {
   high: '#F59E0B',
   medium: '#84CC16',
   low: '#6B7280'
+};
+
+// ===== 型ガード関数 =====
+
+/**
+ * ExtendedScheduleDragDataが未スケジュールタスクのドラッグデータかどうかを判定
+ */
+export const isUnscheduledTaskDragData = (
+  data: ExtendedScheduleDragData
+): data is ExtendedScheduleDragData & { taskData: UnscheduledTaskData } => {
+  return data.sourceType === 'unscheduled' && 
+         data.taskData !== undefined && 
+         data.taskData !== null;
+};
+
+/**
+ * ExtendedScheduleDragDataが既存スケジュールアイテムのドラッグデータかどうかを判定
+ */
+export const isScheduleItemDragData = (
+  data: ExtendedScheduleDragData
+): data is ExtendedScheduleDragData & { itemId: string } => {
+  return data.sourceType === 'schedule' && 
+         data.itemId !== undefined && 
+         data.itemId !== '' &&
+         data.itemId !== null;
+};
+
+/**
+ * UnscheduledTaskDataの妥当性を検証
+ */
+export const isValidUnscheduledTaskData = (
+  data: unknown
+): data is UnscheduledTaskData => {
+  if (!data || typeof data !== 'object') return false;
+  
+  const task = data as UnscheduledTaskData;
+  
+  return (
+    typeof task.id === 'string' &&
+    task.id.trim() !== '' &&
+    typeof task.title === 'string' &&
+    task.title.trim() !== '' &&
+    (task.type === 'task' || task.type === 'subtask') &&
+    typeof task.estimatedTime === 'number' &&
+    task.estimatedTime > 0 &&
+    Array.isArray(task.tags)
+  );
+};
+
+/**
+ * ScheduleDragDataの妥当性を検証
+ */
+export const isValidScheduleDragData = (
+  data: unknown
+): data is ScheduleDragData => {
+  if (!data || typeof data !== 'object') return false;
+  
+  const dragData = data as ScheduleDragData;
+  
+  return (
+    typeof dragData.itemId === 'string' &&
+    typeof dragData.sourceBlockId === 'string' &&
+    (dragData.dragType === 'move' || 
+     dragData.dragType === 'resize-start' || 
+     dragData.dragType === 'resize-end')
+  );
+};
+
+/**
+ * ExtendedScheduleDragDataの妥当性を検証
+ */
+export const isValidExtendedScheduleDragData = (
+  data: unknown
+): data is ExtendedScheduleDragData => {
+  if (!data || typeof data !== 'object') return false;
+  
+  const extendedData = data as ExtendedScheduleDragData;
+  
+  // 基本的なScheduleDragDataの検証
+  if (!isValidScheduleDragData(data)) return false;
+  
+  // sourceTypeの検証
+  if (extendedData.sourceType !== 'schedule' && extendedData.sourceType !== 'unscheduled') {
+    return false;
+  }
+  
+  // 未スケジュールの場合はtaskDataが必要
+  if (extendedData.sourceType === 'unscheduled') {
+    return isValidUnscheduledTaskData(extendedData.taskData);
+  }
+  
+  // スケジュールアイテムの場合はitemIdが必要
+  if (extendedData.sourceType === 'schedule') {
+    return typeof extendedData.itemId === 'string' && 
+           extendedData.itemId.trim() !== '';
+  }
+  
+  return true;
 };

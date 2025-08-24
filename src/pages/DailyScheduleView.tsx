@@ -19,7 +19,6 @@ import {
   Settings,
   BarChart3,
   Clock,
-  CheckCircle,
   AlertCircle
 } from 'lucide-react';
 import { TimeGrid } from '@/components/schedule/TimeGrid';
@@ -30,7 +29,7 @@ import {
   useScheduleStatistics, 
   useUnscheduledTasks 
 } from '@/stores/scheduleStore';
-import { ScheduleItem, CreateScheduleItemRequest, ScheduleDragData } from '@/types/schedule';
+import { ScheduleItem, CreateScheduleItemRequest, ExtendedScheduleDragData, UnscheduledTaskData } from '@/types/schedule';
 
 const DailyScheduleView: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -38,6 +37,7 @@ const DailyScheduleView: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newItemTime, setNewItemTime] = useState<string>('');
   const [showSidebar, setShowSidebar] = useState(true);
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
 
   // ストアから状態とアクションを取得
   const {
@@ -172,6 +172,61 @@ const DailyScheduleView: React.FC = () => {
     await createScheduleItem(createRequest);
     setIsCreateModalOpen(false);
   }, [currentDate, createScheduleItem]);
+
+  // 未スケジュールタスクのドラッグ開始処理（メモ化）
+  const handleUnscheduledDragStart = useCallback((
+    e: React.DragEvent,
+    task: UnscheduledTaskData
+  ) => {
+    const dragData: ExtendedScheduleDragData = {
+      itemId: '',  // 新規作成のため空
+      sourceBlockId: '',
+      sourceType: 'unscheduled',
+      taskData: task,
+      dragType: 'move'
+    };
+    
+    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+    e.dataTransfer.effectAllowed = 'copy';
+    
+    // ドラッグ画像をカスタマイズ
+    const dragPreview = document.createElement('div');
+    dragPreview.innerHTML = `
+      <div style="
+        background: #dbeafe;
+        border: 2px solid #3b82f6;
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 14px;
+        color: #1e40af;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      ">
+        📋 ${task.title} (${task.estimatedTime}分)
+      </div>
+    `;
+    dragPreview.style.position = 'absolute';
+    dragPreview.style.top = '-1000px';
+    document.body.appendChild(dragPreview);
+    
+    e.dataTransfer.setDragImage(dragPreview, 10, 10);
+    
+    // ドラッグ画像要素を少し遅らせて削除
+    setTimeout(() => {
+      document.body.removeChild(dragPreview);
+    }, 0);
+    
+    // ドラッグ中のビジュアルフィードバック
+    setDraggingTaskId(task.id);
+  }, []);
+
+  // ドラッグ終了処理（メモ化）
+  const handleDragEnd = useCallback(() => {
+    setDraggingTaskId(null);
+  }, []);
 
   // 選択されたアイテムを取得（メモ化）
   const selectedItem = useMemo(() => 
@@ -366,38 +421,111 @@ const DailyScheduleView: React.FC = () => {
                 {unscheduledTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="p-3 bg-white dark:bg-gray-800 border rounded-lg cursor-pointer hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     role="listitem"
                     tabIndex={0}
                     aria-label={`未スケジュールタスク: ${task.title}, 推定時間 ${task.estimatedTime}分, 優先度 ${task.priority}`}
+                    aria-describedby={`task-description-${task.id}`}
                     draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', JSON.stringify({
-                        type: 'unscheduled-task',
-                        taskId: task.id,
-                        title: task.title,
-                        estimatedTime: task.estimatedTime
-                      }));
+                    onDragStart={(e) => handleUnscheduledDragStart(e, task)}
+                    onDragEnd={handleDragEnd}
+                    onKeyDown={(e) => {
+                      // キーボード操作でもドラッグを開始可能にする（将来的な拡張）
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        // 現在はログのみ（将来的にはキーボードでのドラッグ開始を実装）
+                        console.log(`タスク「${task.title}」が選択されました`);
+                      }
                     }}
+                    className={`
+                      relative p-3 bg-white dark:bg-gray-800 border rounded-lg cursor-grab active:cursor-grabbing
+                      hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                      transition-all duration-200 transform hover:scale-[1.02]
+                      ${draggingTaskId === task.id 
+                        ? 'opacity-50 scale-95 shadow-xl border-blue-500' 
+                        : 'hover:shadow-sm'
+                      }
+                      ${task.priority === 'high' || task.priority === 'urgent' || task.priority === 'critical'
+                        ? 'border-l-4 border-l-orange-500'
+                        : 'border-l-4 border-l-gray-200 dark:border-l-gray-700'
+                      }
+                    `}
                   >
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-sm">{task.title}</h4>
-                      <Badge variant="outline" size="sm">
-                        {task.estimatedTime}分
-                      </Badge>
+                    {/* ドラッグインジケーター */}
+                    <div className="absolute top-2 left-2 opacity-30 group-hover:opacity-60 transition-opacity">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                        <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                        <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                      </div>
                     </div>
-                    {task.description && (
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                        {task.description}
-                      </p>
+
+                    <div className="ml-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                            {task.title}
+                          </h4>
+                          {task.type === 'subtask' && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400" title="サブタスク">
+                              ↳
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Badge
+                            variant="outline"
+                            size="sm"
+                            className={`
+                              ${task.priority === 'high' || task.priority === 'urgent' || task.priority === 'critical'
+                                ? 'border-orange-300 text-orange-700 bg-orange-50 dark:border-orange-600 dark:text-orange-300'
+                                : 'border-gray-300 text-gray-700'
+                              }
+                            `}
+                          >
+                            ⏱ {task.estimatedTime}分
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {task.description && (
+                        <p 
+                          id={`task-description-${task.id}`}
+                          className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2"
+                        >
+                          {task.description}
+                        </p>
+                      )}
+                      
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-1">
+                          {task.tags.map((tag: string, index: number) => (
+                            <Badge key={index} variant="secondary" size="sm" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                        
+                        {/* 優先度インジケーター */}
+                        {(task.priority === 'high' || task.priority === 'urgent' || task.priority === 'critical') && (
+                          <div className="flex items-center gap-1">
+                            <div 
+                              className={`w-2 h-2 rounded-full ${
+                                task.priority === 'critical' ? 'bg-red-500' :
+                                task.priority === 'urgent' ? 'bg-orange-500' :
+                                'bg-yellow-500'
+                              }`}
+                              title={`優先度: ${task.priority}`}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ドラッグ中のオーバーレイ */}
+                    {draggingTaskId === task.id && (
+                      <div className="absolute inset-0 bg-blue-100 dark:bg-blue-900/50 rounded-lg pointer-events-none opacity-30" />
                     )}
-                    <div className="flex items-center gap-1 mt-2">
-                      {task.tags.map((tag: string, index: number) => (
-                        <Badge key={index} variant="secondary" size="sm">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
                   </div>
                 ))}
               </div>
@@ -465,7 +593,7 @@ const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="新しいスケジュール">
+    <Modal open={isOpen} onClose={onClose} title="新しいスケジュール">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -555,7 +683,7 @@ const ScheduleItemDetailModal: React.FC<ScheduleItemDetailModalProps> = ({
   onDelete
 }) => {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="スケジュール詳細">
+    <Modal open={isOpen} onClose={onClose} title="スケジュール詳細">
       <div className="space-y-4">
         <ScheduleItemCard
           item={item}

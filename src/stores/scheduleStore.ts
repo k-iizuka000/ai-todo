@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { customStorage } from '@/utils/customStorage';
+import { useTaskStore } from './taskStore';
 import {
   DailySchedule,
   ScheduleItem,
@@ -14,41 +15,21 @@ import {
   ScheduleStatistics,
   CreateScheduleItemRequest,
   ScheduleDragData,
+  ExtendedScheduleDragData,
+  UnscheduledTaskData,
   TimeSlot,
   ConflictResolution,
   BulkScheduleOperation,
   defaultScheduleViewSettings,
   scheduleItemColors
 } from '@/types/schedule';
-import { Priority } from '@/types/task';
 import {
   getScheduleForDate,
   createEmptySchedule,
   calculateStatistics,
-  mockSuggestions,
-  unscheduledTasks
+  mockSuggestions
 } from '@/mock/scheduleData';
 
-/**
- * 未スケジュールタスクの型定義
- * スケジュールに配置されていないタスクの情報を管理
- * 
- * @interface UnscheduledTask
- */
-interface UnscheduledTask {
-  /** タスクの一意識別子 */
-  id: string;
-  /** タスクのタイトル */
-  title: string;
-  /** タスクの詳細説明（オプション） */
-  description?: string;
-  /** タスクの優先度（high, medium, low） */
-  priority: Priority;
-  /** 見積実行時間（分単位） */
-  estimatedTime: number;
-  /** タスクに関連付けられたタグのリスト */
-  tags: string[];
-}
 
 /**
  * スケジュールストアの状態型定義
@@ -72,7 +53,7 @@ interface ScheduleState {
   // === 派生状態（computed） ===
   getCurrentSchedule: () => DailySchedule | undefined;
   getScheduleForDate: (date: Date) => DailySchedule | undefined;
-  getUnscheduledTasks: () => UnscheduledTask[];
+  getUnscheduledTasks: () => UnscheduledTaskData[];
   getConflictsForItem: (itemId: string) => ScheduleConflict[];
   getStatistics: (date: Date) => ScheduleStatistics;
   
@@ -98,6 +79,11 @@ interface ScheduleState {
   startDrag: (itemId: string) => void;
   endDrag: () => void;
   handleDrop: (data: ScheduleDragData) => Promise<void>;
+  
+  // タスクからスケジュール作成
+  createScheduleFromTask: (taskData: UnscheduledTaskData, timeSlot: TimeSlot) => Promise<void>;
+  handleTaskDrop: (dragData: ExtendedScheduleDragData) => Promise<void>;
+  syncTaskSchedule: (taskId: string, scheduleItemId: string) => Promise<void>;
   
   // コンフリクト管理
   detectConflicts: (date: Date) => void;
@@ -139,25 +125,16 @@ const isDate = (value: unknown): value is Date => {
   return value instanceof Date && !isNaN(value.getTime());
 };
 
-/**
- * 有効な日付文字列かどうかを判定する型ガード関数
- * @param value - 判定対象の値
- * @returns 有効な日付文字列の場合true、それ以外はfalse
- */
-const isValidDateString = (value: unknown): value is string => {
-  if (typeof value !== 'string') return false;
-  const date = new Date(value);
-  return !isNaN(date.getTime());
-};
 
 /**
  * Date型または日付文字列かどうかを判定する型ガード関数
  * @param value - 判定対象の値
  * @returns Date型または有効な日付文字列の場合true、それ以外はfalse
+ * @note 現在未使用だが、将来のデータ検証で使用予定
  */
-const isDateLike = (value: unknown): value is Date | string => {
-  return isDate(value) || isValidDateString(value);
-};
+// const isDateLike = (value: unknown): value is Date | string => {
+//   return isDate(value) || isValidDateString(value);
+// };
 
 /**
  * 値を安全にDate型に変換するユーティリティ関数
@@ -265,9 +242,9 @@ export const useScheduleStore = create<ScheduleState>()(
           return dailySchedules.get(dateKey);
         },
         
-        getUnscheduledTasks: (): UnscheduledTask[] => {
-          // mockデータから未スケジュールタスクを返す
-          return unscheduledTasks as UnscheduledTask[];
+        getUnscheduledTasks: (): UnscheduledTaskData[] => {
+          // タスクストアから未スケジュールタスクを取得
+          return useTaskStore.getState().getUnscheduledTasks();
         },
         
         getConflictsForItem: (itemId: string) => {
@@ -585,6 +562,105 @@ export const useScheduleStore = create<ScheduleState>()(
           }
         },
         
+        createScheduleFromTask: async (taskData: UnscheduledTaskData, timeSlot: TimeSlot) => {
+          try {
+            const createRequest: CreateScheduleItemRequest = {
+              date: timeSlot.date,
+              taskId: taskData.id,
+              type: taskData.type as 'task' | 'subtask',
+              title: taskData.title,
+              description: taskData.description,
+              startTime: timeSlot.startTime,
+              endTime: timeSlot.endTime,
+              priority: taskData.priority,
+              tags: taskData.tags || []
+            };
+            
+            // スケジュールアイテムを作成
+            await get().createScheduleItem(createRequest);
+            
+            // タスクのスケジュール情報を同期
+            await get().syncWithTasks();
+            
+            console.log('Successfully created schedule from task:', taskData.id);
+          } catch (error) {
+            console.error('Failed to create schedule from task:', error);
+            set((state) => ({
+              ...state,
+              error: 'タスクからスケジュールの作成に失敗しました'
+            }));
+          }
+        },
+        
+        handleTaskDrop: async (dragData: ExtendedScheduleDragData) => {
+          try {
+            if (dragData.sourceType === 'unscheduled' && dragData.taskData) {
+              // 未スケジュールタスクのドロップ処理
+              const timeSlot: TimeSlot = {
+                date: new Date(), // この値は適切なドロップ先の日付に更新される必要がある
+                startTime: dragData.startTime || '09:00',
+                endTime: dragData.endTime || '10:00',
+                availability: 'busy'
+              };
+              
+              await get().createScheduleFromTask(dragData.taskData, timeSlot);
+            } else if (dragData.sourceType === 'schedule') {
+              // 既存スケジュールアイテムのドロップ処理
+              await get().handleDrop(dragData);
+            }
+          } catch (error) {
+            console.error('Failed to handle task drop:', error);
+            set((state) => ({
+              ...state,
+              error: 'タスクドロップ処理に失敗しました'
+            }));
+          }
+        },
+        
+        syncTaskSchedule: async (taskId: string, scheduleItemId: string) => {
+          try {
+            const taskStore = useTaskStore.getState();
+            const task = taskStore.getTaskById(taskId);
+            
+            if (!task) {
+              throw new Error(`Task not found: ${taskId}`);
+            }
+            
+            // スケジュールアイテムを検索
+            const currentSchedules = get().dailySchedules;
+            let scheduleItem: ScheduleItem | undefined;
+            let scheduleDate: Date | undefined;
+            
+            for (const [dateKey, schedule] of currentSchedules) {
+              const item = schedule.scheduleItems.find(item => item.id === scheduleItemId);
+              if (item) {
+                scheduleItem = item;
+                scheduleDate = new Date(dateKey + 'T00:00:00');
+                break;
+              }
+            }
+            
+            if (scheduleItem && scheduleDate) {
+              // タスクのスケジュール情報を更新
+              taskStore.updateTaskSchedule(taskId, {
+                scheduledDate: scheduleDate,
+                scheduledStartTime: scheduleItem.startTime,
+                scheduledEndTime: scheduleItem.endTime,
+                scheduleItemId: scheduleItem.id
+              });
+            }
+            
+            console.log('Task schedule sync completed for task:', taskId);
+          } catch (error) {
+            console.error('Failed to sync task schedule:', error);
+            set((state) => ({
+              ...state,
+              error: 'タスクスケジュール同期に失敗しました'
+            }));
+          }
+        },
+
+        
         detectConflicts: (date: Date) => {
           const schedule = get().getScheduleForDate(date);
           if (!schedule) return;
@@ -670,8 +746,54 @@ export const useScheduleStore = create<ScheduleState>()(
         },
         
           syncWithTasks: async () => {
-            // タスクストアとの同期処理（簡易実装）
-            console.log('Syncing with tasks...');
+            try {
+              // タスクストアからすべてのタスクを取得
+              const taskStore = useTaskStore.getState();
+              const tasks = taskStore.tasks;
+              
+              // スケジュールアイテムからタスクIDを収集
+              const currentSchedules = get().dailySchedules;
+              const scheduledTaskIds = new Set<string>();
+              
+              for (const [, schedule] of currentSchedules) {
+                for (const item of schedule.scheduleItems) {
+                  if (item.taskId) {
+                    scheduledTaskIds.add(item.taskId);
+                  }
+                }
+              }
+              
+              // タスクのスケジュール情報を更新
+              for (const task of tasks) {
+                if (scheduledTaskIds.has(task.id)) {
+                  // スケジュール済みのタスクを探す
+                  for (const [dateKey, schedule] of currentSchedules) {
+                    const scheduleItem = schedule.scheduleItems.find(item => item.taskId === task.id);
+                    if (scheduleItem) {
+                      const scheduleDate = new Date(dateKey + 'T00:00:00');
+                      taskStore.updateTaskSchedule(task.id, {
+                        scheduledDate: scheduleDate,
+                        scheduledStartTime: scheduleItem.startTime,
+                        scheduledEndTime: scheduleItem.endTime,
+                        scheduleItemId: scheduleItem.id
+                      });
+                      break;
+                    }
+                  }
+                } else if (task.scheduleInfo?.scheduleItemId) {
+                  // スケジュールから削除されたタスクのスケジュール情報をクリア
+                  taskStore.clearTaskSchedule(task.id);
+                }
+              }
+              
+              console.log('Task schedule sync completed successfully');
+            } catch (error) {
+              console.error('Failed to sync with tasks:', error);
+              set((state) => ({
+                ...state,
+                error: 'タスクとの同期に失敗しました'
+              }));
+            }
           },
         
         subscribeToUpdates: (date: Date) => {

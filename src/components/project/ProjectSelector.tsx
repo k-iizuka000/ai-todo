@@ -7,8 +7,12 @@ import { cn } from '@/lib/utils';
 
 interface ProjectSelectorProps {
   selectedProject?: Project;
+  selectedProjectId?: string | null;  // 新規追加：ID直接指定
   onProjectSelect: (project: Project | null) => void;
+  onProjectIdSelect?: (projectId: string | null) => void;  // 新規追加
   onCreateProject?: () => void;
+  allowNone?: boolean;  // 新規追加：「プロジェクトなし」許可
+  noneLabel?: string;   // 新規追加：「プロジェクトなし」表示ラベル
   className?: string;
   disabled?: boolean;
   allowClear?: boolean;
@@ -20,14 +24,43 @@ interface ProjectSelectorProps {
  */
 export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   selectedProject,
+  selectedProjectId,
   onProjectSelect,
+  onProjectIdSelect,
   onCreateProject,
+  allowNone = false,
+  noneLabel = 'プロジェクトを設定しない',
   className,
   disabled = false,
   allowClear = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const projects = mockProjects.filter(p => !p.isArchived);
+
+  // プロパティのバリデーション
+  if (selectedProject && selectedProjectId !== undefined) {
+    console.warn('ProjectSelector: selectedProject と selectedProjectId の両方が提供されています。selectedProject が優先されます。');
+  }
+
+  // 現在の選択状態を決定
+  const getCurrentSelectedProject = (): Project | null => {
+    if (selectedProject) {
+      return selectedProject;
+    }
+    if (selectedProjectId === null) {
+      return null;
+    }
+    if (selectedProjectId) {
+      const foundProject = projects.find(p => p.id === selectedProjectId);
+      if (!foundProject) {
+        console.warn(`ProjectSelector: 指定されたprojectId "${selectedProjectId}" が見つかりません。`);
+      }
+      return foundProject || null;
+    }
+    return null;
+  };
+
+  const currentSelectedProject = getCurrentSelectedProject();
 
   const getStatusDisplay = (status: string) => {
     const statusMap = {
@@ -63,6 +96,16 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
 
   const handleProjectSelect = (project: Project) => {
     onProjectSelect(project);
+    if (onProjectIdSelect) {
+      onProjectIdSelect(project.id);
+    }
+    setIsOpen(false);
+  };
+
+  const handleNoneSelect = () => {
+    if (onProjectIdSelect) {
+      onProjectIdSelect(null);
+    }
     setIsOpen(false);
   };
 
@@ -80,18 +123,23 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
         disabled={disabled}
       >
         <div className="flex items-center space-x-2 min-w-0">
-          {selectedProject ? (
+          {currentSelectedProject ? (
             <>
               <span
                 className="w-3 h-3 rounded-full flex-shrink-0"
-                style={{ backgroundColor: selectedProject.color }}
+                style={{ backgroundColor: currentSelectedProject.color }}
               />
               <div className="text-left min-w-0 flex-1">
-                <p className="font-medium truncate">{selectedProject.name}</p>
+                <p className="font-medium truncate">{currentSelectedProject.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {getStatusDisplay(selectedProject.status)}
+                  {getStatusDisplay(currentSelectedProject.status)}
                 </p>
               </div>
+            </>
+          ) : selectedProjectId === null && allowNone ? (
+            <>
+              <Check className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <span className="text-muted-foreground">{noneLabel}</span>
             </>
           ) : (
             <span className="text-muted-foreground">プロジェクトを選択</span>
@@ -113,6 +161,25 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             onClick={() => setIsOpen(false)}
           />
           <div className="absolute z-20 w-full mt-1 bg-white border border-border rounded-md shadow-lg max-h-64 overflow-auto">
+
+            {/* プロジェクトなしオプション */}
+            {allowNone && (
+              <button
+                onClick={handleNoneSelect}
+                className={cn(
+                  'w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors flex items-center space-x-2',
+                  onCreateProject && 'border-b border-border',
+                  currentSelectedProject === null && 'bg-muted/30'
+                )}
+              >
+                <Check className={cn(
+                  'h-4 w-4 flex-shrink-0',
+                  currentSelectedProject === null ? 'text-primary' : 'text-transparent'
+                )} />
+                <span className="text-muted-foreground">{noneLabel}</span>
+              </button>
+            )}
+
             {/* 新規作成ボタン */}
             {onCreateProject && (
               <>
@@ -158,7 +225,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                   className={cn(
                     'w-full px-3 py-3 text-left hover:bg-muted/50 transition-colors flex items-center justify-between border-l-4',
                     getPriorityColor(project.priority),
-                    selectedProject?.id === project.id && 'bg-muted/30'
+                    currentSelectedProject?.id === project.id && 'bg-muted/30'
                   )}
                 >
                   <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -191,7 +258,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                       </div>
                     </div>
                   </div>
-                  {selectedProject?.id === project.id && (
+                  {currentSelectedProject?.id === project.id && (
                     <Check className="h-4 w-4 text-primary flex-shrink-0" />
                   )}
                 </button>

@@ -7,6 +7,7 @@ import { TaskDetail, Priority, TaskStatus } from '../../types/task';
 import { Tag } from '../../types/tag';
 import { TaskDetailTabs } from './TaskDetailTabs';
 import { TagBadge, TagSelector } from '../tag';
+import { ProjectBadge } from '../project/ProjectBadge';
 import { DataValidationService } from '../../utils/dataValidation';
 
 export interface TaskDetailViewProps {
@@ -22,6 +23,8 @@ export interface TaskDetailViewProps {
   onClose?: () => void;
   /** 利用可能なタグ */
   availableTags?: Tag[];
+  /** プロジェクトクリック時のコールバック */
+  onProjectClick?: (projectId: string) => void;
 }
 
 const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
@@ -30,7 +33,8 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   onTaskUpdate,
   onTaskDelete,
   onClose,
-  availableTags = []
+  availableTags = [],
+  onProjectClick
 }) => {
   // データバリデーションを適用（メモ化）
   const validatedTask = useMemo(() => 
@@ -211,12 +215,24 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
 
         {/* ステータス・優先度バッジ */}
         <div className="flex flex-wrap items-center gap-2 mt-3">
-          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(task.status)}`}>
-            {getStatusLabel(task.status)}
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(validatedTask.status)}`}>
+            {getStatusLabel(validatedTask.status)}
           </span>
-          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getPriorityColor(task.priority)}`}>
-            優先度: {getPriorityLabel(task.priority)}
+          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getPriorityColor(validatedTask.priority)}`}>
+            優先度: {getPriorityLabel(validatedTask.priority)}
           </span>
+          {/* プロジェクトバッジ追加 */}
+          <ProjectBadge
+            projectId={validatedTask.projectId}
+            size="sm"
+            onClick={validatedTask.projectId ? () => {
+              const projectId = validatedTask.projectId;
+              if (projectId) {
+                onProjectClick?.(projectId);
+              }
+            } : undefined}
+            showEmptyState={true}
+          />
         </div>
       </div>
 

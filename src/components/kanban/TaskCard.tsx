@@ -295,7 +295,6 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
             variant={compact ? 'compact' : 'default'}
             onClick={task.projectId ? handleProjectClick : undefined}
             showEmptyState={true}
-            emptyStateText="プロジェクトなし"
           />
 
           {/* 期限バッジ */}

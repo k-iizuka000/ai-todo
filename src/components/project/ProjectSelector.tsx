@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, Check, Plus } from 'lucide-react';
+import { ChevronDown, Check, Plus, X } from 'lucide-react';
 import { Project } from '@/types/project';
 import { mockProjects } from '@/mock/projects';
 import { Button } from '@/components/ui/button';
@@ -8,13 +8,14 @@ import { cn } from '@/lib/utils';
 interface ProjectSelectorProps {
   selectedProject?: Project;
   selectedProjectId?: string | null;  // 新規追加：ID直接指定
-  onProjectSelect: (project: Project) => void;
+  onProjectSelect: (project: Project | null) => void;
   onProjectIdSelect?: (projectId: string | null) => void;  // 新規追加
   onCreateProject?: () => void;
   allowNone?: boolean;  // 新規追加：「プロジェクトなし」許可
   noneLabel?: string;   // 新規追加：「プロジェクトなし」表示ラベル
   className?: string;
   disabled?: boolean;
+  allowClear?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   noneLabel = 'プロジェクトを設定しない',
   className,
   disabled = false,
+  allowClear = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const projects = mockProjects.filter(p => !p.isArchived);
@@ -192,6 +194,22 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                   <span className="text-primary font-medium">新規プロジェクト作成</span>
                 </button>
               </>
+            )}
+
+            {/* プロジェクトなしオプション */}
+            {allowClear && selectedProject && (
+              <button
+                onClick={() => {
+                  onProjectSelect(null);
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-3 text-left hover:bg-muted/50 transition-colors flex items-center justify-between border-b border-border"
+              >
+                <div className="flex items-center space-x-3">
+                  <X className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">プロジェクトなし</span>
+                </div>
+              </button>
             )}
 
             {/* プロジェクトリスト */}

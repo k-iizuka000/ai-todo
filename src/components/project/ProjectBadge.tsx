@@ -104,7 +104,7 @@ export const ProjectBadge: React.FC<ProjectBadgeProps> = React.memo(({
   onClick,
   variant = 'default',
   showEmptyState = false,
-  emptyStateText = 'プロジェクト未設定',
+  emptyStateText = '（プロジェクト無し）',
   className = ''
 }) => {
   const { getProjectDisplayData } = useProjectHelper();

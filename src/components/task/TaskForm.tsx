@@ -6,6 +6,9 @@ import { Tag } from '@/types/tag'
 import { ValidationMessages } from './ValidationMessages'
 import { TagSelector } from '@/components/tag/TagSelector'
 import { useTagStore } from '@/stores/tagStore'
+import { ProjectSelector } from '@/components/project/ProjectSelector'
+import { useProjectStore } from '@/stores/projectStore'
+import { Project } from '@/types/project'
 import { Calendar, Clock } from 'lucide-react'
 
 // フォーム用のバリデーションエラー型
@@ -16,6 +19,7 @@ export interface ValidationErrors {
   dueDate?: string[]
   estimatedHours?: string[]
   tags?: string[]
+  projectId?: string[]
   [key: string]: string[] | undefined
 }
 
@@ -27,6 +31,7 @@ export interface TaskFormData {
   dueDate: string
   estimatedHours: string
   tags: Tag[]
+  projectId?: string
 }
 
 export interface TaskFormProps {
@@ -57,6 +62,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({
 }) => {
   // タグストアからタグデータを取得
   const { tags } = useTagStore()
+  // プロジェクトストアからプロジェクトデータを取得
+  const { getProjectById } = useProjectStore()
   // フォームデータ
   const [formData, setFormData] = useState<TaskFormData>({
     title: '',
@@ -65,6 +72,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     dueDate: '',
     estimatedHours: '',
     tags: [],
+    projectId: undefined,
   })
 
   // バリデーションエラー
@@ -80,6 +88,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         dueDate: initialData.dueDate ? new Date(initialData.dueDate).toISOString().split('T')[0] : '',
         estimatedHours: initialData.estimatedHours?.toString() || '',
         tags: initialData.tags || [],
+        projectId: initialData.projectId,
       })
     }
   }, [initialData])
@@ -139,6 +148,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
       estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : undefined,
       tags: formData.tags,
+      projectId: formData.projectId,
     }
 
     try {
@@ -229,6 +239,22 @@ export const TaskForm: React.FC<TaskFormProps> = ({
             </Button>
           ))}
         </div>
+      </FormField>
+
+      {/* プロジェクト */}
+      <FormField
+        label="プロジェクト"
+        error={errors.projectId?.[0]}
+      >
+        <ProjectSelector
+          selectedProject={formData.projectId ? getProjectById(formData.projectId) : undefined}
+          onProjectSelect={(project: Project | null) => 
+            handleFieldChange('projectId', project ? project.id : undefined)
+          }
+          allowClear={true}
+          className="w-full"
+          disabled={loading}
+        />
       </FormField>
 
       {/* 期日と見積時間 */}

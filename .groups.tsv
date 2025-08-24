@@ -1,3 +1,2 @@
-1	Modalコンポーネントの改修
-2	Modal構造の最適化
-3	ProjectCreateModalの調整
+1	ProjectSelector の「プロジェクトなし」オプション追加
+2	ProjectSelector の APIインターフェース拡張

@@ -15,10 +15,11 @@ import {
 import { Plus, Search, Filter, Columns, List, X } from 'lucide-react';
 import { TagBadge } from '@/components/tag/TagBadge';
 import { useTagStore } from '@/stores/tagStore';
-import type { Task, TaskStatus, TaskDetail } from '@/types/task';
+import type { Task, TaskStatus, TaskDetail, CreateTaskInput } from '@/types/task';
 import { Tag } from '@/types/tag';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import TaskDetailView from '@/components/task/TaskDetailView';
+import { TaskCreateModal } from '@/components/task/TaskCreateModal';
 import { mockTasks, mockTags } from '@/mock/tasks';
 import { mockTodayTasks, getTaskDetail } from '@/mock/taskDetails';
 
@@ -205,6 +206,12 @@ const Dashboard: React.FC = () => {
       const newPath = currentPath.endsWith('/') ? `${currentPath}${task.id}` : `${currentPath}/${task.id}`;
       navigate(newPath, { replace: true });
     }
+  };
+
+  const handleTaskCreate = async (task: CreateTaskInput) => {
+    console.log('新しいタスクを作成:', task);
+    // 実際のAPIコールをここに実装
+    // 暫定的にコンソールログで確認
   };
 
   const handleAddTask = (_status: TaskStatus) => {
@@ -509,46 +516,11 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* 新規タスク作成モーダル */}
-      <Modal
+      <TaskCreateModal
         open={showCreateModal}
         onOpenChange={setShowCreateModal}
-        title="新しいタスクを作成"
-        size="lg"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">タスク名</label>
-            <Input placeholder="タスク名を入力..." />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">説明</label>
-            <Input placeholder="タスクの説明を入力..." />
-          </div>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-medium mb-2">優先度</label>
-              <select className="w-full p-2 border border-input rounded-md">
-                <option value="low">低</option>
-                <option value="medium">中</option>
-                <option value="high">高</option>
-                <option value="urgent">緊急</option>
-              </select>
-            </div>
-            <div className="flex-1">
-              <label className="block text-sm font-medium mb-2">期限</label>
-              <Input type="date" />
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 mt-6">
-          <Button variant="outline" onClick={() => setShowCreateModal(false)}>
-            キャンセル
-          </Button>
-          <Button onClick={() => setShowCreateModal(false)}>
-            タスクを作成
-          </Button>
-        </div>
-      </Modal>
+        onTaskCreate={handleTaskCreate}
+      />
 
       {/* タスク詳細モーダル */}
       <Modal
@@ -569,7 +541,6 @@ const Dashboard: React.FC = () => {
           <TaskDetailView
             task={selectedTask}
             editable={true}
-            mode="full"
             onTaskUpdate={handleTaskUpdate}
             onSubtaskToggle={handleSubtaskToggle}
             onSubtaskAdd={handleSubtaskAdd}

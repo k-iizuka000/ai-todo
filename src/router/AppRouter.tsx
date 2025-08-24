@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import AuthLayout from '@/components/auth/AuthLayout';
 import ProtectedRoute, { AuthenticatedRedirect } from '@/components/auth/ProtectedRoute';
@@ -27,14 +27,6 @@ const LoadingSpinner: React.FC = () => (
   </div>
 );
 
-// Wildcard redirect component for backward compatibility
-const TasksWildcardRedirect: React.FC = () => {
-  const location = useLocation();
-  // Get the full path after /tasks
-  const tasksPath = location.pathname.replace(/^\/tasks/, '');
-  const dashboardPath = tasksPath ? `/dashboard${tasksPath}` : '/dashboard';
-  return <Navigate to={dashboardPath} replace />;
-};
 
 const AppRouter: React.FC = () => {
   return (
@@ -69,13 +61,9 @@ const AppRouter: React.FC = () => {
             </ProtectedRoute>
           }
         >
-          {/* Redirect routes for backward compatibility */}
           {/* Root redirect to dashboard */}
           <Route path="" element={<Navigate to="/dashboard" replace />} />
           
-          {/* Wildcard tasks paths redirect to dashboard */}
-          <Route path="tasks/*" element={<TasksWildcardRedirect />} />
-
           {/* Dashboard routes */}
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="dashboard/:taskId" element={<Dashboard />} />

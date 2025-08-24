@@ -134,7 +134,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
 
         {/* メインフォーム */}
         <TaskForm
-          initialData={initialData}
+          initialData={projectId || initialData?.projectId ? { ...initialData, projectId: projectId || initialData?.projectId } : initialData}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
           submitLabel="タスクを作成"

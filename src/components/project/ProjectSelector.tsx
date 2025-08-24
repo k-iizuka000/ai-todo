@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, Check, Plus } from 'lucide-react';
+import { ChevronDown, Check, Plus, X } from 'lucide-react';
 import { Project } from '@/types/project';
 import { mockProjects } from '@/mock/projects';
 import { Button } from '@/components/ui/button';
@@ -7,10 +7,11 @@ import { cn } from '@/lib/utils';
 
 interface ProjectSelectorProps {
   selectedProject?: Project;
-  onProjectSelect: (project: Project) => void;
+  onProjectSelect: (project: Project | null) => void;
   onCreateProject?: () => void;
   className?: string;
   disabled?: boolean;
+  allowClear?: boolean;
 }
 
 /**
@@ -23,6 +24,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   onCreateProject,
   className,
   disabled = false,
+  allowClear = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const projects = mockProjects.filter(p => !p.isArchived);
@@ -125,6 +127,22 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                   <span className="text-primary font-medium">新規プロジェクト作成</span>
                 </button>
               </>
+            )}
+
+            {/* プロジェクトなしオプション */}
+            {allowClear && selectedProject && (
+              <button
+                onClick={() => {
+                  onProjectSelect(null);
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-3 text-left hover:bg-muted/50 transition-colors flex items-center justify-between border-b border-border"
+              >
+                <div className="flex items-center space-x-3">
+                  <X className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">プロジェクトなし</span>
+                </div>
+              </button>
             )}
 
             {/* プロジェクトリスト */}

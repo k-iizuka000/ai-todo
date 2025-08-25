@@ -4,7 +4,8 @@
 
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import { Task, TaskFilter, TaskSort, CreateTaskInput, UpdateTaskInput, TaskListOptions } from '../types/task';
+import { Task, TaskFilter, TaskSort, CreateTaskInput, UpdateTaskInput, TaskListOptions, TaskScheduleInfo } from '../types/task';
+import { UnscheduledTaskData } from '../types/schedule';
 import { mockTasks } from '../mock/tasks';
 
 // タスクストアの状態型定義
@@ -47,6 +48,12 @@ interface TaskState {
   // データ初期化
   loadMockData: () => void;
   resetStore: () => void;
+  
+  // スケジュール関連メソッド
+  getUnscheduledTasks: () => UnscheduledTaskData[];
+  getUnscheduledSubtasks: (parentId: string) => UnscheduledTaskData[];
+  updateTaskSchedule: (taskId: string, scheduleInfo: TaskScheduleInfo) => void;
+  clearTaskSchedule: (taskId: string) => void;
 }
 
 // デフォルトのフィルター設定
@@ -337,6 +344,76 @@ export const useTaskStore = create<TaskState>()(
             isLoading: false,
             error: null
           }, false, 'resetStore');
+        },
+
+        // スケジュール関連メソッド
+        getUnscheduledTasks: () => {
+          const { tasks } = get();
+          return tasks
+            .filter(task => !task.scheduleInfo?.scheduleItemId)
+            .map(task => ({
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              type: 'task' as const,
+              priority: task.priority,
+              estimatedTime: task.estimatedHours ? task.estimatedHours * 60 : 60, // デフォルト1時間
+              tags: task.tags.map(tag => tag.id),
+              projectId: task.projectId,
+              dueDate: task.dueDate
+            }));
+        },
+
+        getUnscheduledSubtasks: (parentId: string) => {
+          const { tasks } = get();
+          const parentTask = tasks.find(task => task.id === parentId);
+          if (!parentTask) return [];
+          
+          return parentTask.subtasks
+            .filter(subtask => !subtask.completed)
+            .map(subtask => ({
+              id: subtask.id,
+              title: subtask.title,
+              description: undefined,
+              type: 'subtask' as const,
+              parentTaskId: parentId,
+              priority: parentTask.priority,
+              estimatedTime: 30, // サブタスクはデフォルト30分
+              tags: parentTask.tags.map(tag => tag.id),
+              projectId: parentTask.projectId
+            }));
+        },
+
+        updateTaskSchedule: (taskId: string, scheduleInfo: TaskScheduleInfo) => {
+          const { tasks } = get();
+          const updatedTasks = tasks.map(task =>
+            task.id === taskId
+              ? {
+                  ...task,
+                  scheduleInfo,
+                  updatedAt: new Date(),
+                  updatedBy: 'current-user'
+                }
+              : task
+          );
+          
+          set({ tasks: updatedTasks }, false, 'updateTaskSchedule');
+        },
+
+        clearTaskSchedule: (taskId: string) => {
+          const { tasks } = get();
+          const updatedTasks = tasks.map(task =>
+            task.id === taskId
+              ? {
+                  ...task,
+                  scheduleInfo: undefined,
+                  updatedAt: new Date(),
+                  updatedBy: 'current-user'
+                }
+              : task
+          );
+          
+          set({ tasks: updatedTasks }, false, 'clearTaskSchedule');
         }
       }),
       {

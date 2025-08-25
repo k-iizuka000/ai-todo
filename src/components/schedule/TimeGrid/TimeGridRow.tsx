@@ -1,6 +1,6 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 import { ScheduleItem } from '@/types/schedule';
-import { ScheduleItemCard } from '@/components/schedule/ScheduleItem';
+// import { ScheduleItemCard } from '@/components/schedule/ScheduleItem'; // 使用時にインポート
 
 interface TimeGridRowProps {
   hour: number;
@@ -23,6 +23,7 @@ const TimeGridRow: React.FC<TimeGridRowProps> = ({
 }) => {
   const timeStr = `${hour.toString().padStart(2, '0')}:00`;
   const isCurrentHour = showCurrentTime && currentTime.getHours() === hour;
+  const [isDragOver, setIsDragOver] = useState(false);
   
   // この時間帯のスケジュールアイテムをフィルター
   const itemsInThisHour = scheduleItems.filter(item => {
@@ -75,6 +76,26 @@ const TimeGridRow: React.FC<TimeGridRowProps> = ({
     };
   };
 
+  // ドラッグ関連のイベントハンドラー
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    // 子要素から出ても反応しないようにする
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    // ドロップ可能であることを示す
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
   const handleResizeMouseDown = useCallback((e: React.MouseEvent, item: ScheduleItem, direction: 'top' | 'bottom') => {
     e.preventDefault();
     e.stopPropagation();
@@ -118,12 +139,19 @@ const TimeGridRow: React.FC<TimeGridRowProps> = ({
         {/* スケジュール表示エリア */}
         <div 
           ref={timeSlotRef}
-          className="flex-1 relative cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+          className={`flex-1 relative cursor-pointer transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset ${
+            isDragOver 
+              ? 'bg-blue-50 dark:bg-blue-900/30 border-2 border-dashed border-blue-300 dark:border-blue-600' 
+              : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 border-2 border-transparent'
+          }`}
           onClick={handleTimeSlotClick}
           onKeyDown={handleTimeSlotKeyDown}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
           tabIndex={0}
           role="button"
-          aria-label={`${timeStr}の時間スロット。クリックまたはEnterキーでスケジュールを追加`}
+          aria-label={`${timeStr}の時間スロット。クリックまたはEnterキーでスケジュールを追加、またはタスクをドロップ`}
           aria-describedby={`time-label-${hour}`}
         >
           {/* 現在時刻のライン */}
@@ -238,10 +266,24 @@ const TimeGridRow: React.FC<TimeGridRowProps> = ({
           
           {/* 空の時間スロットのヒント */}
           {itemsInThisHour.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-50 transition-opacity">
-              <span className="text-xs text-gray-400 dark:text-gray-500">
-                クリックしてスケジュールを追加
+            <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${
+              isDragOver 
+                ? 'opacity-100' 
+                : 'opacity-0 hover:opacity-50'
+            }`}>
+              <span className="text-xs text-gray-400 dark:text-gray-500 text-center">
+                {isDragOver 
+                  ? '📋 ここにドロップしてスケジュール配置' 
+                  : 'クリックしてスケジュールを追加'
+                }
               </span>
+            </div>
+          )}
+          
+          {/* ドラッグオーバー時の追加表示 */}
+          {isDragOver && (
+            <div className="absolute inset-0 pointer-events-none z-30">
+              <div className="w-full h-full border-2 border-blue-400 rounded-md bg-blue-100/20 dark:bg-blue-800/20 animate-pulse" />
             </div>
           )}
         </div>

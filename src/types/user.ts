@@ -26,18 +26,13 @@ export type AuthProvider =
 // ユーザー設定
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
-  language: 'ja' | 'en';
+  language: string;
   timezone: string;
   dateFormat: string;
   timeFormat: '12h' | '24h';
-  notifications: {
-    email: boolean;
-    push: boolean;
-    desktop: boolean;
-    taskDeadlines: boolean;
-    projectUpdates: boolean;
-    mentions: boolean;
-  };
+  notificationEmail: boolean;
+  notificationPush: boolean;
+  notificationDesktop: boolean;
 }
 
 // ユーザープロフィール
@@ -52,11 +47,6 @@ export interface UserProfile {
   phoneNumber?: string;
   location?: string;
   website?: string;
-  socialLinks?: {
-    twitter?: string;
-    linkedin?: string;
-    github?: string;
-  };
 }
 
 // メインのUser型定義

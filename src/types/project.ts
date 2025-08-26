@@ -24,13 +24,17 @@ export type ProjectRole =
   | 'member'      // メンバー
   | 'viewer';     // 閲覧者
 
-// プロジェクトメンバーの型定義
+// プロジェクトメンバーの型定義（DBテーブル構造に対応）
 export interface ProjectMember {
   id: string;
   userId: string;
-  userName: string;
   role: ProjectRole;
   joinedAt: Date;
+}
+
+// JOINして取得する場合のプロジェクトメンバー型
+export interface ProjectMemberWithUser extends ProjectMember {
+  userName: string;
   avatar?: string;
 }
 
@@ -49,7 +53,7 @@ export interface ProjectStats {
   actualHours: number;
 }
 
-// メインのProject型定義
+// メインのProject型定義（DBテーブル構造に対応）
 export interface Project {
   id: string;
   name: string;
@@ -59,17 +63,22 @@ export interface Project {
   color: string;
   icon?: string;
   ownerId: string;
-  members: ProjectMember[];
   startDate?: Date;
   endDate?: Date;
   deadline?: Date;
   budget?: number;
-  tags: string[];
   isArchived: boolean;
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
   updatedBy: string;
+}
+
+// JOINでタグやメンバーを取得する場合のプロジェクト型
+export interface ProjectWithDetails extends Project {
+  members: ProjectMemberWithUser[];
+  tags: string[]; // タグ名の配列
+  tagIds: string[]; // タグIDの配列
 }
 
 // プロジェクト作成用のInput型
@@ -83,7 +92,7 @@ export interface CreateProjectInput {
   endDate?: Date;
   deadline?: Date;
   budget?: number;
-  tags?: string[];
+  tagIds?: string[]; // タグIDの配列
 }
 
 // プロジェクト更新用のInput型
@@ -98,7 +107,7 @@ export interface UpdateProjectInput {
   endDate?: Date;
   deadline?: Date;
   budget?: number;
-  tags?: string[];
+  tagIds?: string[]; // タグIDの配列
   isArchived?: boolean;
 }
 

@@ -45,15 +45,14 @@ interface KanbanBoardProps {
   className?: string;
 }
 
-// ステータスの表示順序
-const COLUMN_ORDER: TaskStatus[] = ['todo', 'in_progress', 'done', 'archived'];
+// ステータスの表示順序（アーカイブカラム削除）
+const COLUMN_ORDER: TaskStatus[] = ['todo', 'in_progress', 'done'];
 
-// カラムタイトル設定
-const COLUMN_TITLES: Record<TaskStatus, string> = {
+// カラムタイトル設定（アーカイブを除外した型定義）
+const COLUMN_TITLES: Record<Exclude<TaskStatus, 'archived'>, string> = {
   todo: 'To Do',
   in_progress: 'In Progress', 
-  done: 'Done',
-  archived: 'Archived'
+  done: 'Done'
 };
 
 // ドラッグ＆ドロップ設定
@@ -125,18 +124,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     })
   );
 
-  // ステータス別にタスクを分類
+  // ステータス別にタスクを分類（アーカイブを除外した型定義）
   const tasksByStatus = useMemo(() => {
-    const grouped: Record<TaskStatus, Task[]> = {
+    type ActiveTaskStatus = Exclude<TaskStatus, 'archived'>;
+    const grouped: Record<ActiveTaskStatus, Task[]> = {
       todo: [],
       in_progress: [],
-      done: [],
-      archived: []
+      done: []
     };
     
     taskList.forEach(task => {
-      if (grouped[task.status]) {
-        grouped[task.status].push(task);
+      // アーカイブタスクは除外してアクティブタスクのみ分類
+      if (task.status !== 'archived' && grouped[task.status as ActiveTaskStatus]) {
+        grouped[task.status as ActiveTaskStatus].push(task);
       }
     });
     
@@ -279,9 +279,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         }
       }
 
-      // 同じカラム内でのリオーダリング
-      if (activeTask.status === finalStatus && over.id !== active.id) {
-        const columnTasks = tasksByStatus[finalStatus];
+      // 同じカラム内でのリオーダリング（アーカイブでの操作は除外）
+      if (activeTask.status === finalStatus && over.id !== active.id && finalStatus !== 'archived') {
+        const columnTasks = tasksByStatus[finalStatus as Exclude<TaskStatus, 'archived'>];
         const oldIndex = columnTasks.findIndex(task => task.id === active.id);
         const newIndex = columnTasks.findIndex(task => task.id === over.id);
         
@@ -327,8 +327,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               <KanbanColumn
                 key={status}
                 status={status}
-                title={COLUMN_TITLES[status]}
-                tasks={tasksByStatus[status]}
+                title={COLUMN_TITLES[status as Exclude<TaskStatus, 'archived'>]}
+                tasks={tasksByStatus[status as Exclude<TaskStatus, 'archived'>]}
                 onTaskClick={onTaskClick}
                 onAddTask={handleAddTask}
                 onToggleTaskCollapse={handleToggleTaskCollapse}

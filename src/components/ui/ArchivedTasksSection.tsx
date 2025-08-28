@@ -37,6 +37,10 @@ export interface ArchivedTasksSectionProps {
   storageKey: string
   /** タスククリック時のハンドラー */
   onTaskClick?: (task: Task) => void
+  /** タグ選択時のハンドラー - グループ2: タグ表示コンポーネントとの整合性 */
+  onTagSelect?: (tagId: string) => void
+  /** プロジェクトクリック時のハンドラー - グループ4: プロジェクト管理コンポーネントとの整合性 */
+  onProjectClick?: (projectId: string) => void
   /** カスタムタスク表示関数。未指定の場合はデフォルトの表示を使用 */
   renderTask?: (task: Task) => React.ReactNode
   /** 追加のCSSクラス */
@@ -277,6 +281,8 @@ export const ArchivedTasksSection = React.memo<ArchivedTasksSectionProps>(({
   tasks,
   storageKey,
   onTaskClick,
+  onTagSelect,
+  onProjectClick,
   renderTask,
   className,
   title = "アーカイブ済みタスク",

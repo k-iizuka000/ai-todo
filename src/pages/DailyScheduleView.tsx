@@ -23,13 +23,17 @@ import {
 } from 'lucide-react';
 import { TimeGrid } from '@/components/schedule/TimeGrid';
 import { ScheduleItemCard } from '@/components/schedule/ScheduleItem';
+import { ArchivedTasksSection } from '@/components/ui/ArchivedTasksSection';
 import { 
   useScheduleStore, 
   useCurrentSchedule, 
   useScheduleStatistics, 
   useUnscheduledTasks 
 } from '@/stores/scheduleStore';
+import { useTaskStore } from '@/stores/taskStore';
 import { ScheduleItem, CreateScheduleItemRequest, ExtendedScheduleDragData, UnscheduledTaskData } from '@/types/schedule';
+import { Task } from '@/types/task';
+import { isSameDay } from '@/lib/utils';
 
 const DailyScheduleView: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -57,6 +61,9 @@ const DailyScheduleView: React.FC = () => {
   const currentSchedule = useCurrentSchedule();
   const statistics = useScheduleStatistics();
   const unscheduledTasks = useUnscheduledTasks();
+  
+  // タスクストアから全タスクを取得
+  const { tasks: allTasks } = useTaskStore();
 
   // 日付ナビゲーション（メモ化）- TDZ問題を避けるため最初に定義
   const navigateDate = useCallback((direction: 'prev' | 'next') => {
@@ -228,6 +235,30 @@ const DailyScheduleView: React.FC = () => {
     setDraggingTaskId(null);
   }, []);
 
+  // タスククリック処理（メモ化）
+  const handleTaskClick = useCallback((task: Task) => {
+    // アーカイブタスククリック時の処理
+    // 現在は基本的なログのみ（必要に応じて詳細表示や編集機能を追加可能）
+    console.log('Archived task clicked:', task.title);
+    // 将来的にはタスクの詳細モーダルを表示するなどの処理を追加可能
+  }, []);
+
+  // タグ選択処理（メモ化）- グループ2: タグ表示コンポーネントとの整合性
+  const handleTagSelect = useCallback((tagId: string) => {
+    // タグクリック時の処理
+    // 現在は基本的なログのみ（将来的にはタグによるフィルタリング等を実装）
+    console.log('Tag selected:', tagId);
+    // 将来的にはタグによるタスクのフィルタリング機能を追加可能
+  }, []);
+
+  // プロジェクトクリック処理（メモ化）- グループ4: プロジェクト管理コンポーネントとの整合性
+  const handleProjectClick = useCallback((projectId: string) => {
+    // プロジェクトクリック時の処理
+    // 現在は基本的なログのみ（将来的にはプロジェクト詳細表示等を実装）
+    console.log('Project clicked:', projectId);
+    // 将来的にはプロジェクトフィルタリングや詳細表示機能を追加可能
+  }, []);
+
   // 選択されたアイテムを取得（メモ化）
   const selectedItem = useMemo(() => 
     selectedItemId && currentSchedule?.scheduleItems.find(
@@ -242,6 +273,14 @@ const DailyScheduleView: React.FC = () => {
     breakTimes: [],
     totalAvailable: 480
   }), []);
+
+  // 今日のアーカイブタスクをフィルタリング（メモ化）
+  const todayArchivedTasks = useMemo(() => {
+    return allTasks.filter(task => 
+      task.status === 'archived' && 
+      isSameDay(task.archivedAt || task.updatedAt, currentDate)
+    );
+  }, [allTasks, currentDate]);
 
   // エラーハンドリング
   if (error) {
@@ -533,6 +572,18 @@ const DailyScheduleView: React.FC = () => {
           </aside>
         )}
       </main>
+
+      {/* アーカイブタスクセクション */}
+      <section className="px-6 pb-6" aria-label="今日のアーカイブタスク">
+        <ArchivedTasksSection
+          tasks={todayArchivedTasks}
+          storageKey="daily-schedule"
+          onTaskClick={handleTaskClick}
+          onTagSelect={handleTagSelect}
+          onProjectClick={handleProjectClick}
+          className="mt-6"
+        />
+      </section>
 
       {/* 新規作成モーダル */}
       {isCreateModalOpen && (

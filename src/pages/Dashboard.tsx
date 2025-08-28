@@ -117,26 +117,29 @@ const Dashboard: React.FC = () => {
     );
   }, []);
   
-  // 表示するタスクを決定（メモ化とパフォーマンス最適化）
-  const displayTasks = useMemo(() => {
-    // ページタイプによる初期フィルタリング（早期リターンでパフォーマンス向上）
-    let tasks: Task[];
+  // ページタイプに基づくタスク取得をメモ化（パフォーマンス最適化）
+  const baseTasksByPage = useMemo(() => {
     switch (pageType) {
       case 'today':
-        tasks = mockTodayTasks;
-        break;
+        return mockTodayTasks;
       case 'important':
-        tasks = mockTasks.filter(task => task.priority === 'urgent' || task.priority === 'high');
-        break;
+        return mockTasks.filter(task => task.priority === 'urgent' || task.priority === 'high');
       case 'completed':
-        tasks = mockTasks.filter(task => task.status === 'done');
-        break;
+        return mockTasks.filter(task => task.status === 'done');
       default:
-        tasks = mockTasks;
+        return mockTasks;
     }
-    
-    // アーカイブタスクを除外（メインの表示からは分離）
-    tasks = tasks.filter(task => task.status !== 'archived');
+  }, [pageType]);
+
+  // アクティブタスクのみを抽出（設計書2.2: activeTasksOnlyのメモ化実装）
+  const activeTasksOnly = useMemo(() => 
+    baseTasksByPage.filter(task => task.status !== 'archived'),
+    [baseTasksByPage]
+  );
+
+  // 表示するタスクを決定（メモ化とパフォーマンス最適化）
+  const displayTasks = useMemo(() => {
+    let tasks = activeTasksOnly;
     
     // フィルターが設定されていない場合は早期リターン
     if (selectedTags.length === 0 && !searchQuery.trim()) {
@@ -154,24 +157,11 @@ const Dashboard: React.FC = () => {
     }
     
     return tasks;
-  }, [pageType, selectedTags, tagFilterMode, searchQuery]);
+  }, [activeTasksOnly, selectedTags, tagFilterMode, searchQuery, filterTasksByTags, filterTasksBySearch]);
 
-  // アーカイブセクション用のタスクを取得
+  // アーカイブセクション用のタスクを取得（baseTasksByPageを再利用）
   const allTasksForArchived = useMemo(() => {
-    let tasks: Task[];
-    switch (pageType) {
-      case 'today':
-        tasks = mockTodayTasks;
-        break;
-      case 'important':
-        tasks = mockTasks.filter(task => task.priority === 'urgent' || task.priority === 'high');
-        break;
-      case 'completed':
-        tasks = mockTasks.filter(task => task.status === 'done');
-        break;
-      default:
-        tasks = mockTasks;
-    }
+    let tasks = baseTasksByPage;
     
     // アーカイブタスクにもフィルターを適用
     if (selectedTags.length > 0) {
@@ -183,7 +173,7 @@ const Dashboard: React.FC = () => {
     }
     
     return tasks;
-  }, [pageType, selectedTags, tagFilterMode, searchQuery]);
+  }, [baseTasksByPage, selectedTags, tagFilterMode, searchQuery, filterTasksByTags, filterTasksBySearch]);
   
   // ページタイトルを決定
   const getPageTitle = (): string => {
@@ -502,60 +492,75 @@ const Dashboard: React.FC = () => {
       {/* コンテンツエリア */}
       <div className="flex-1 min-h-0">
         {viewMode === 'kanban' ? (
-          <KanbanBoard
-            tasks={displayTasks}
-            onTaskMove={handleTaskMove}
-            onTaskClick={handleTaskClick}
-            onAddTask={handleAddTask}
-            onTagClick={handleTagSelect}
-            onProjectClick={handleProjectClick}
-            className="h-[calc(100vh-12rem)]"
-          />
+          <>
+            <KanbanBoard
+              tasks={displayTasks}
+              onTaskMove={handleTaskMove}
+              onTaskClick={handleTaskClick}
+              onAddTask={handleAddTask}
+              onTagClick={handleTagSelect}
+              onProjectClick={handleProjectClick}
+              className="h-[calc(100vh-20rem)]"
+            />
+            {/* 設計書2.1: カンバンビューにアーカイブセクションを追加 */}
+            <div className="mt-6">
+              <ArchivedTasksSection
+                tasks={allTasksForArchived}
+                storageKey="dashboard-kanban"
+                onTaskClick={handleTaskClick}
+                onTagSelect={handleTagSelect}
+                onProjectClick={handleProjectClick}
+              />
+            </div>
+          </>
         ) : (
-          <div className="space-y-4">
-            {displayTasks.map((task) => (
-              <Card key={task.id} variant="interactive" onClick={() => handleTaskClick(task)}>
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg">{task.title}</CardTitle>
-                    <div className="flex gap-2">
-                      <StatusBadge status={task.status} />
-                      <PriorityBadge priority={task.priority} />
+          <>
+            <div className="space-y-4">
+              {displayTasks.map((task) => (
+                <Card key={task.id} variant="interactive" onClick={() => handleTaskClick(task)}>
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-lg">{task.title}</CardTitle>
+                      <div className="flex gap-2">
+                        <StatusBadge status={task.status} />
+                        <PriorityBadge priority={task.priority} />
+                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-3">{task.description}</p>
-                  <div className="flex items-center gap-2">
-                    {task.tags.map((tag) => (
-                      <TagBadge 
-                        key={tag.id} 
-                        tag={tag} 
-                        size="sm"
-                        onClick={() => handleTagSelect(tag.id)}
-                      />
-                    ))}
-                    {task.dueDate && (
-                      <span className="text-sm text-muted-foreground ml-auto">
-                        期限: {task.dueDate.toLocaleDateString('ja-JP')}
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground mb-3">{task.description}</p>
+                    <div className="flex items-center gap-2">
+                      {task.tags.map((tag) => (
+                        <TagBadge 
+                          key={tag.id} 
+                          tag={tag} 
+                          size="sm"
+                          onClick={() => handleTagSelect(tag.id)}
+                        />
+                      ))}
+                      {task.dueDate && (
+                        <span className="text-sm text-muted-foreground ml-auto">
+                          期限: {task.dueDate.toLocaleDateString('ja-JP')}
+                        </span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            {/* リストビューのアーカイブセクション */}
+            <div className="mt-6">
+              <ArchivedTasksSection
+                tasks={allTasksForArchived}
+                storageKey="dashboard-list"
+                onTaskClick={handleTaskClick}
+                onTagSelect={handleTagSelect}
+                onProjectClick={handleProjectClick}
+              />
+            </div>
+          </>
         )}
       </div>
-
-      {/* アーカイブタスクセクション */}
-      <ArchivedTasksSection
-        tasks={allTasksForArchived}
-        storageKey="dashboard"
-        onTaskClick={handleTaskClick}
-        onTagSelect={handleTagSelect}
-        onProjectClick={handleProjectClick}
-      />
 
       {/* 新規タスク作成モーダル */}
       <TaskCreateModal

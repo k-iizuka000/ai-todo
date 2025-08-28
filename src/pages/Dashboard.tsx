@@ -10,7 +10,8 @@ import {
   Badge,
   StatusBadge,
   PriorityBadge,
-  Modal 
+  Modal,
+  ArchivedTasksSection
 } from '@/components/ui';
 import { Plus, Search, Filter, Columns, List, X } from 'lucide-react';
 import { TagBadge } from '@/components/tag/TagBadge';
@@ -134,6 +135,9 @@ const Dashboard: React.FC = () => {
         tasks = mockTasks;
     }
     
+    // アーカイブタスクを除外（メインの表示からは分離）
+    tasks = tasks.filter(task => task.status !== 'archived');
+    
     // フィルターが設定されていない場合は早期リターン
     if (selectedTags.length === 0 && !searchQuery.trim()) {
       return tasks;
@@ -145,6 +149,35 @@ const Dashboard: React.FC = () => {
     }
     
     // 検索フィルタリングを適用
+    if (searchQuery.trim()) {
+      tasks = filterTasksBySearch(tasks, searchQuery);
+    }
+    
+    return tasks;
+  }, [pageType, selectedTags, tagFilterMode, searchQuery]);
+
+  // アーカイブセクション用のタスクを取得
+  const allTasksForArchived = useMemo(() => {
+    let tasks: Task[];
+    switch (pageType) {
+      case 'today':
+        tasks = mockTodayTasks;
+        break;
+      case 'important':
+        tasks = mockTasks.filter(task => task.priority === 'urgent' || task.priority === 'high');
+        break;
+      case 'completed':
+        tasks = mockTasks.filter(task => task.status === 'done');
+        break;
+      default:
+        tasks = mockTasks;
+    }
+    
+    // アーカイブタスクにもフィルターを適用
+    if (selectedTags.length > 0) {
+      tasks = filterTasksByTags(tasks, selectedTags, tagFilterMode);
+    }
+    
     if (searchQuery.trim()) {
       tasks = filterTasksBySearch(tasks, searchQuery);
     }
@@ -514,6 +547,15 @@ const Dashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* アーカイブタスクセクション */}
+      <ArchivedTasksSection
+        tasks={allTasksForArchived}
+        storageKey="dashboard"
+        onTaskClick={handleTaskClick}
+        onTagSelect={handleTagSelect}
+        onProjectClick={handleProjectClick}
+      />
 
       {/* 新規タスク作成モーダル */}
       <TaskCreateModal

@@ -2,6 +2,10 @@
 import '@testing-library/jest-dom';
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import { toHaveNoViolations } from 'jest-axe';
+
+// jest-axeカスタムマッチャーを追加
+expect.extend(toHaveNoViolations);
 
 // テスト後のクリーンアップ
 afterEach(() => {

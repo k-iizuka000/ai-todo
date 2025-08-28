@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { ErrorHandler } from '@/utils/dataValidation';
 import { 
   Card, 
@@ -6,8 +6,7 @@ import {
   CardHeader, 
   CardTitle, 
   Button,
-  Badge,
-  Input
+  Badge
 } from '@/components/ui';
 import { 
   BarChart3, 
@@ -17,10 +16,12 @@ import {
   Target, 
   Users,
   Calendar,
-  Filter,
   Download,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Archive,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 import type { AnalyticsPeriod } from '@/types/analytics';
 import { 
@@ -28,16 +29,20 @@ import {
   getCompletionTrendChartData,
   getProjectCompletionChartData,
   getTimeDistributionChartData,
-  getWeeklyProductivityData,
   getWeeklyProductivityDataForAnalytics,
-  getPriorityDistributionData,
   getMonthlyCompletionData
 } from '@/mock/analyticsData';
+import { useAnalyticsStats } from '@/stores/taskStore';
+import { ArchivedTasksSection } from '@/components/ui/ArchivedTasksSection';
 
 const Analytics: React.FC = () => {
   const [timeRange, setTimeRange] = useState<AnalyticsPeriod>('month');
   const [selectedMetric, setSelectedMetric] = useState<'overview' | 'projects' | 'productivity' | 'time'>('overview');
   const [error, setError] = useState<string | null>(null);
+  const [includeArchived, setIncludeArchived] = useState<boolean>(false);
+  
+  // 実際のタスクデータから統計を取得（アーカイブ除外オプション付き）
+  const analyticsStats = useAnalyticsStats(includeArchived);
 
   // 分析データの取得（エラーハンドリング付き）
   const dashboard = ErrorHandler.handleSync(
@@ -84,13 +89,6 @@ const Analytics: React.FC = () => {
     (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
   );
 
-  const priorityDistributionData = ErrorHandler.handleSync(
-    () => getPriorityDistributionData(),
-    [],
-    '優先度分布データの取得に失敗しました',
-    (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
-  );
-
   const monthlyCompletionData = ErrorHandler.handleSync(
     () => getMonthlyCompletionData(),
     [],
@@ -98,8 +96,8 @@ const Analytics: React.FC = () => {
     (error) => setError(ErrorHandler.createUserFriendlyMessage(error))
   );
 
-  // 期間選択による説明テキストの生成
-  const getPeriodDescription = (period: AnalyticsPeriod) => {
+  // パフォーマンス最適化: 期間選択による説明テキストの生成をメモ化
+  const getPeriodDescription = useCallback((period: AnalyticsPeriod) => {
     switch (period) {
       case 'day':
         return '過去24時間';
@@ -114,10 +112,10 @@ const Analytics: React.FC = () => {
       default:
         return '過去30日間';
     }
-  };
+  }, []);
 
-  // チャート用のモック実装（実際にはChart.jsやRecharts等を使用）
-  const MockLineChart: React.FC<{ data: any[]; title: string; dataKey: string }> = ({ data, title, dataKey }) => (
+  // パフォーマンス最適化: チャート用のモック実装をメモ化（実際にはChart.jsやRecharts等を使用）
+  const MockLineChart: React.FC<{ data: any[]; title: string }> = React.memo(({ data, title }) => (
     <div className="space-y-4">
       <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
       <div className="h-48 flex items-end justify-between gap-2 p-4 bg-gray-50 dark:bg-gray-800 rounded">
@@ -138,9 +136,10 @@ const Analytics: React.FC = () => {
         ))}
       </div>
     </div>
-  );
+  ));
 
-  const MockPieChart: React.FC<{ data: any[]; title: string }> = ({ data, title }) => {
+  // パフォーマンス最適化: PieChartコンポーネントをメモ化
+  const MockPieChart: React.FC<{ data: any[]; title: string }> = React.memo(({ data, title }) => {
     const total = data.reduce((sum, item) => sum + item.y, 0);
     
     return (
@@ -176,7 +175,7 @@ const Analytics: React.FC = () => {
         </div>
       </div>
     );
-  };
+  });
 
   return (
     <div className="p-6 space-y-6">
@@ -236,6 +235,23 @@ const Analytics: React.FC = () => {
             ))}
           </div>
 
+          {/* アーカイブ除外オプション */}
+          <Button
+            variant="outline"
+            onClick={() => setIncludeArchived(!includeArchived)}
+            className={`flex items-center gap-2 ${includeArchived ? 'bg-blue-50 border-blue-200' : ''}`}
+          >
+            <Archive className="h-4 w-4" />
+            {includeArchived ? (
+              <ToggleRight className="h-4 w-4 text-blue-600" />
+            ) : (
+              <ToggleLeft className="h-4 w-4" />
+            )}
+            <span className="text-sm">
+              {includeArchived ? 'アーカイブ含む' : 'アーカイブ除外'}
+            </span>
+          </Button>
+
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             エクスポート
@@ -251,9 +267,9 @@ const Analytics: React.FC = () => {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboard.metrics.tasksCreated}</div>
+            <div className="text-2xl font-bold">{analyticsStats.total}</div>
             <p className="text-xs text-muted-foreground">
-              {getPeriodDescription(timeRange)}で作成
+              {includeArchived ? '全タスク数' : 'アクティブタスク数'}（アーカイブ: {analyticsStats.archived}件）
             </p>
           </CardContent>
         </Card>
@@ -264,9 +280,9 @@ const Analytics: React.FC = () => {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{dashboard.metrics.tasksCompleted}</div>
+            <div className="text-2xl font-bold text-green-600">{analyticsStats.completed}</div>
             <p className="text-xs text-muted-foreground">
-              完了率: {Math.round((dashboard.metrics.tasksCompleted / dashboard.metrics.tasksCreated) * 100) || 0}%
+              完了率: {analyticsStats.completionRate}%
             </p>
           </CardContent>
         </Card>
@@ -277,9 +293,9 @@ const Analytics: React.FC = () => {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{dashboard.metrics.averageCompletionTime}日</div>
+            <div className="text-2xl font-bold text-blue-600">{analyticsStats.timeStats.totalActual}h</div>
             <p className="text-xs text-muted-foreground">
-              タスクの平均完了期間
+              実働時間 (見積: {analyticsStats.timeStats.totalEstimated}h)
             </p>
           </CardContent>
         </Card>
@@ -290,9 +306,9 @@ const Analytics: React.FC = () => {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{dashboard.metrics.productivityScore}%</div>
+            <div className="text-2xl font-bold text-purple-600">{analyticsStats.efficiency}%</div>
             <p className="text-xs text-muted-foreground">
-              総合的な生産性指標
+              作業効率指標 (見積/実績)
             </p>
           </CardContent>
         </Card>
@@ -312,7 +328,6 @@ const Analytics: React.FC = () => {
             <MockLineChart 
               data={completionTrendData} 
               title={`${getPeriodDescription(timeRange)}のタスク完了推移`}
-              dataKey="completed"
             />
           </CardContent>
         </Card>
@@ -327,7 +342,13 @@ const Analytics: React.FC = () => {
           </CardHeader>
           <CardContent>
             <MockPieChart 
-              data={priorityDistributionData}
+              data={[
+                { x: '最重要', y: analyticsStats.priorityStats.critical, color: '#ef4444' },
+                { x: '緊急', y: analyticsStats.priorityStats.urgent, color: '#f97316' },
+                { x: '高', y: analyticsStats.priorityStats.high, color: '#f59e0b' },
+                { x: '中', y: analyticsStats.priorityStats.medium, color: '#3b82f6' },
+                { x: '低', y: analyticsStats.priorityStats.low, color: '#6b7280' }
+              ]}
               title="タスク優先度分布"
             />
           </CardContent>
@@ -345,7 +366,6 @@ const Analytics: React.FC = () => {
             <MockLineChart 
               data={projectCompletionData}
               title="プロジェクトの完了率"
-              dataKey="completionRate"
             />
           </CardContent>
         </Card>
@@ -518,21 +538,28 @@ const Analytics: React.FC = () => {
             <div className="p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
               <h3 className="font-medium text-yellow-800">優先度の調整</h3>
               <p className="text-sm text-yellow-700 mt-1">
-                緊急タスクが{priorityDistributionData.find(p => p.x === '緊急')?.y || 0}件あります。
+                緊急タスクが{analyticsStats.priorityStats.urgent}件、期限切れタスクが{analyticsStats.overdueTasks}件あります。
                 リソース配分の見直しを検討してください。
               </p>
             </div>
             
             <div className="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
-              <h3 className="font-medium text-purple-800">プロジェクト進捗</h3>
+              <h3 className="font-medium text-purple-800">期限管理</h3>
               <p className="text-sm text-purple-700 mt-1">
-                {dashboard.projectStats.active}個のアクティブプロジェクトの
-                平均進捗率は良好な水準を保っています。
+                今後7日以内の期限タスクが{analyticsStats.dueSoonTasks}件あります。
+                計画的な進捗管理を継続してください。
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
+      
+      {/* アーカイブタスクセクション */}
+      <ArchivedTasksSection 
+        tasks={analyticsStats.archivedTasksData}
+        storageKey="analytics"
+        className="mt-6"
+      />
     </div>
   );
 };

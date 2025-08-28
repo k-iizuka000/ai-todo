@@ -56,6 +56,8 @@ export interface Task {
   updatedAt: Date;
   createdBy: string;
   updatedBy: string;
+  // アーカイブ日時（アーカイブタスクの時系列管理用）
+  archivedAt?: Date;
   // スケジュール情報の追加
   scheduleInfo?: TaskScheduleInfo;
 }

@@ -79,3 +79,5 @@ issues/
 # Worktree temporary files
 .groups.tsv
 
+database/
+script/

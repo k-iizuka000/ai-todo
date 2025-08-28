@@ -1,0 +1,259 @@
+{
+  "config": {
+    "configFile": "/Users/kei/work/ai-todo/playwright.config.ts",
+    "rootDir": "/Users/kei/work/ai-todo/e2e",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/Users/kei/work/ai-todo/e2e/global.setup.ts",
+    "globalTeardown": "/Users/kei/work/ai-todo/e2e/global.teardown.ts",
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {},
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        {
+          "outputDir": "playwright-report"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "playwright-results.json"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "playwright-results.xml"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/Users/kei/work/ai-todo/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {},
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/kei/work/ai-todo/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/Users/kei/work/ai-todo/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {},
+        "id": "Mobile Safari",
+        "name": "Mobile Safari",
+        "testDir": "/Users/kei/work/ai-todo/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/Users/kei/work/ai-todo/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {},
+        "id": "accessibility",
+        "name": "accessibility",
+        "testDir": "/Users/kei/work/ai-todo/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/accessibility.e2e.ts"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.55.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "accessibility.e2e.ts",
+      "file": "accessibility.e2e.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "アクセシビリティテスト - WCAG 2.1 AA準拠",
+          "file": "accessibility.e2e.ts",
+          "line": 11,
+          "column": 6,
+          "specs": [
+            {
+              "title": "タスク管理画面のアクセシビリティ検証",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "accessibility",
+                  "projectName": "accessibility",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "f27a3217e31f5a22ee84-c272da357ed48ab63e9b",
+              "file": "accessibility.e2e.ts",
+              "line": 13,
+              "column": 3
+            },
+            {
+              "title": "プロジェクト管理画面のアクセシビリティ検証",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "accessibility",
+                  "projectName": "accessibility",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "f27a3217e31f5a22ee84-e4ab53d8d294b3c77e01",
+              "file": "accessibility.e2e.ts",
+              "line": 34,
+              "column": 3
+            },
+            {
+              "title": "スケジュール画面のアクセシビリティ検証",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "accessibility",
+                  "projectName": "accessibility",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "f27a3217e31f5a22ee84-e0dfc90dca934cb898cd",
+              "file": "accessibility.e2e.ts",
+              "line": 49,
+              "column": 3
+            },
+            {
+              "title": "通知画面のアクセシビリティ検証",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "accessibility",
+                  "projectName": "accessibility",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "f27a3217e31f5a22ee84-b09a863a6f518ebe396e",
+              "file": "accessibility.e2e.ts",
+              "line": 64,
+              "column": 3
+            },
+            {
+              "title": "色覚異常者対応確認",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "accessibility",
+                  "projectName": "accessibility",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "f27a3217e31f5a22ee84-54051a527ea8b50aaaa2",
+              "file": "accessibility.e2e.ts",
+              "line": 79,
+              "column": 3
+            },
+            {
+              "title": "フォーカス管理とキーボードナビゲーション",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "accessibility",
+                  "projectName": "accessibility",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "f27a3217e31f5a22ee84-fc5cab96c6b6a7d98147",
+              "file": "accessibility.e2e.ts",
+              "line": 99,
+              "column": 3
+            },
+            {
+              "title": "ARIA属性とセマンティックHTML確認",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "accessibility",
+                  "projectName": "accessibility",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "f27a3217e31f5a22ee84-d6f1891dc4dffa87cd87",
+              "file": "accessibility.e2e.ts",
+              "line": 125,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-08-28T18:14:10.272Z",
+    "duration": 64.387,
+    "expected": 0,
+    "skipped": 7,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

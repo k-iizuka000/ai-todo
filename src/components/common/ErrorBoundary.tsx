@@ -8,6 +8,8 @@ import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { logger, logError, logSecurityEvent } from '@/lib/logger';
+import { getSecureErrorLog } from '@/lib/api/errors';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -98,11 +100,46 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // ログ出力
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    // 統合ログシステムを使用したセキュアなエラーログ
+    const secureErrorLog = getSecureErrorLog(error);
+    const errorContext = {
+      componentStack: errorInfo.componentStack,
+      errorBoundary: 'ErrorBoundary',
+      feature: 'global_error_boundary',
+      timestamp: new Date().toISOString(),
+      ...secureErrorLog
+    };
+    
+    logger.error('ErrorBoundary caught an error', errorContext, error);
+    
+    // セキュリティ関連エラーの検出
+    if (this.isSecurityRelatedError(error)) {
+      logSecurityEvent('Potential security-related error in ErrorBoundary', 'high', {
+        errorName: error.name,
+        errorMessage: error.message,
+        componentStack: errorInfo.componentStack
+      });
+    }
     
     // 外部コールバックがあれば呼び出し
     this.props.onError?.(error, errorInfo);
+  }
+  
+  /**
+   * セキュリティ関連のエラーかどうかを判定
+   */
+  private isSecurityRelatedError(error: Error): boolean {
+    const message = error.message?.toLowerCase() || '';
+    const stack = error.stack?.toLowerCase() || '';
+    
+    const securityKeywords = [
+      'xss', 'script injection', 'eval', 'dangerouslySetInnerHTML',
+      'unauthorized', 'forbidden', 'csrf', 'cors', 'content security policy'
+    ];
+    
+    return securityKeywords.some(keyword => 
+      message.includes(keyword) || stack.includes(keyword)
+    );
   }
 
   resetError = () => {
@@ -125,15 +162,32 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
  */
 export const useErrorHandler = () => {
   const handleError = React.useCallback((error: Error, errorInfo?: string) => {
-    console.error('Manual error handling:', error);
+    // 統合ログシステムを使用
+    const context = {
+      source: 'useErrorHandler',
+      additionalInfo: errorInfo,
+      timestamp: new Date().toISOString()
+    };
     
-    // 本来はエラーレポーティングサービスに送信
+    logError(error, context);
+    
+    // パフォーマンス関連のエラー追跡
+    if (error.message?.includes('timeout') || error.message?.includes('performance')) {
+      logger.warn('Performance-related error detected', {
+        category: 'performance',
+        errorMessage: error.message,
+        ...context
+      });
+    }
+    
+    // 開発環境での詳細ログ（統合ロガーを使用）
     if (process.env.NODE_ENV === 'development') {
-      console.group('Error Details');
-      console.error('Error:', error);
-      console.error('Additional Info:', errorInfo);
-      console.error('Stack:', error.stack);
-      console.groupEnd();
+      logger.debug('Error Handler Details', {
+        errorName: error.name,
+        errorMessage: error.message,
+        errorStack: error.stack,
+        additionalInfo: errorInfo
+      });
     }
   }, []);
 

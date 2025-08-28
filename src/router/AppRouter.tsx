@@ -19,6 +19,7 @@ import GeneralSettings from '@/pages/settings/GeneralSettings';
 import AISettings from '@/pages/settings/AISettings';
 import ThemeSettings from '@/pages/settings/ThemeSettings';
 import DataManagement from '@/pages/settings/DataManagement';
+import QualityDashboard from '@/components/QualityDashboard';
 
 // Loading component
 const LoadingSpinner: React.FC = () => (
@@ -100,6 +101,9 @@ const AppRouter: React.FC = () => {
           
           {/* Tags routes */}
           <Route path="tags" element={<TagManagement />} />
+          
+          {/* Quality Dashboard routes */}
+          <Route path="quality" element={<QualityDashboard />} />
           
           {/* Settings routes with nested layout */}
           <Route path="settings" element={<SettingsLayout />}>

@@ -1,0 +1,492 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "metrics"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== User Management =====
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  status        UserStatus @default(ACTIVE)
+  role          UserRole   @default(MEMBER)
+  authProvider  AuthProvider @default(EMAIL)
+  emailVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  profile      UserProfile?
+  preferences  UserPreferences?
+  tasks        Task[]        @relation("TaskAssignee")
+  createdTasks Task[]        @relation("TaskCreator")
+  updatedTasks Task[]        @relation("TaskUpdater")
+  ownedProjects Project[]    @relation("ProjectOwner")
+  projectMembers ProjectMember[]
+  sessions     Session[]
+  notifications Notification[]
+  schedules    DailySchedule[]
+  taskComments TaskComment[]
+  taskHistories TaskHistory[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  firstName   String
+  lastName    String
+  displayName String
+  bio         String?
+  avatar      String?
+  department  String?
+  position    String?
+  phoneNumber String?
+  location    String?
+  website     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model UserPreferences {
+  id                  String  @id @default(cuid())
+  userId              String  @unique
+  theme               Theme   @default(SYSTEM)
+  language            String  @default("ja")
+  timezone            String  @default("Asia/Tokyo")
+  dateFormat          String  @default("YYYY-MM-DD")
+  timeFormat          TimeFormat @default(TWENTYFOUR_HOUR)
+  notificationEmail   Boolean @default(true)
+  notificationPush    Boolean @default(true)
+  notificationDesktop Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// ===== Project Management =====
+model Project {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  status      ProjectStatus   @default(PLANNING)
+  priority    ProjectPriority @default(MEDIUM)
+  color       String          @default("#3B82F6")
+  icon        String?
+  ownerId     String
+  startDate   DateTime?
+  endDate     DateTime?
+  deadline    DateTime?
+  budget      Float?
+  isArchived  Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  createdBy   String
+  updatedBy   String
+
+  // Relations
+  owner       User            @relation("ProjectOwner", fields: [ownerId], references: [id])
+  members     ProjectMember[]
+  tasks       Task[]
+  projectTags ProjectTag[]
+
+  @@index([status, priority])
+  @@index([ownerId])
+  @@index([isArchived])
+  @@map("projects")
+}
+
+model ProjectMember {
+  id       String      @id @default(cuid())
+  userId   String
+  projectId String
+  role     ProjectRole @default(MEMBER)
+  joinedAt DateTime    @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@index([projectId])
+  @@map("project_members")
+}
+
+// ===== Tag Management =====
+model Tag {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  color      String
+  usageCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  taskTags    TaskTag[]
+  projectTags ProjectTag[]
+
+  @@index([usageCount])
+  @@map("tags")
+}
+
+model TaskTag {
+  id     String @id @default(cuid())
+  taskId String
+  tagId  String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, tagId])
+  @@map("task_tags")
+}
+
+model ProjectTag {
+  id        String @id @default(cuid())
+  projectId String
+  tagId     String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, tagId])
+  @@map("project_tags")
+}
+
+// ===== Task Management =====
+model Task {
+  id             String     @id @default(cuid())
+  title          String
+  description    String?
+  status         TaskStatus @default(TODO)
+  priority       Priority   @default(MEDIUM)
+  projectId      String?
+  assigneeId     String?
+  parentId       String?    // 階層タスク用
+  dueDate        DateTime?
+  estimatedHours Float?
+  actualHours    Float?
+  archivedAt     DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  createdBy      String
+  updatedBy      String
+
+  // Relations
+  project      Project?      @relation(fields: [projectId], references: [id])
+  assignee     User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator      User          @relation("TaskCreator", fields: [createdBy], references: [id])
+  updater      User          @relation("TaskUpdater", fields: [updatedBy], references: [id])
+  parent       Task?         @relation("TaskHierarchy", fields: [parentId], references: [id])
+  children     Task[]        @relation("TaskHierarchy")
+  subtasks     Subtask[]
+  tags         TaskTag[]
+  comments     TaskComment[]
+  attachments  TaskAttachment[]
+  history      TaskHistory[]
+  scheduleItems ScheduleItem[]
+
+  @@index([status, projectId])
+  @@index([assigneeId, dueDate])
+  @@index([parentId])
+  @@index([createdAt])
+  @@map("tasks")
+}
+
+model Subtask {
+  id        String   @id @default(cuid())
+  taskId    String
+  title     String
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("subtasks")
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  content   String
+  mentions  String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+  @@map("task_comments")
+}
+
+model TaskAttachment {
+  id         String   @id @default(cuid())
+  taskId     String
+  fileName   String
+  fileSize   Int
+  fileType   String
+  url        String
+  uploadedBy String
+  uploadedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_attachments")
+}
+
+model TaskHistory {
+  id        String     @id @default(cuid())
+  taskId    String
+  userId    String
+  action    TaskAction
+  changes   Json
+  timestamp DateTime   @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+  @@index([timestamp])
+  @@map("task_histories")
+}
+
+// ===== Schedule Management =====
+model DailySchedule {
+  id              String   @id @default(cuid())
+  date            DateTime @db.Date
+  userId          String
+  projectId       String?
+  workingHoursStart String @default("09:00")
+  workingHoursEnd   String @default("18:00")
+  totalEstimated    Int    @default(0)
+  totalActual       Int    @default(0)
+  utilization       Float  @default(0.0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id])
+  timeBlocks    TimeBlock[]
+  scheduleItems ScheduleItem[]
+
+  @@unique([userId, date])
+  @@index([date])
+  @@map("daily_schedules")
+}
+
+model TimeBlock {
+  id              String   @id @default(cuid())
+  dailyScheduleId String
+  startTime       String   // HH:mm format
+  endTime         String   // HH:mm format
+  duration        Int      @default(60) // minutes
+
+  dailySchedule DailySchedule  @relation(fields: [dailyScheduleId], references: [id], onDelete: Cascade)
+  scheduleItems ScheduleItem[]
+
+  @@index([dailyScheduleId])
+  @@map("time_blocks")
+}
+
+model ScheduleItem {
+  id              String              @id @default(cuid())
+  timeBlockId     String
+  dailyScheduleId String
+  taskId          String?
+  type            ScheduleItemType
+  title           String
+  description     String?
+  startTime       String              // HH:mm format
+  endTime         String              // HH:mm format
+  duration        Int                 // minutes
+  color           String              @default("#3B82F6")
+  status          ScheduleItemStatus  @default(PLANNED)
+  priority        Priority            @default(MEDIUM)
+  isLocked        Boolean             @default(false)
+  isRecurring     Boolean             @default(false)
+  estimatedTime   Int?                // minutes
+  actualTime      Int?                // minutes
+  completionRate  Float               @default(0.0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  createdBy       String
+
+  timeBlock     TimeBlock     @relation(fields: [timeBlockId], references: [id])
+  dailySchedule DailySchedule @relation(fields: [dailyScheduleId], references: [id], onDelete: Cascade)
+  task          Task?         @relation(fields: [taskId], references: [id])
+
+  @@index([dailyScheduleId])
+  @@index([taskId])
+  @@index([type, status])
+  @@map("schedule_items")
+}
+
+// ===== Notification Management =====
+model Notification {
+  id         String               @id @default(cuid())
+  userId     String
+  type       NotificationType
+  priority   NotificationPriority @default(MEDIUM)
+  title      String
+  message    String
+  isRead     Boolean              @default(false)
+  actionUrl  String?
+  metadata   Json?
+  createdAt  DateTime             @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ===== Session Management =====
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime @default(now())
+  ipAddress    String
+  userAgent    String
+  isActive     Boolean  @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ===== Enums =====
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  MEMBER
+  GUEST
+}
+
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+  GITHUB
+  MICROSOFT
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+enum TimeFormat {
+  TWELVE_HOUR
+  TWENTYFOUR_HOUR
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ProjectRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  ARCHIVED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+enum TaskAction {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  ASSIGNED
+  COMMENT_ADDED
+  SUBTASK_ADDED
+  SUBTASK_COMPLETED
+}
+
+enum ScheduleItemType {
+  TASK
+  SUBTASK
+  MEETING
+  BREAK
+  PERSONAL
+  BLOCKED
+  FOCUS
+  REVIEW
+}
+
+enum ScheduleItemStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  POSTPONED
+  CANCELLED
+}
+
+enum NotificationType {
+  TASK_DEADLINE
+  TASK_ASSIGNED
+  TASK_COMPLETED
+  MENTION
+  PROJECT_UPDATE
+  SYSTEM
+}
+
+enum NotificationPriority {
+  HIGH
+  MEDIUM
+  LOW
+}

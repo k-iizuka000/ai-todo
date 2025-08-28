@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Card, 
@@ -12,7 +12,9 @@ import {
   Input
 } from '@/components/ui';
 import { ChevronLeft, ChevronRight, Plus, List, Calendar as CalendarIcon, Filter, Search, Clock } from 'lucide-react';
+import { ArchivedTasksSection } from '@/components/ui/ArchivedTasksSection';
 import type { Task } from '@/types/task';
+// import type { Tag } from '@/types/tag'; // 未使用のため削除
 import type { CalendarEvent, CalendarView, CalendarFilter } from '@/types/calendar';
 import { 
   allCalendarEvents, 
@@ -23,11 +25,39 @@ import {
   defaultCalendarFilter 
 } from '@/mock/calendarData';
 
+// CalendarEventをTask型に変換するためのヘルパー関数
+const calendarEventToTask = (event: CalendarEvent): Task => {
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    status: event.status,
+    priority: event.priority,
+    projectId: undefined,
+    assigneeId: undefined,
+    tags: [],
+    subtasks: [],
+    dueDate: event.start,
+    estimatedHours: undefined,
+    actualHours: undefined,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    createdBy: 'system',
+    updatedBy: 'system',
+    scheduleInfo: {
+      scheduledDate: event.start,
+      scheduledStartTime: event.allDay ? undefined : event.start.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+      scheduledEndTime: event.allDay ? undefined : event.end.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+      scheduleItemId: event.taskId
+    }
+  };
+};
+
 // カレンダー表示用の日付ユーティリティ
 const getDaysInMonth = (year: number, month: number): Date[] => {
   const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-  const daysInMonth = lastDay.getDate();
+  // const lastDay = new Date(year, month + 1, 0); // 未使用のため削除
+  // const daysInMonth = lastDay.getDate(); // 未使用のため削除
   
   // 月の最初の週の空白日を計算
   const firstDayOfWeek = firstDay.getDay();
@@ -67,71 +97,154 @@ const Calendar: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [filter, setFilter] = useState<CalendarFilter>(defaultCalendarFilter);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // 現在の月の日付を取得
-  const calendarDays = getDaysInMonth(calendarView.currentDate.getFullYear(), calendarView.currentDate.getMonth());
-  
-  // イベントを日付ごとに分類
-  const eventsByDate = allCalendarEvents.reduce((acc: Record<string, CalendarEvent[]>, event) => {
-    const dateKey = formatDate(event.start);
-    if (!acc[dateKey]) {
-      acc[dateKey] = [];
-    }
-    acc[dateKey].push(event);
-    return acc;
-  }, {});
-  
-  // 現在の月のイベント
-  const monthEvents = getMonthEvents(calendarView.currentDate);
-  
-  // フィルタリングされたイベント
-  const filteredEvents = monthEvents.filter(event => {
-    if (searchQuery && !event.title.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false;
-    }
-    if (!filter.showCompleted && event.status === 'done') {
-      return false;
-    }
-    if (filter.priorities && filter.priorities.length > 0 && !filter.priorities.includes(event.priority)) {
-      return false;
-    }
-    return true;
-  });
 
-  const navigateMonth = (direction: 'prev' | 'next') => {
+  
+  // パフォーマンス最適化: カレンダー日付の計算をメモ化
+  const calendarDays = useMemo(() => 
+    getDaysInMonth(calendarView.currentDate.getFullYear(), calendarView.currentDate.getMonth()),
+    [calendarView.currentDate]
+  );
+  
+  // パフォーマンス最適化: イベントの日付分類をメモ化
+  const eventsByDate = useMemo(() => {
+    return allCalendarEvents.reduce((acc: Record<string, CalendarEvent[]>, event) => {
+      const dateKey = formatDate(event.start);
+      if (!acc[dateKey]) {
+        acc[dateKey] = [];
+      }
+      acc[dateKey].push(event);
+      return acc;
+    }, {});
+  }, []);
+  
+  // パフォーマンス最適化: 月のイベント取得をメモ化
+  const monthEvents = useMemo(() => 
+    getMonthEvents(calendarView.currentDate),
+    [calendarView.currentDate]
+  );
+  
+  // パフォーマンス最適化: フィルタリングされたイベントをメモ化（アーカイブタスクを除外）
+  const filteredEvents = useMemo(() => {
+    return monthEvents.filter(event => {
+      // アーカイブタスクを除外
+      if (event.status === 'archived') {
+        return false;
+      }
+      if (searchQuery && !event.title.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false;
+      }
+      if (!filter.showCompleted && event.status === 'done') {
+        return false;
+      }
+      if (filter.priorities && filter.priorities.length > 0 && !filter.priorities.includes(event.priority)) {
+        return false;
+      }
+      return true;
+    });
+  }, [monthEvents, searchQuery, filter.showCompleted, filter.priorities]);
+
+  // パフォーマンス最適化: アーカイブされたイベントをメモ化（分離表示用）
+  const archivedEvents = useMemo(() => 
+    monthEvents.filter(event => event.status === 'archived'),
+    [monthEvents]
+  );
+
+  // パフォーマンス最適化: アーカイブされたタスクに変換
+  const archivedTasks = useMemo(() => 
+    archivedEvents.map(calendarEventToTask),
+    [archivedEvents]
+  );
+
+  // タスククリック処理
+  const handleTaskClick = useCallback((task: Task) => {
+    // タスクの詳細画面へ遷移する場合
+    console.log('Task clicked:', task);
+    // 必要に応じて詳細画面へ遷移
+    // navigate(`/tasks/${task.id}`);
+  }, []);
+
+  // カスタムタスクレンダラー（カレンダー画面用）
+  const renderCalendarTask = useCallback((task: Task) => {
+    const event = archivedEvents.find(e => e.id === task.id);
+    if (!event) return null;
+
+    return (
+      <div
+        className="flex items-center justify-between p-3 border rounded-lg bg-muted/30 opacity-70 hover:opacity-100 transition-opacity cursor-pointer"
+        onClick={() => handleTaskClick(task)}
+      >
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <div
+              className="w-3 h-3 rounded-full opacity-60"
+              style={{ backgroundColor: event.color }}
+            />
+            <h4 className="font-medium text-muted-foreground line-through">
+              {task.title}
+            </h4>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-sm text-muted-foreground">
+              {event.start.toLocaleDateString('ja-JP')}
+              {!event.allDay && ` ${event.start.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`}
+            </span>
+            <Badge variant="outline" className="text-xs opacity-60">
+              アーカイブ済み
+            </Badge>
+          </div>
+          {task.description && (
+            <p className="text-sm text-muted-foreground mt-1 opacity-60">
+              {task.description}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 ml-4">
+          <StatusBadge status={task.status} />
+          <PriorityBadge priority={task.priority} />
+        </div>
+      </div>
+    );
+  }, [archivedEvents, handleTaskClick]);
+
+  // パフォーマンス最適化: 月のナビゲーション処理をメモ化
+  const navigateMonth = useCallback((direction: 'prev' | 'next') => {
     const newDate = new Date(calendarView.currentDate);
     if (direction === 'prev') {
       newDate.setMonth(newDate.getMonth() - 1);
     } else {
       newDate.setMonth(newDate.getMonth() + 1);
     }
-    setCalendarView({ ...calendarView, currentDate: newDate });
-  };
+    setCalendarView(prev => ({ ...prev, currentDate: newDate }));
+  }, [calendarView.currentDate]);
 
-  const handleDateClick = (date: Date) => {
+  // パフォーマンス最適化: 日付クリック処理をメモ化
+  const handleDateClick = useCallback((date: Date) => {
     setSelectedDate(date);
-    setCalendarView({ ...calendarView, selectedDate: date });
-  };
+    setCalendarView(prev => ({ ...prev, selectedDate: date }));
+  }, []);
 
-  // 日時スケジュール画面への遷移
-  const handleScheduleClick = (date: Date) => {
+  // パフォーマンス最適化: スケジュール画面への遷移をメモ化
+  const handleScheduleClick = useCallback((date: Date) => {
     const dateString = formatDate(date);
     navigate(`/schedule?date=${dateString}`);
-  };
+  }, [navigate]);
 
-  const getEventsForDate = (date: Date): CalendarEvent[] => {
+  // パフォーマンス最適化: 日付別イベント取得をメモ化
+  const getEventsForDate = useCallback((date: Date): CalendarEvent[] => {
     return eventsByDate[formatDate(date)] || [];
-  };
+  }, [eventsByDate]);
 
-  const handleToday = () => {
+  // パフォーマンス最適化: 今日ボタン処理をメモ化
+  const handleToday = useCallback(() => {
     const today = new Date();
-    setCalendarView({ ...calendarView, currentDate: today, selectedDate: today });
+    setCalendarView(prev => ({ ...prev, currentDate: today, selectedDate: today }));
     setSelectedDate(today);
-  };
+  }, []);
 
-  const handleFilterChange = (newFilter: Partial<CalendarFilter>) => {
-    setFilter({ ...filter, ...newFilter });
-  };
+  // パフォーマンス最適化: フィルター変更処理をメモ化
+  const handleFilterChange = useCallback((newFilter: Partial<CalendarFilter>) => {
+    setFilter(prev => ({ ...prev, ...newFilter }));
+  }, []);
 
   const monthNames = [
     '1月', '2月', '3月', '4月', '5月', '6月',
@@ -140,8 +253,8 @@ const Calendar: React.FC = () => {
 
   const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
 
-  // 期限が近いイベントを取得（7日以内）
-  const getUpcomingEvents = (): CalendarEvent[] => {
+  // パフォーマンス最適化: 期限が近いイベントの取得をメモ化（7日以内）
+  const upcomingEvents = useMemo((): CalendarEvent[] => {
     const today = new Date();
     const nextWeek = new Date();
     nextWeek.setDate(today.getDate() + 7);
@@ -153,12 +266,10 @@ const Calendar: React.FC = () => {
     }).sort((a, b) => {
       return new Date(a.start).getTime() - new Date(b.start).getTime();
     });
-  };
-
-  const upcomingEvents = getUpcomingEvents();
+  }, [filteredEvents]);
   
-  // 期限切れのイベントを取得
-  const getOverdueEvents = (): CalendarEvent[] => {
+  // パフォーマンス最適化: 期限切れイベントの取得をメモ化
+  const overdueEvents = useMemo((): CalendarEvent[] => {
     const today = new Date();
     return filteredEvents.filter(event => {
       if (event.status === 'done') return false;
@@ -166,9 +277,7 @@ const Calendar: React.FC = () => {
     }).sort((a, b) => {
       return new Date(a.start).getTime() - new Date(b.start).getTime();
     });
-  };
-
-  const overdueEvents = getOverdueEvents();
+  }, [filteredEvents]);
 
   return (
     <div className="p-6">
@@ -432,6 +541,19 @@ const Calendar: React.FC = () => {
               </CardContent>
             </Card>
           )}
+
+          {/* アーカイブされたタスク（月表示モード） - 共通コンポーネント使用 */}
+          <ArchivedTasksSection
+            tasks={archivedTasks}
+            storageKey="calendar-month"
+            onTaskClick={handleTaskClick}
+            renderTask={renderCalendarTask}
+            className="mt-6"
+            title="アーカイブされたタスク（今月）"
+            emptyMessage="今月のアーカイブされたタスクはありません"
+            virtualScrollingThreshold={50}  // カレンダー表示では50件からVirtual Scrolling適用
+            maxHeight={600}  // 最大高さ600px
+          />
         </div>
       ) : (
         // リスト表示
@@ -532,6 +654,19 @@ const Calendar: React.FC = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* アーカイブされたタスク（リスト表示モード） - 共通コンポーネント使用 */}
+          <ArchivedTasksSection
+            tasks={archivedTasks}
+            storageKey="calendar-list"
+            onTaskClick={handleTaskClick}
+            renderTask={renderCalendarTask}
+            className="mt-6"
+            title="アーカイブされたタスク"
+            emptyMessage="アーカイブされたタスクはありません"
+            virtualScrollingThreshold={50}  // カレンダー表示では50件からVirtual Scrolling適用
+            maxHeight={600}  // 最大高さ600px
+          />
         </div>
       )}
     </div>

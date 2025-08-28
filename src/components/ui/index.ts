@@ -103,3 +103,16 @@ export {
   type LoadingStateProps,
   type ProgressBarProps,
 } from './loading'
+
+// Accordion components
+export {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from './Accordion'
+
+// Archived Tasks Section
+export {
+  ArchivedTasksSection,
+} from './ArchivedTasksSection'

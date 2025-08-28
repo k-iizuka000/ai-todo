@@ -8,6 +8,83 @@
 
 services:
   # ===========================================
+  # データベース: PostgreSQL 15 (設計書準拠)
+  # ===========================================
+  database:
+    image: postgres:15-alpine
+    container_name: ai-todo-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ai_todo_dev}
+      POSTGRES_USER: ${DB_USER:-ai_todo_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev_password_2024}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C --data-checksums"
+      # PostgreSQL パフォーマンス最適化設定
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_MAINTENANCE_WORK_MEM: 64MB
+      POSTGRES_WORK_MEM: 4MB
+      POSTGRES_MAX_CONNECTIONS: ${DB_POOL_MAX:-100}
+    ports:
+      # ポート5433を使用（ローカルPostgreSQLとの競合回避）
+      # ローカル開発環境でPostgreSQL（ポート5432）が稼働している場合の対策
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+      - ./database/backup:/backup
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c work_mem=4MB
+      -c max_connections=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c wal_buffers=16MB
+      -c checkpoint_timeout=10min
+      -c max_wal_size=1GB
+      -c min_wal_size=80MB
+      -c log_statement=all
+      -c log_duration=on
+      -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+    networks:
+      - ai-todo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_todo_user -d ai_todo_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ===========================================
+  # 管理ツール: pgAdmin 4
+  # ===========================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ai-todo-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ai-todo.local
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+      PGADMIN_CONFIG_WTF_CSRF_ENABLED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./database/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    networks:
+      - ai-todo-network
+    profiles:
+      - tools  # 必要時のみ起動: docker-compose --profile tools up
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ===========================================
   # メインアプリケーション: React + Vite
   # ===========================================
   app:
@@ -23,17 +100,22 @@ services:
       - .:/app
       - /app/node_modules  # node_modulesは永続化（キャッシュ効率化）
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=${NODE_ENV:-development}
       - VITE_HOST=0.0.0.0
       - VITE_PORT=5173
       - CHOKIDAR_USEPOLLING=true  # ファイル変更監視（Macで必要な場合）
+      # データベース接続設定（コンテナ内部通信用）
+      - DATABASE_URL=postgresql://${DB_USER:-ai_todo_user}:${DB_PASSWORD:-dev_password_2024}@database:5432/${DB_NAME:-ai_todo_dev}
     env_file:
-      - .env.local  # 環境変数ファイル（作成必要）
+      - .env.local  # 環境変数ファイル（存在する場合のみ読み込み）
     networks:
       - ai-todo-network
     restart: unless-stopped
     stdin_open: true  # インタラクティブモード対応
     tty: true
+    depends_on:
+      database:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5173"]
       interval: 30s
@@ -70,6 +152,14 @@ services:
 # ===========================================
 volumes:
   node_modules:
+    driver: local
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/database/data
+      o: bind
+  pgadmin_data:
     driver: local
 
 # ===========================================

@@ -1,0 +1,155 @@
+# Docker Compose: E2Eテスト環境設定
+# 設計書準拠のPlaywright統合基盤
+# 
+# 使用方法:
+#   テスト実行: docker compose -f docker-compose.e2e.yml up
+#   ヘッドレス実行: docker compose -f docker-compose.e2e.yml run --rm playwright npm run test:playwright
+#   UIモード実行: docker compose -f docker-compose.e2e.yml run --rm playwright npm run test:playwright:ui
+
+version: '3.8'
+
+services:
+  # ===========================================
+  # E2Eテスト用データベース (分離環境)
+  # ===========================================
+  test-database:
+    image: postgres:15-alpine
+    container_name: ai-todo-test-db
+    environment:
+      POSTGRES_DB: ${TEST_DB_NAME:-ai_todo_test}
+      POSTGRES_USER: ${TEST_DB_USER:-ai_todo_test_user}
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:-test_password_2024}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C --data-checksums"
+      # テスト用パフォーマンス設定（高速化重視）
+      POSTGRES_SHARED_BUFFERS: 128MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 512MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 32MB
+      POSTGRES_WORK_MEM: 2MB
+      POSTGRES_MAX_CONNECTIONS: 50
+    ports:
+      - "5434:5432"  # テスト専用ポート
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=512MB
+      -c maintenance_work_mem=32MB
+      -c work_mem=2MB
+      -c max_connections=50
+      -c fsync=off
+      -c synchronous_commit=off
+      -c checkpoint_timeout=5min
+      -c checkpoint_completion_target=0.9
+      -c log_statement=all
+    networks:
+      - e2e-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEST_DB_USER:-ai_todo_test_user} -d ${TEST_DB_NAME:-ai_todo_test}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: "no"  # テスト用なので再起動しない
+
+  # ===========================================
+  # テスト用アプリケーション
+  # ===========================================
+  test-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: ai-todo-test-app
+    ports:
+      - "5174:5173"  # テスト専用ポート
+    volumes:
+      - .:/app
+      - test_node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=test
+      - VITE_HOST=0.0.0.0
+      - VITE_PORT=5173
+      - IS_DOCKER_CONTAINER=1
+      # テスト用データベース接続
+      - DATABASE_URL=postgresql://${TEST_DB_USER:-ai_todo_test_user}:${TEST_DB_PASSWORD:-test_password_2024}@test-database:5432/${TEST_DB_NAME:-ai_todo_test}
+    networks:
+      - e2e-test-network
+    depends_on:
+      test-database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: "no"
+
+  # ===========================================
+  # Playwright テスト実行環境
+  # ===========================================
+  playwright:
+    build:
+      context: .
+      dockerfile: ./tests/docker/Dockerfile.playwright
+    container_name: ai-todo-playwright
+    environment:
+      # アプリケーション接続設定
+      - BASE_URL=http://test-app:5173
+      - NODE_ENV=test
+      - CI=true
+      
+      # テスト用データベース接続（DB検証用）
+      - TEST_DATABASE_URL=postgresql://${TEST_DB_USER:-ai_todo_test_user}:${TEST_DB_PASSWORD:-test_password_2024}@test-database:5432/${TEST_DB_NAME:-ai_todo_test}
+      
+      # Playwright設定
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    volumes:
+      # テストファイルとソースコード
+      - .:/app
+      - ./tests:/app/tests
+      
+      # Playwrightキャッシュ（ブラウザバイナリ）
+      - playwright_cache:/ms-playwright
+      
+      # テスト結果出力
+      - ./test-results:/app/test-results
+      - ./playwright-report:/app/playwright-report
+    working_dir: /app
+    networks:
+      - e2e-test-network
+    depends_on:
+      test-app:
+        condition: service_healthy
+      test-database:
+        condition: service_healthy
+    profiles:
+      - e2e  # 明示的にE2Eテストプロファイルで実行
+    
+    # デフォルトコマンド（ヘッドレス実行）
+    command: ["npm", "run", "test:playwright:ci"]
+
+# ===========================================
+# 専用ボリューム設定
+# ===========================================
+volumes:
+  # テスト専用ボリューム（本番データと完全分離）
+  test_node_modules:
+    driver: local
+  test_postgres_data:
+    driver: local
+  playwright_cache:
+    driver: local
+
+# ===========================================
+# テスト専用ネットワーク
+# ===========================================
+networks:
+  e2e-test-network:
+    driver: bridge
+    # テストトラフィックの分離
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

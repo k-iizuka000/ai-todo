@@ -1,0 +1,144 @@
+{
+  "config": {
+    "configFile": "/app/playwright.config.ts",
+    "rootDir": "/app/tests/playwright",
+    "forbidOnly": false,
+    "fullyParallel": true,
+    "globalSetup": "/app/tests/playwright/global-setup.ts",
+    "globalTeardown": "/app/tests/playwright/global-teardown.ts",
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {},
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        {
+          "outputFolder": "test-results/playwright-report"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/test-results.json"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "test-results/junit.xml"
+        }
+      ],
+      [
+        "line",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/app/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {},
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/app/tests/playwright",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/app/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {},
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "/app/tests/playwright",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/app/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {},
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "/app/tests/playwright",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/app/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {},
+        "id": "Mobile Chrome",
+        "name": "Mobile Chrome",
+        "testDir": "/app/tests/playwright",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/app/test-results/artifacts",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {},
+        "id": "performance",
+        "name": "performance",
+        "testDir": "/app/tests/playwright",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*performance*.test.ts"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.55.0",
+    "workers": 3,
+    "webServer": null
+  },
+  "suites": [],
+  "errors": [
+    {
+      "message": "SyntaxError: /app/tests/playwright/page-objects/index.ts: Export 'PerformanceMetrics' is not defined. (325:2)\n\n  323 | export type {\n  324 |   // Base types\n> 325 |   PerformanceMetrics as BasePerformanceMetrics,\n      |   ^\n  326 |   ErrorHandlingOptions as BaseErrorHandlingOptions,\n  327 |   WaitCondition as BaseWaitCondition,\n  328 |   ",
+      "stack": "SyntaxError: /app/tests/playwright/page-objects/index.ts: Export 'PerformanceMetrics' is not defined. (325:2)\n\n  323 | export type {\n  324 |   // Base types\n> 325 |   PerformanceMetrics as BasePerformanceMetrics,\n      |   ^\n  326 |   ErrorHandlingOptions as BaseErrorHandlingOptions,\n  327 |   WaitCondition as BaseWaitCondition,\n  328 |   ",
+      "location": {
+        "file": "/app/tests/playwright/page-objects-quality-test.test.ts",
+        "line": 325,
+        "column": 2
+      },
+      "snippet": "   at page-objects-quality-test.test.ts:325\n\n  323 |       console.log('♿ Testing ARIA attributes...');\n  324 |       \n> 325 |       await dashboardPage.navigateToDashboard();\n      |  ^\n  326 |       \n  327 |       // 主要なUI要素のARIA属性を確認\n  328 |       const newTaskButton = dashboardPage.newTaskButton;"
+    }
+  ],
+  "stats": {
+    "startTime": "2025-08-29T18:37:46.317Z",
+    "duration": 259.932,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

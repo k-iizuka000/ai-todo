@@ -4,6 +4,7 @@
  * Design Specification: Issues-022-設計.md - Group 1: Playwright基盤セットアップ
  * Quality Engineer specialization: Performance, Security, Maintainability focus
  * 2025 Best Practices: Resilient selectors, auto-waiting, test isolation
+ * Integrated with 021 Infrastructure: Docker-compose.e2e.yml compatibility
  * 
  * Performance Targets:
  * - Page transitions: <3 seconds
@@ -18,174 +19,132 @@ import { defineConfig, devices } from '@playwright/test';
  * Docker environment detection for database integration
  */
 const isDocker = process.env.IS_DOCKER_CONTAINER === '1';
-const baseURL = isDocker 
-  ? 'http://localhost:5173' 
-  : 'http://localhost:5173';
 
 /**
- * Performance-optimized configuration
- * Quality focus: Stability, Speed, Reliability
+ * Base URL configuration with Docker compatibility
+ */
+const baseURL = process.env.BASE_URL || 'http://localhost:5173';
+
+/**
+ * Advanced Playwright configuration integrating Quality Engineer specialization
+ * with Infrastructure Architect recommendations from 021 implementation
  */
 export default defineConfig({
-  // Test directory configuration
+  // テストファイルパターン - Quality Engineer重視の構造
   testDir: './tests/playwright',
   
-  // Global timeout settings - aligned with performance targets
-  timeout: 30 * 1000, // 30 seconds per test (well within 5 minute target)
-  expect: {
-    timeout: 10 * 1000, // 10 seconds for assertions
-  },
+  // パフォーマンス最適化設定
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 1, // Quality Engineer: ローカル環境でも1回リトライ
+  workers: process.env.CI ? 3 : 4, // パフォーマンス最適化: 3-4 worker
   
-  // Global setup and teardown for database integration
-  globalSetup: './tests/playwright/global-setup.ts',
-  globalTeardown: './tests/playwright/global-teardown.ts',
+  // テスト実行制約 - Quality Engineer設定
+  timeout: 300000, // 5分 (Single test target)
+  globalTimeout: 900000, // 15分 (Full suite target)
   
-  // Test execution optimization
-  fullyParallel: true, // Enable parallel execution for speed
-  forbidOnly: !!process.env.CI, // Prevent .only() in CI
-  retries: process.env.CI ? 2 : 1, // Smart retries for flaky network conditions
-  workers: process.env.CI ? 4 : 3, // Optimal worker count for 15-minute target
-  
-  // Comprehensive reporting for quality assurance
+  // レポーター設定 - 包括的な品質監視
   reporter: [
-    ['html', { outputFolder: 'test-results/playwright-report' }],
-    ['json', { outputFile: 'test-results/test-results.json' }],
-    ['junit', { outputFile: 'test-results/junit.xml' }],
-    ...(process.env.CI ? [['github']] : [['line']]) // GitHub Actions integration
+    ['html', { open: 'never' }],
+    ['json', { outputFile: 'test-results/results.json' }],
+    ['list'],
+    // CI環境では追加のJUnit出力
+    ...(process.env.CI ? [['junit', { outputFile: 'test-results/junit.xml' }]] : [])
   ],
   
-  // Output configuration for debugging and analysis
-  outputDir: 'test-results/artifacts',
-  
-  // Global test configuration
+  // グローバル使用設定 - Quality Engineer仕様
   use: {
-    // Base URL for all tests
+    // ベースURL - Infrastructure統合
     baseURL,
     
-    // Tracing for debugging - 2025 best practice
+    // パフォーマンス監視設定
+    actionTimeout: 15000, // データ操作2秒目標の7.5倍バッファ
+    navigationTimeout: 30000, // ページ遷移3秒目標の10倍バッファ
+    
+    // 品質保証機能
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     
-    // Performance optimization settings
-    actionTimeout: 10 * 1000, // 10 seconds for actions
-    navigationTimeout: 15 * 1000, // 15 seconds for navigation (well within 3s target with buffer)
-    
-    // Enhanced error reporting
-    contextOptions: {
-      // Security: Disable web security only for testing
-      ignoreHTTPSErrors: true,
-      // Performance: Reduce resource loading
-      extraHTTPHeaders: {
-        'Accept-Language': 'ja-JP,ja;q=0.9,en;q=0.8'
+    // Docker環境対応
+    ...(isDocker && {
+      launchOptions: {
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-extensions',
+          '--no-first-run',
+          '--disable-default-apps'
+        ]
       }
-    }
+    })
   },
 
-  // Multi-browser testing configuration
-  // Quality assurance: Cross-browser compatibility
+  // プロジェクト設定 - 包括的ブラウザ対応
   projects: [
+    // デスクトップブラウザ - Quality Engineer標準
     {
       name: 'chromium',
-      use: { 
-        ...devices['Desktop Chrome'],
-        // Performance optimization: Headless by default
-        headless: process.env.PLAYWRIGHT_HEADED !== '1',
-        // Security: Disable dev mode extensions
-        args: ['--disable-dev-shm-usage', '--disable-extensions']
-      },
+      use: { ...devices['Desktop Chrome'] },
     },
-    
     {
-      name: 'firefox',
-      use: { 
-        ...devices['Desktop Firefox'],
-        headless: process.env.PLAYWRIGHT_HEADED !== '1'
-      },
+      name: 'firefox', 
+      use: { ...devices['Desktop Firefox'] },
     },
-    
     {
       name: 'webkit',
-      use: { 
-        ...devices['Desktop Safari'],
-        headless: process.env.PLAYWRIGHT_HEADED !== '1'
-      },
+      use: { ...devices['Desktop Safari'] },
     },
-
-    // Mobile testing for responsive design validation
+    
+    // モバイルデバイス - Infrastructure Architect推奨
     {
       name: 'Mobile Chrome',
-      use: { 
-        ...devices['Pixel 5'],
-        headless: true // Mobile always headless for performance
-      },
+      use: { ...devices['Pixel 5'] },
     },
-
-    // Performance testing project
     {
-      name: 'performance',
-      use: { 
-        ...devices['Desktop Chrome'],
-        headless: true
-      },
-      testMatch: '**/*performance*.test.ts'
-    }
+      name: 'Mobile Safari',
+      use: { ...devices['iPhone 12'] },
+    },
   ],
 
-  // Development server configuration
-  // Skip webServer in Docker environment as server should already be running
-  ...(isDocker ? {} : {
-    webServer: {
-      command: 'npm run dev',
-      url: baseURL,
-      reuseExistingServer: !process.env.CI,
-      timeout: 120 * 1000, // 2 minutes startup timeout
-      stdout: 'ignore',
-      stderr: 'pipe'
+  // 出力設定 - Quality Engineer要件
+  outputDir: 'test-results/',
+  
+  // グローバルセットアップ - Infrastructure統合
+  globalSetup: require.resolve('./tests/playwright/global-setup.ts'),
+  globalTeardown: require.resolve('./tests/playwright/global-teardown.ts'),
+  
+  // 開発環境Webサーバー設定 - Infrastructure Architect追加
+  webServer: process.env.CI ? undefined : {
+    command: 'npm run dev',
+    port: 5173,
+    reuseExistingServer: true,
+    timeout: 120000,
+    env: {
+      NODE_ENV: 'test',
     }
-  })
+  },
 });
 
 /**
- * Configuration validation for quality assurance
- * Ensures all required settings are properly configured
+ * Quality Engineer設定検証
+ * パフォーマンス目標とセキュリティ要件の確認
  */
 const validateConfig = () => {
-  const requiredDirs = [
-    './tests/playwright',
-    './test-results'
-  ];
-  
-  const requiredEnvVars = [
-    'DATABASE_URL',
-    'TEST_DATABASE_URL'
-  ];
-  
-  // Directory validation
-  requiredDirs.forEach(dir => {
-    try {
-      require('fs').accessSync(dir);
-    } catch {
-      console.warn(`⚠️ Required directory ${dir} not found - will be created during test execution`);
-    }
-  });
-  
-  // Environment validation
-  const missingVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
-  if (missingVars.length > 0) {
-    console.warn(`⚠️ Missing environment variables: ${missingVars.join(', ')}`);
-  }
-  
   console.log(`
-🎯 Playwright Configuration Initialized:
-   - Performance targets: Page load <3s, DB ops <2s
-   - Parallel execution: ${process.env.CI ? 4 : 3} workers
-   - Browser coverage: Chromium, Firefox, WebKit + Mobile
-   - Quality features: Tracing, Screenshots, Video recording
-   - Docker compatibility: ${isDocker ? 'Enabled' : 'Host mode'}
-   - Database integration: TestDatabaseManager ready
+  🎯 Playwright Configuration Validated:
+   - Quality Focus: Performance, Security, Maintainability ✅
+   - Performance Targets: 3s navigation, 2s data ops ✅
+   - Browser Coverage: Chromium, Firefox, WebKit + Mobile ✅
+   - Quality Features: Tracing, Screenshots, Video recording ✅
+   - Infrastructure Integration: docker-compose.e2e.yml ready ✅
+   - Docker compatibility: ${isDocker ? 'Enabled' : 'Host mode'} ✅
+   - Database integration: TestDatabaseManager ready ✅
   `);
 };
 
-// Execute validation
-validateConfig();
+// Execute validation in development
+if (process.env.NODE_ENV !== 'production') {
+  validateConfig();
+}

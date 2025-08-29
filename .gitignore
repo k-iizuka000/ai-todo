@@ -49,6 +49,12 @@ coverage/
 # Test output
 junit.xml
 
+# Playwright
+/test-results/
+/playwright-report/
+/tests/playwright/.auth/
+playwright/.cache/
+
 # IDEs
 .idea/
 *.iml

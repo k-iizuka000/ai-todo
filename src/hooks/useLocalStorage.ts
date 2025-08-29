@@ -47,7 +47,7 @@ export function useLocalStorage<T>(
       
       return parsed;
     } catch (error) {
-      console.warn(`Error reading localStorage key "${key}":`, error);
+      console.warn(`useLocalStorage: Error reading localStorage key "${key}":`, error);
       return initialValue;
     }
   });
@@ -62,13 +62,13 @@ export function useLocalStorage<T>(
         // 容量制限チェック（簡易版）
         const serializedValue = serialize(valueToStore);
         if (serializedValue.length > 1024 * 1024) { // 1MB制限
-          console.warn(`localStorage value for key "${key}" is large (${serializedValue.length} bytes)`);
+          console.warn(`useLocalStorage: Approaching localStorage capacity limit`);
         }
         
         window.localStorage.setItem(key, serializedValue);
       }
     } catch (error) {
-      console.error(`Error setting localStorage key "${key}":`, error);
+      console.error(`useLocalStorage: Error setting localStorage key "${key}":`, error);
       
       // クォータ超過の場合はクリーンアップを試行
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {

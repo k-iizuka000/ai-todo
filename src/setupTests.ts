@@ -43,6 +43,7 @@ vi.mock('react-router-dom', async () => {
 Object.defineProperty(global, 'crypto', {
   value: {
     randomUUID: () => `test-uuid-${Math.random().toString(36).substr(2, 9)}`,
+    random: () => Math.random(),
   },
 });
 

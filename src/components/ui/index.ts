@@ -116,3 +116,14 @@ export {
 export {
   ArchivedTasksSection,
 } from './ArchivedTasksSection'
+
+// Performance Optimization Components
+export {
+  LazyImage,
+  type LazyImageProps,
+} from './LazyImage'
+
+export {
+  PerformanceOptimizer,
+  type PerformanceOptimizerProps,
+} from './PerformanceOptimizer'

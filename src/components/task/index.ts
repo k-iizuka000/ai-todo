@@ -39,10 +39,12 @@ export type {
 // タスク詳細コンポーネント群のエクスポート
 export { default as TaskDetailView } from './TaskDetailView'
 export { TaskDetailTabs } from './TaskDetailTabs'
+export { default as TaskDetailModal } from './TaskDetailModal'
 export { default as TaskHierarchy } from './TaskHierarchy'
 export { default as SubTaskList } from './SubTaskList'
 export { default as ProgressIndicator } from './ProgressIndicator'
 export type { TaskDetailViewProps } from './TaskDetailView'
+export type { TaskDetailModalProps } from './TaskDetailModal'
 export type { TaskHierarchyProps } from './TaskHierarchy'
 export type { SubTaskListProps } from './SubTaskList'
 export type { ProgressIndicatorProps } from './ProgressIndicator'

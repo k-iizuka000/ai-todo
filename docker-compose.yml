@@ -98,7 +98,7 @@ services:
     volumes:
       # ソースコードのホットリロード対応
       - .:/app
-      - /app/node_modules  # node_modulesは永続化（キャッシュ効率化）
+      - node_modules:/app/node_modules  # node_modulesは名前付きボリュームで永続化（キャッシュ効率化）
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - VITE_HOST=0.0.0.0
@@ -138,7 +138,7 @@ services:
       - "6006:6006"  # Storybook
     volumes:
       - .:/app
-      - /app/node_modules
+      - node_modules:/app/node_modules
     environment:
       - NODE_ENV=development
     command: ["npm", "run", "storybook"]
@@ -157,10 +157,6 @@ volumes:
     driver: local
   postgres_data:
     driver: local
-    driver_opts:
-      type: none
-      device: ${PWD}/database/data
-      o: bind
   pgadmin_data:
     driver: local
 

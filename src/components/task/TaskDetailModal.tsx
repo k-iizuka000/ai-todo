@@ -7,7 +7,7 @@ import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { TaskDetail } from '../../types/task';
 import { Tag } from '../../types/tag';
-import { LoadingSpinner } from '../ui/loading';
+import { Spinner } from '../ui/loading';
 
 // レイジーローディング対応コンポーネント
 const LazyTaskDetailView = lazy(() => 
@@ -111,7 +111,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             fallback={
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg h-full flex items-center justify-center">
                 <div className="text-center">
-                  <LoadingSpinner size="lg" />
+                  <Spinner size="lg" />
                   <p className="mt-4 text-sm text-gray-500">タスク詳細を読み込んでいます...</p>
                 </div>
               </div>

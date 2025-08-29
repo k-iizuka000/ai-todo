@@ -56,6 +56,37 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   onRefresh,
   enableA11y = true
 }) => {
+  // ヘルパー関数を先に定義
+  const getPriorityColor = useCallback((priority: Priority) => {
+    switch (priority) {
+      case 'urgent':
+        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 border-red-200';
+      case 'high':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400 border-orange-200';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 border-yellow-200';
+      case 'low':
+        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 border-green-200';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
+    }
+  }, []);
+
+  const getStatusColor = useCallback((status: TaskStatus) => {
+    switch (status) {
+      case 'todo':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
+      case 'in_progress':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 border-blue-200';
+      case 'done':
+        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 border-green-200';
+      case 'archived':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 border-purple-200';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
+    }
+  }, []);
+
   // データバリデーションを適用（最適化されたメモ化）
   const validatedTask = useMemo(() => 
     DataValidationService.validateTaskDetail(task), 
@@ -65,13 +96,13 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   // ステータス色クラスをメモ化
   const statusColorClasses = useMemo(() => 
     getStatusColor(validatedTask.status),
-    [validatedTask.status]
+    [validatedTask.status, getStatusColor]
   );
   
   // 優先度色クラスをメモ化  
   const priorityColorClasses = useMemo(() =>
     getPriorityColor(validatedTask.priority),
-    [validatedTask.priority]
+    [validatedTask.priority, getPriorityColor]
   );
   
   const [isEditing, setIsEditing] = useState(false);
@@ -175,36 +206,6 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
       return cleanup;
     }
   }, [bindSwipeHandlers, isMobile]);
-
-  const getPriorityColor = useCallback((priority: Priority) => {
-    switch (priority) {
-      case 'urgent':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 border-red-200';
-      case 'high':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400 border-orange-200';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 border-yellow-200';
-      case 'low':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 border-green-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
-    }
-  }, []);
-
-  const getStatusColor = useCallback((status: TaskStatus) => {
-    switch (status) {
-      case 'todo':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 border-blue-200';
-      case 'done':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 border-green-200';
-      case 'archived':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 border-purple-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
-    }
-  }, []);
 
   const getStatusLabel = useCallback((status: TaskStatus) => {
     switch (status) {

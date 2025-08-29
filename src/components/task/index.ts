@@ -46,3 +46,9 @@ export type { TaskDetailViewProps } from './TaskDetailView'
 export type { TaskHierarchyProps } from './TaskHierarchy'
 export type { SubTaskListProps } from './SubTaskList'
 export type { ProgressIndicatorProps } from './ProgressIndicator'
+
+// エラーハンドリング
+export { 
+  TaskErrorBoundary, 
+  withTaskErrorBoundary 
+} from './TaskErrorBoundary'

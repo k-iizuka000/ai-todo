@@ -3,3 +3,9 @@ export { ProjectCreateModal } from './ProjectCreateModal';
 export { ProjectSettings } from './ProjectSettings';
 export { ProjectCard } from './ProjectCard';
 export { ProjectBadge } from './ProjectBadge';
+
+// エラーハンドリング
+export { 
+  ProjectErrorBoundary, 
+  withProjectErrorBoundary 
+} from './ProjectErrorBoundary';

@@ -43,6 +43,7 @@ EXPOSE 5173
 ENV NODE_ENV=development
 ENV VITE_HOST=0.0.0.0
 ENV VITE_PORT=5173
+ENV IS_DOCKER_CONTAINER=1
 
 # 開発サーバー起動
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
@@ -105,7 +106,6 @@ CMD ["nginx", "-g", "daemon off;"]
 FROM dependencies AS test
 
 # テスト用ツールの追加
-RUN npm install -g @playwright/test
 
 # ソースコードをコピー
 COPY . .

@@ -16,6 +16,7 @@ import {
 import { Plus, Search, Filter, Columns, List, X } from 'lucide-react';
 import { TagBadge } from '@/components/tag/TagBadge';
 import { useTagStore } from '@/stores/tagStore';
+import { useTaskStore } from '@/stores/taskStore';
 import type { Task, TaskStatus, TaskDetail, CreateTaskInput } from '@/types/task';
 import { Tag } from '@/types/tag';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
@@ -39,6 +40,9 @@ const Dashboard: React.FC = () => {
   
   // タグストアから利用可能なタグを取得
   const { tags: availableTags } = useTagStore();
+  
+  // タスクストア - 通常のパターンを使用
+  const { tasks: tasksFromStore, addTask, isLoading, error } = useTaskStore();
   
   // URLからタスクページの種類を判定
   const pageType = location.pathname.includes('/today') ? 'today' : 
@@ -119,17 +123,24 @@ const Dashboard: React.FC = () => {
   
   // ページタイプに基づくタスク取得をメモ化（パフォーマンス最適化）
   const baseTasksByPage = useMemo(() => {
+    const allTasks = tasksFromStore.length > 0 ? tasksFromStore : mockTasks; // フォールバック
+    
     switch (pageType) {
       case 'today':
-        return mockTodayTasks;
+        // 今日のタスク: 今日が期限のもの、または今日作成されたもの
+        const today = new Date().toISOString().split('T')[0];
+        return allTasks.filter(task => 
+          (task.dueDate && task.dueDate.startsWith(today)) ||
+          (task.createdAt && task.createdAt.startsWith(today))
+        );
       case 'important':
-        return mockTasks.filter(task => task.priority === 'urgent' || task.priority === 'high');
+        return allTasks.filter(task => task.priority === 'urgent' || task.priority === 'high');
       case 'completed':
-        return mockTasks.filter(task => task.status === 'done');
+        return allTasks.filter(task => task.status === 'done');
       default:
-        return mockTasks;
+        return allTasks;
     }
-  }, [pageType]);
+  }, [pageType, tasksFromStore]);
 
   // アクティブタスクのみを抽出（設計書2.2: activeTasksOnlyのメモ化実装）
   const activeTasksOnly = useMemo(() => 
@@ -232,9 +243,15 @@ const Dashboard: React.FC = () => {
   };
 
   const handleTaskCreate = async (task: CreateTaskInput) => {
-    console.log('新しいタスクを作成:', task);
-    // 実際のAPIコールをここに実装
-    // 暫定的にコンソールログで確認
+    try {
+      console.log('新しいタスクを作成:', task);
+      addTask(task);
+      console.log('タスク作成完了:', task);
+      setShowCreateModal(false);
+      // Note: taskStore will automatically update the display
+    } catch (error) {
+      console.error('タスク作成エラー:', error);
+    }
   };
 
   const handleAddTask = (_status: TaskStatus) => {

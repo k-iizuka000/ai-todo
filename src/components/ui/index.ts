@@ -127,3 +127,12 @@ export {
   PerformanceOptimizer,
   type PerformanceOptimizerProps,
 } from './PerformanceOptimizer'
+
+export {
+  PerformanceMonitor,
+  usePerformanceMonitor,
+  PerformanceTracker,
+  PerformanceTestUtils,
+  type PerformanceMonitorProps,
+  type PerformanceMetrics,
+} from './PerformanceMonitor'

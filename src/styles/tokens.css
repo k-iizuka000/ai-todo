@@ -104,6 +104,37 @@
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 
+    /* Touch Target Sizes (モバイルファースト設計) */
+    --tap-target-min: 44px;  /* WCAG 2.1 AAA基準の最小タップターゲット */
+    --tap-target-sm: 48px;   /* 推奨サイズ */
+    --tap-target-md: 56px;   /* 快適なサイズ */
+    --tap-target-lg: 64px;   /* 大きなサイズ */
+
+    /* Animation Durations */
+    --animation-fast: 150ms;
+    --animation-normal: 200ms;  /* 設計書指定: 統一200ms */
+    --animation-slow: 300ms;
+    --animation-slower: 500ms;
+
+    /* Animation Easings */
+    --easing-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --easing-ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --easing-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --easing-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    /* Modal系 */
+    --modal-overlay-color: rgba(0, 0, 0, 0.5);
+    --modal-border-radius: 0.75rem;
+    --modal-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    --modal-max-width-sm: 32rem;
+    --modal-max-width-md: 48rem;
+    --modal-max-width-lg: 64rem;
+    --modal-max-width-xl: 80rem;
+
+    /* Animation系 - 統一200ms */
+    --transition-modal: all var(--animation-normal) var(--easing-ease-out);
+    --transition-hover: all var(--animation-fast) var(--easing-ease-out);
+
     /* Z-Index Scale */
     --z-dropdown: 1000;
     --z-sticky: 1020;
@@ -235,5 +266,52 @@
   
   .bg-priority-critical {
     @apply bg-priority-critical/20;
+  }
+
+  /* Touch Target Utilities */
+  .tap-target {
+    min-width: var(--tap-target-min);
+    min-height: var(--tap-target-min);
+  }
+
+  .tap-target-sm {
+    min-width: var(--tap-target-sm);
+    min-height: var(--tap-target-sm);
+  }
+
+  .tap-target-md {
+    min-width: var(--tap-target-md);
+    min-height: var(--tap-target-md);
+  }
+
+  .tap-target-lg {
+    min-width: var(--tap-target-lg);
+    min-height: var(--tap-target-lg);
+  }
+
+  /* Animation Utilities */
+  .animate-normal {
+    transition-duration: var(--animation-normal);
+  }
+
+  .animate-fast {
+    transition-duration: var(--animation-fast);
+  }
+
+  .animate-slow {
+    transition-duration: var(--animation-slow);
+  }
+
+  /* Easing Utilities */
+  .ease-out {
+    transition-timing-function: var(--easing-ease-out);
+  }
+
+  .ease-in-out {
+    transition-timing-function: var(--easing-ease-in-out);
+  }
+
+  .ease-bounce {
+    transition-timing-function: var(--easing-bounce);
   }
 }

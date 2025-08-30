@@ -11,6 +11,11 @@ const path = require('path');
 // Docker環境内かどうかチェック
 function isRunningInDocker() {
   try {
+    // 明示的なDocker環境変数チェック
+    if (process.env.IS_DOCKER_CONTAINER === '1') {
+      return true;
+    }
+    
     // /.dockerenvファイルの存在チェック
     if (fs.existsSync('/.dockerenv')) {
       return true;

@@ -19,8 +19,14 @@ RUN npm config set audit-level moderate
 # ========================================
 FROM base AS dependencies
 
+# Docker環境変数を設定（preinstallスクリプト用）
+ENV IS_DOCKER_CONTAINER=1
+
 # package.json と package-lock.json をコピー（キャッシュ効率化）
 COPY package*.json ./
+
+# preinstallスクリプトに必要なscriptsディレクトリをコピー
+COPY scripts/ ./scripts/
 
 # 依存関係インストール
 RUN npm ci --prefer-offline --no-audit
@@ -31,7 +37,7 @@ RUN npm ci --prefer-offline --no-audit
 FROM dependencies AS development
 
 # 開発に必要な追加パッケージ
-RUN apk add --no-cache git
+RUN apk add --no-cache git curl
 
 # ソースコードをコピー（ボリュームマウントで上書きされる想定）
 COPY . .

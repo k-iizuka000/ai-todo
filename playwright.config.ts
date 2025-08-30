@@ -112,8 +112,8 @@ export default defineConfig({
   outputDir: 'test-results/',
   
   // グローバルセットアップ - Infrastructure統合
-  globalSetup: require.resolve('./tests/playwright/global-setup.ts'),
-  globalTeardown: require.resolve('./tests/playwright/global-teardown.ts'),
+  globalSetup: './tests/playwright/global-setup.ts',
+  globalTeardown: './tests/playwright/global-teardown.ts',
   
   // 開発環境Webサーバー設定 - Infrastructure Architect追加
   webServer: process.env.CI ? undefined : {

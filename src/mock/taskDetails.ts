@@ -167,8 +167,48 @@ export const mockTodayTasks: TaskDetail[] = mockTaskDetails.filter(task => {
 }).slice(0, 4);
 
 // 特定のタスクIDでタスク詳細を取得するヘルパー関数
+/**
+ * TaskをTaskDetailに変換する関数
+ * グループ1: 基本モーダル実装のためのシンプルな変換機能
+ */
+export const convertTaskToTaskDetail = (task: any): TaskDetail => {
+  return {
+    ...task,
+    comments: [],
+    attachments: [],
+    history: [],
+    childTasks: [],
+    // Date型の確実な変換
+    createdAt: task.createdAt instanceof Date ? task.createdAt : new Date(task.createdAt),
+    updatedAt: task.updatedAt instanceof Date ? task.updatedAt : new Date(task.updatedAt),
+    dueDate: task.dueDate ? (task.dueDate instanceof Date ? task.dueDate : new Date(task.dueDate)) : undefined
+  } as TaskDetail;
+};
+
 export const getTaskDetail = (taskId: string): TaskDetail | undefined => {
-  return mockTaskDetails.find(task => task.id === taskId);
+  // 1. まずmockデータから検索
+  const mockDetail = mockTaskDetails.find(task => task.id === taskId);
+  if (mockDetail) {
+    return mockDetail;
+  }
+  
+  // 2. 実際に作成されたタスクから検索（useTaskStoreから取得）
+  try {
+    // localStorageから直接取得する（簡易実装）
+    const taskStorage = localStorage.getItem('task-storage');
+    if (taskStorage) {
+      const parsed = JSON.parse(taskStorage);
+      const tasks = parsed?.state?.tasks || [];
+      const foundTask = tasks.find((task: any) => task.id === taskId);
+      if (foundTask) {
+        return convertTaskToTaskDetail(foundTask);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to get task from storage:', error);
+  }
+  
+  return undefined;
 };
 
 // 今日のタスクを取得するヘルパー関数

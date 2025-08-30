@@ -1,12 +1,24 @@
 import React, { useEffect } from 'react';
 import AppRouter from './router/AppRouter';
 import { QueryProvider } from './providers/QueryProvider';
+import { AccessibilityProvider } from './providers/AccessibilityProvider';
 import { useProjectStore } from './stores/projectStore';
 
 const App: React.FC = () => {
   return (
     <QueryProvider>
-      <AppContent />
+      <AccessibilityProvider
+        initialConfig={{
+          keyboardNavigation: true,
+          enhancedFocus: true,
+          reducedMotion: false,
+          highContrast: false,
+          largeTouchTargets: false
+        }}
+        storageKey="ai-todo-accessibility"
+      >
+        <AppContent />
+      </AccessibilityProvider>
     </QueryProvider>
   );
 };

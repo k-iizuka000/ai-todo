@@ -231,15 +231,30 @@ const Dashboard: React.FC = () => {
   };
 
   const handleTaskClick = (task: Task) => {
-    const taskDetail = getTaskDetail(task.id);
-    if (taskDetail) {
-      setSelectedTask(taskDetail);
-      setShowTaskDetailModal(true);
-      // URLを更新してタスク詳細表示を反映
-      const currentPath = location.pathname;
-      const newPath = currentPath.endsWith('/') ? `${currentPath}${task.id}` : `${currentPath}/${task.id}`;
-      navigate(newPath, { replace: true });
+    console.log('Task clicked:', task.id, task.title);
+    
+    let taskDetail = getTaskDetail(task.id);
+    
+    // フォールバック: TaskDetailが見つからない場合、Taskから基本的なTaskDetailを作成
+    if (!taskDetail) {
+      console.log('TaskDetail not found, converting from Task:', task);
+      taskDetail = {
+        ...task,
+        comments: [],
+        attachments: [],
+        history: [],
+        childTasks: []
+      };
     }
+    
+    console.log('Opening modal with TaskDetail:', taskDetail);
+    setSelectedTask(taskDetail);
+    setShowTaskDetailModal(true);
+    
+    // URLを更新してタスク詳細表示を反映
+    const currentPath = location.pathname;
+    const newPath = currentPath.endsWith('/') ? `${currentPath}${task.id}` : `${currentPath}/${task.id}`;
+    navigate(newPath, { replace: true });
   };
 
   const handleTaskCreate = async (task: CreateTaskInput) => {

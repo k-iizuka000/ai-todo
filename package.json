@@ -13,6 +13,7 @@
     "prepreview": "node scripts/check-docker.cjs",
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:analyze": "npm run build && npx webpack-bundle-analyzer dist/assets/*.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "type-check": "tsc --noEmit",
     "preview": "vite preview",
@@ -126,7 +127,8 @@
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2",
     "vite": "^5.0.8",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "webpack-bundle-analyzer": "^4.10.2"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"

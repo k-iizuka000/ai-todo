@@ -1,0 +1,80 @@
+/* タッチターゲット最適化 - WCAG AA準拠（44x44px最小サイズ） */
+.tap-target {
+  /* 最小タッチターゲットサイズ確保 */
+  min-height: 44px;
+  min-width: 44px;
+  
+  /* タッチフィードバック最適化 */
+  touch-action: manipulation;
+  user-select: none;
+  
+  /* レスポンシブタッチターゲット */
+  @apply relative inline-flex items-center justify-center;
+  
+  /* タッチデバイスでのホバー無効化 */
+  @media (hover: none) and (pointer: coarse) {
+    &:hover {
+      /* タッチデバイスではホバー効果を無効化 */
+      @apply transform-none;
+    }
+  }
+  
+  /* タッチフィードバックアニメーション */
+  &:active {
+    @apply scale-95 duration-75;
+  }
+}
+
+/* 小さなボタン用の最適化 */
+.tap-target-sm {
+  min-height: 40px;
+  min-width: 40px;
+  @apply tap-target;
+}
+
+/* 大きなボタン用の最適化 */
+.tap-target-lg {
+  min-height: 48px;
+  min-width: 48px;
+  @apply tap-target;
+}
+
+/* テキストボタン用の最適化 */
+.tap-target-text {
+  min-height: 44px;
+  padding: 8px 16px;
+  @apply tap-target;
+}
+
+/* スワイプジェスチャー対応 */
+.swipe-container {
+  touch-action: pan-x pan-y;
+  overscroll-behavior: contain;
+}
+
+/* モバイル専用のタッチ最適化 */
+@media (max-width: 640px) {
+  .tap-target {
+    /* モバイルでは最小48pxを確保 */
+    min-height: 48px;
+    min-width: 48px;
+    
+    /* タッチ領域を視覚的に大きくする */
+    &::before {
+      content: '';
+      position: absolute;
+      top: -4px;
+      left: -4px;
+      right: -4px;
+      bottom: -4px;
+      border-radius: inherit;
+      background: transparent;
+    }
+  }
+  
+  /* モバイルでのスクロール最適化 */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: bounce;
+  }
+}

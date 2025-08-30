@@ -1,8 +1,9 @@
 /**
- * タスク詳細のタブコンポーネント
+ * タスク詳細のタブコンポーネント - React.memo最適化
+ * 設計書 グループ2: パフォーマンス最適化とCore Web Vitals対応
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Button, Input, Badge } from '@/components/ui';
 import { Plus, MessageCircle, Clock, Paperclip, Trash2 } from 'lucide-react';
 import type { TaskDetail, TaskComment, TaskHistory, CreateSubtaskInput } from '@/types/task';
@@ -14,7 +15,7 @@ interface TaskDetailTabsProps {
   onUpdate?: (updates: Partial<TaskDetail>) => void;
 }
 
-export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
+export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = React.memo(({
   task,
   activeTab,
   onTabChange,
@@ -24,7 +25,16 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
   const [newComment, setNewComment] = useState('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
 
-  const handleAddSubtask = () => {
+  // メモ化された進捗計算
+  const progressStats = useMemo(() => {
+    const completed = task.childTasks.filter(subtask => subtask.status === 'done').length;
+    const total = task.childTasks.length;
+    const percentage = total > 0 ? (completed / total) * 100 : 0;
+    return { completed, total, percentage };
+  }, [task.childTasks]);
+
+  // イベントハンドラーの最適化
+  const handleAddSubtask = useCallback(() => {
     if (!newSubtaskTitle.trim()) return;
     
     const newSubtask = {
@@ -51,23 +61,23 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
     
     setNewSubtaskTitle('');
     setIsAddingSubtask(false);
-  };
+  }, [newSubtaskTitle, task.projectId, task.assigneeId, task.childTasks, onUpdate]);
 
-  const handleSubtaskStatusToggle = (subtaskId: string) => {
+  const handleSubtaskStatusToggle = useCallback((subtaskId: string) => {
     const updatedChildTasks = task.childTasks.map(subtask =>
       subtask.id === subtaskId
         ? { ...subtask, status: subtask.status === 'done' ? 'todo' : 'done' as const }
         : subtask
     );
     onUpdate?.({ childTasks: updatedChildTasks });
-  };
+  }, [task.childTasks, onUpdate]);
 
-  const handleDeleteSubtask = (subtaskId: string) => {
+  const handleDeleteSubtask = useCallback((subtaskId: string) => {
     const updatedChildTasks = task.childTasks.filter(subtask => subtask.id !== subtaskId);
     onUpdate?.({ childTasks: updatedChildTasks });
-  };
+  }, [task.childTasks, onUpdate]);
 
-  const handleAddComment = () => {
+  const handleAddComment = useCallback(() => {
     if (!newComment.trim()) return;
     
     const comment: TaskComment = {
@@ -84,9 +94,10 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
     onUpdate?.({ comments: updatedComments });
     
     setNewComment('');
-  };
+  }, [newComment, task.id, task.comments, onUpdate]);
 
-  const getActionIcon = (action: string) => {
+  // アクションアイコンとテキストの最適化
+  const getActionIcon = useCallback((action: string) => {
     switch (action) {
       case 'created':
         return '📝';
@@ -101,9 +112,9 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
       default:
         return '📋';
     }
-  };
+  }, []);
 
-  const getActionText = (action: string, changes: Record<string, any>) => {
+  const getActionText = useCallback((action: string, changes: Record<string, any>) => {
     switch (action) {
       case 'created':
         return 'タスクを作成しました';
@@ -118,10 +129,7 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
       default:
         return 'アクションを実行しました';
     }
-  };
-
-  const completedSubtasks = task.childTasks.filter(subtask => subtask.status === 'done').length;
-  const totalSubtasks = task.childTasks.length;
+  }, []);
 
   return (
     <div className="w-96 flex flex-col border-l bg-gray-50 dark:bg-gray-800">
@@ -135,7 +143,7 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
               : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
           }`}
         >
-          サブタスク ({totalSubtasks})
+          サブタスク ({progressStats.total})
         </button>
         <button
           onClick={() => onTabChange('comments')}
@@ -164,19 +172,19 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
         {activeTab === 'subtasks' && (
           <div className="space-y-4">
             {/* 進捗表示 */}
-            {totalSubtasks > 0 && (
+            {progressStats.total > 0 && (
               <div className="p-3 bg-white dark:bg-gray-900 rounded-lg border">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium">進捗</span>
                   <span className="text-sm text-gray-600">
-                    {completedSubtasks}/{totalSubtasks} 完了
+                    {progressStats.completed}/{progressStats.total} 完了
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div
                     className="bg-green-500 h-2 rounded-full transition-all"
                     style={{
-                      width: `${totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0}%`
+                      width: `${progressStats.percentage}%`
                     }}
                   />
                 </div>
@@ -339,4 +347,16 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // 設計書要件: props比較関数の最適化
+  return (
+    prevProps.task.id === nextProps.task.id &&
+    prevProps.task.updatedAt.getTime() === nextProps.task.updatedAt.getTime() &&
+    prevProps.activeTab === nextProps.activeTab &&
+    prevProps.task.childTasks.length === nextProps.task.childTasks.length &&
+    prevProps.task.comments.length === nextProps.task.comments.length &&
+    prevProps.task.history.length === nextProps.task.history.length
+  );
+});
+
+TaskDetailTabs.displayName = 'TaskDetailTabs';

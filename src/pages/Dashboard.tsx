@@ -10,7 +10,6 @@ import {
   Badge,
   StatusBadge,
   PriorityBadge,
-  Modal,
   ArchivedTasksSection
 } from '@/components/ui';
 import { Plus, Search, Filter, Columns, List, X } from 'lucide-react';
@@ -20,8 +19,9 @@ import { useTaskStore } from '@/stores/taskStore';
 import type { Task, TaskStatus, TaskDetail, CreateTaskInput } from '@/types/task';
 import { Tag } from '@/types/tag';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
-import TaskDetailView from '@/components/task/TaskDetailView';
+import { TaskDetailModal } from '@/components/task/TaskDetailModal';
 import { TaskCreateModal } from '@/components/task/TaskCreateModal';
+import { PerformanceMonitor } from '@/components/monitoring/PerformanceMonitor';
 import { mockTasks, mockTags } from '@/mock/tasks';
 import { mockTodayTasks, getTaskDetail } from '@/mock/taskDetails';
 
@@ -263,17 +263,7 @@ const Dashboard: React.FC = () => {
     // TODO: タスクの更新処理（Mockの場合はログ出力のみ）
   };
 
-  const handleSubtaskToggle = (_subtaskId: string, _completed: boolean) => {
-    // TODO: サブタスクの完了状態切り替え
-  };
-
-  const handleSubtaskAdd = (_title: string) => {
-    // TODO: サブタスクの追加
-  };
-
-  const handleSubtaskDelete = (_subtaskId: string) => {
-    // TODO: サブタスクの削除
-  };
+  // サブタスク関連ハンドラーは TaskDetailModal 内で処理されるため削除
 
   const handleTaskDelete = (_taskId: string) => {
     // TODO: タスクの削除
@@ -586,34 +576,25 @@ const Dashboard: React.FC = () => {
         onTaskCreate={handleTaskCreate}
       />
 
-      {/* タスク詳細モーダル */}
-      <Modal
-        open={showTaskDetailModal}
-        onOpenChange={(open) => {
-          if (!open) {
-            handleCloseTaskDetail();
-          } else {
-            // 明示的にtrueが来た場合は状態を確認
-            setShowTaskDetailModal(true);
-          }
-        }}
-        title=""
-        size="xl"
-        className="max-w-4xl"
-      >
-        {selectedTask && (
-          <TaskDetailView
-            task={selectedTask}
-            editable={true}
-            onTaskUpdate={handleTaskUpdate}
-            onSubtaskToggle={handleSubtaskToggle}
-            onSubtaskAdd={handleSubtaskAdd}
-            onSubtaskDelete={handleSubtaskDelete}
-            onTaskDelete={handleTaskDelete}
-            onClose={handleCloseTaskDetail}
-          />
-        )}
-      </Modal>
+      {/* タスク詳細モーダル - TaskDetailModal使用に変更 */}
+      <TaskDetailModal
+        isOpen={showTaskDetailModal}
+        onClose={handleCloseTaskDetail}
+        task={selectedTask}
+        editable={true}
+        onTaskUpdate={handleTaskUpdate}
+        onTaskDelete={handleTaskDelete}
+        availableTags={mockTags}
+        onProjectClick={handleProjectClick}
+      />
+
+      {/* パフォーマンス監視コンポーネント */}
+      <PerformanceMonitor
+        enabled={true}
+        debugMode={process.env.NODE_ENV === 'development'}
+        showAlerts={true}
+        monitoringInterval={5000}
+      />
     </div>
   );
 };

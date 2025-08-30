@@ -265,7 +265,6 @@ export const useScheduleStoreHybrid = create<HybridScheduleState>()(
           set({ loading: true, error: null, syncStatus: 'syncing' });
           
           try {
-          try {
             // TODO: ユーザーIDを適切に取得（認証システムから）
             const userId = 'current-user'; // 仮の値
             

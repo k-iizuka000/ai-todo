@@ -15,6 +15,7 @@ import { useSwipeGesture } from '../../hooks/useSwipeGesture';
 import { usePageTransition } from '../../hooks/useAnimations';
 import { useTaskDetailKeyboard } from '../../hooks/useTaskDetailKeyboard';
 import { useTaskAnnouncements } from '../../hooks/useTaskAnnouncements';
+import { useReducedMotion, useAnimationClass } from '../../hooks/useReducedMotion';
 
 export interface TaskDetailViewProps {
   /** 表示するタスク */
@@ -118,6 +119,13 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   const { layout, isMobile, isTablet, isDesktop, isTouch } = useResponsiveLayout();
   const responsiveRender = useResponsiveRender();
   
+  // アクセシビリティ: アニメーション制御
+  const prefersReducedMotion = useReducedMotion();
+  const transitionClass = useAnimationClass(
+    'transition-all animate-normal ease-out',
+    ''
+  );
+  
   // ページトランジション
   const { isTransitioning, startTransition, endTransition, getTransitionStyles } = usePageTransition();
   
@@ -159,11 +167,11 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
     direction: isMobile ? 'all' : 'horizontal',
   });
   
-  // レスポンシブ値の取得
+  // レスポンシブ値の取得 - 設計書要件準拠
   const containerHeight = useResponsiveValue({
-    mobile: '100vh',
-    tablet: '85vh',
-    desktop: '80vh',
+    mobile: '100vh',     // モバイル: フルスクリーン表示
+    tablet: '90vh',      // タブレット: 90vh サイズ最適化
+    desktop: '85vh',     // デスクトップ: 4xl対応のため85vh
   });
   
   const headerPadding = useResponsiveValue({
@@ -355,15 +363,13 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
       ref={containerRef}
       className={`bg-white dark:bg-gray-800 overflow-hidden flex flex-col ${
         isMobile ? 'h-screen w-screen fixed inset-0 z-50' : 
-        isTablet ? 'rounded-lg shadow-lg h-[85vh] max-w-4xl mx-auto' :
-        'rounded-lg shadow-lg h-[80vh]'
+        isTablet ? 'rounded-lg shadow-lg h-[90vh] max-w-3xl mx-auto' :
+        'rounded-lg shadow-lg h-[85vh] max-w-4xl mx-auto'
       }`}
       style={{
         height: isMobile ? '100vh' : containerHeight,
         ...getTransitionStyles('in'),
       }}
-      role="dialog"
-      aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descId}
     >
@@ -429,13 +435,17 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                   <>
                     <button
                       onClick={handleSave}
-                      className="tap-target px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all animate-normal ease-out"
+                      className={`tap-target px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 ${transitionClass} ${
+                        isMobile ? 'min-h-[48px] min-w-[80px]' : ''
+                      }`}
                     >
                       保存
                     </button>
                     <button
                       onClick={handleCancel}
-                      className="tap-target px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all animate-normal ease-out"
+                      className={`tap-target px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all animate-normal ease-out ${
+                        isMobile ? 'min-h-[48px] min-w-[80px]' : ''
+                      }`}
                     >
                       キャンセル
                     </button>
@@ -447,9 +457,11 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                     </div>
                     <button
                       onClick={handleEditToggle}
-                      className="tap-target p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all animate-normal ease-out"
+                      className={`tap-target p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all animate-normal ease-out ${
+                        isMobile ? 'min-h-[48px] min-w-[48px]' : ''
+                      }`}
                       aria-label="タスクを編集"
-                      title="編集 (Ctrl+E)"
+                      title={isMobile ? "編集" : "編集 (Ctrl+E)"}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -457,7 +469,9 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                     </button>
                     <button
                       onClick={handleDelete}
-                      className="tap-target p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all animate-normal ease-out"
+                      className={`tap-target p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all animate-normal ease-out ${
+                        isMobile ? 'min-h-[48px] min-w-[48px]' : ''
+                      }`}
                       aria-label="タスクを削除"
                       title="削除"
                     >
@@ -473,9 +487,11 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
             {onClose && (
               <button
                 onClick={onClose}
-                className="tap-target p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all animate-normal ease-out"
+                className={`tap-target p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all animate-normal ease-out ${
+                  isMobile ? 'min-h-[48px] min-w-[48px]' : ''
+                }`}
                 aria-label="タスク詳細を閉じる"
-                title="閉じる (Escape)"
+                title={isMobile ? "閉じる" : "閉じる (Escape)"}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

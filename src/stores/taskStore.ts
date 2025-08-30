@@ -549,8 +549,23 @@ export const useTaskStore = create<TaskState>()(
           getItem: (name) => {
             try {
               const item = localStorage.getItem(name);
-              return item ? JSON.parse(item) : null;
-            } catch {
+              if (!item) return null;
+              
+              const parsed = JSON.parse(item);
+              
+              // Critical Fix: Dateオブジェクトを正しく復元
+              if (parsed?.state?.tasks) {
+                parsed.state.tasks = parsed.state.tasks.map((task: any) => ({
+                  ...task,
+                  createdAt: new Date(task.createdAt),
+                  updatedAt: new Date(task.updatedAt),
+                  dueDate: task.dueDate ? new Date(task.dueDate) : undefined
+                }));
+              }
+              
+              return parsed;
+            } catch (error) {
+              console.warn('Failed to parse task store from localStorage:', error);
               return null;
             }
           },
@@ -595,8 +610,15 @@ export const useTaskStore = create<TaskState>()(
           return (state, error) => {
             if (error) {
               console.error('Failed to rehydrate task store:', error);
-              // エラー時はデフォルト状態にリセット
-              state?.resetStore();
+              // Critical Fix: 軽微なエラーではリセットせず、致命的エラーのみリセット
+              if (error.message?.includes('JSON') || error.name === 'SyntaxError') {
+                console.warn('Task store corrupted, resetting to default');
+                state?.resetStore();
+              } else {
+                console.warn('Minor rehydration error, keeping existing data');
+              }
+            } else {
+              console.log('Task store rehydrated successfully');
             }
           };
         }

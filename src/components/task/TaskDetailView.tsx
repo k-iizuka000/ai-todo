@@ -370,7 +370,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
       {/* モバイル用プルツーリフレッシュインジケーター */}
       {responsiveRender.mobile(
         <div 
-          className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600 transition-transform animate-normal ease-out origin-left z-10 pull-to-refresh-indicator ${
+          className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600 transition-transform duration-200 ease-out origin-left z-10 pull-to-refresh-indicator ${
             isRefreshing ? 'scale-x-100' : 'scale-x-0'
           }`}
           style={{
@@ -429,13 +429,13 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                   <>
                     <button
                       onClick={handleSave}
-                      className="tap-target px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all animate-normal ease-out"
+                      className="touch-manipulation px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all duration-200 ease-out"
                     >
                       保存
                     </button>
                     <button
                       onClick={handleCancel}
-                      className="tap-target px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all animate-normal ease-out"
+                      className="touch-manipulation px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all duration-200 ease-out"
                     >
                       キャンセル
                     </button>
@@ -447,7 +447,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                     </div>
                     <button
                       onClick={handleEditToggle}
-                      className="tap-target p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all animate-normal ease-out"
+                      className="touch-manipulation p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200 ease-out"
                       aria-label="タスクを編集"
                       title="編集 (Ctrl+E)"
                     >
@@ -457,7 +457,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                     </button>
                     <button
                       onClick={handleDelete}
-                      className="tap-target p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all animate-normal ease-out"
+                      className="touch-manipulation p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all duration-200 ease-out"
                       aria-label="タスクを削除"
                       title="削除"
                     >
@@ -473,7 +473,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
             {onClose && (
               <button
                 onClick={onClose}
-                className="tap-target p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all animate-normal ease-out"
+                className="touch-manipulation p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all duration-200 ease-out"
                 aria-label="タスク詳細を閉じる"
                 title="閉じる (Escape)"
               >
@@ -596,7 +596,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                 {editable && !isEditingTags && (
                   <button
                     onClick={() => setIsEditingTags(true)}
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline transition-all animate-normal ease-out"
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline transition-all duration-200 ease-out"
                   >
                     編集
                   </button>
@@ -616,7 +616,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                   <div className="flex gap-2 mt-2">
                     <button
                       onClick={() => setIsEditingTags(false)}
-                      className="tap-target px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all animate-normal ease-out"
+                      className="touch-manipulation px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all duration-200 ease-out"
                     >
                       完了
                     </button>
@@ -626,7 +626,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                         setIsEditingTags(false);
                         // ここでタグを元の状態に戻すロジックが必要であれば追加
                       }}
-                      className="tap-target px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all animate-normal ease-out"
+                      className="touch-manipulation px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all duration-200 ease-out"
                     >
                       キャンセル
                     </button>

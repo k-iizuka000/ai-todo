@@ -1,4 +1,4 @@
-@import './styles/tokens.css';
+@import './styles/accessibility.css';
 
 @tailwind base;
 @tailwind components;
@@ -49,11 +49,11 @@
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-all animate-normal ease-out font-medium tap-target;
+    @apply bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-all duration-200 ease-out font-medium touch-manipulation;
   }
   
   .btn-secondary {
-    @apply bg-gray-200 text-gray-900 px-4 py-2 rounded-lg hover:bg-gray-300 transition-all animate-normal ease-out font-medium tap-target;
+    @apply bg-gray-200 text-gray-900 px-4 py-2 rounded-lg hover:bg-gray-300 transition-all duration-200 ease-out font-medium touch-manipulation;
   }
   
   .card {

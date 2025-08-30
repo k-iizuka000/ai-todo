@@ -10,7 +10,6 @@ import {
   Badge,
   StatusBadge,
   PriorityBadge,
-  Modal,
   ArchivedTasksSection
 } from '@/components/ui';
 import { Plus, Search, Filter, Columns, List, X } from 'lucide-react';
@@ -22,6 +21,7 @@ import { Tag } from '@/types/tag';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import TaskDetailView from '@/components/task/TaskDetailView';
 import { TaskCreateModal } from '@/components/task/TaskCreateModal';
+import { TaskDetailModal } from '@/components/task/TaskDetailModal';
 import { mockTasks, mockTags } from '@/mock/tasks';
 import { mockTodayTasks, getTaskDetail } from '@/mock/taskDetails';
 
@@ -231,15 +231,30 @@ const Dashboard: React.FC = () => {
   };
 
   const handleTaskClick = (task: Task) => {
-    const taskDetail = getTaskDetail(task.id);
-    if (taskDetail) {
-      setSelectedTask(taskDetail);
-      setShowTaskDetailModal(true);
-      // URLを更新してタスク詳細表示を反映
-      const currentPath = location.pathname;
-      const newPath = currentPath.endsWith('/') ? `${currentPath}${task.id}` : `${currentPath}/${task.id}`;
-      navigate(newPath, { replace: true });
+    console.log('Task clicked:', task.id, task.title);
+    
+    let taskDetail = getTaskDetail(task.id);
+    
+    // フォールバック: TaskDetailが見つからない場合、Taskから基本的なTaskDetailを作成
+    if (!taskDetail) {
+      console.log('TaskDetail not found, converting from Task:', task);
+      taskDetail = {
+        ...task,
+        comments: [],
+        attachments: [],
+        history: [],
+        childTasks: []
+      };
     }
+    
+    console.log('Opening modal with TaskDetail:', taskDetail);
+    setSelectedTask(taskDetail);
+    setShowTaskDetailModal(true);
+    
+    // URLを更新してタスク詳細表示を反映
+    const currentPath = location.pathname;
+    const newPath = currentPath.endsWith('/') ? `${currentPath}${task.id}` : `${currentPath}/${task.id}`;
+    navigate(newPath, { replace: true });
   };
 
   const handleTaskCreate = async (task: CreateTaskInput) => {
@@ -587,33 +602,16 @@ const Dashboard: React.FC = () => {
       />
 
       {/* タスク詳細モーダル */}
-      <Modal
-        open={showTaskDetailModal}
-        onOpenChange={(open) => {
-          if (!open) {
-            handleCloseTaskDetail();
-          } else {
-            // 明示的にtrueが来た場合は状態を確認
-            setShowTaskDetailModal(true);
-          }
-        }}
-        title=""
-        size="xl"
-        className="max-w-4xl"
-      >
-        {selectedTask && (
-          <TaskDetailView
-            task={selectedTask}
-            editable={true}
-            onTaskUpdate={handleTaskUpdate}
-            onSubtaskToggle={handleSubtaskToggle}
-            onSubtaskAdd={handleSubtaskAdd}
-            onSubtaskDelete={handleSubtaskDelete}
-            onTaskDelete={handleTaskDelete}
-            onClose={handleCloseTaskDetail}
-          />
-        )}
-      </Modal>
+      <TaskDetailModal
+        isOpen={showTaskDetailModal}
+        onClose={handleCloseTaskDetail}
+        task={selectedTask}
+        editable={true}
+        onTaskUpdate={handleTaskUpdate}
+        onTaskDelete={handleTaskDelete}
+        availableTags={availableTags}
+        onProjectClick={handleProjectClick}
+      />
     </div>
   );
 };

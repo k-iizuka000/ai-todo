@@ -29,3 +29,7 @@ export {
   usePageTransition, 
   useAnimationOptimization 
 } from './useAnimations';
+
+// アクセシビリティ関連hooks
+export { useFocusManagement } from './useFocusManagement';
+export type { FocusManagementOptions } from './useFocusManagement';

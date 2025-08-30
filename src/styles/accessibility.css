@@ -1,0 +1,467 @@
+/**
+ * WCAG 2.1 AA準拠アクセシビリティスタイル
+ * 設計書 グループ2: WCAG準拠アクセシビリティ対応
+ * 
+ * 準拠基準:
+ * - 1.4.3 Contrast (Minimum): 4.5:1以上のコントラスト比
+ * - 2.4.7 Focus Visible: フォーカス表示の明確化
+ * - 2.5.5 Target Size: タッチターゲット44x44px以上
+ */
+
+/* ========================
+   フォーカス管理
+   ======================== */
+
+/* 基本フォーカススタイル - WCAG 2.4.7 Focus Visible */
+:focus {
+  outline: 2px solid hsl(210, 100%, 50%);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* 強化フォーカス（高コントラストモード）*/
+[data-enhanced-focus="true"] :focus,
+[data-high-contrast="true"] :focus {
+  outline: var(--focus-width, 3px) solid hsl(210, 100%, 40%);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 1px hsl(210, 100%, 95%);
+}
+
+/* キーボードフォーカス専用（マウスクリック時は非表示）*/
+[data-keyboard-focus="true"] :focus {
+  outline: 2px solid hsl(210, 100%, 50%);
+  outline-offset: 2px;
+}
+
+/* フォーカストラップ内でのフォーカス */
+[data-focus-trap="true"] :focus {
+  outline: 2px solid hsl(210, 100%, 60%);
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+/* 非表示要素のフォーカス防止 */
+[hidden] {
+  display: none !important;
+}
+
+[aria-hidden="true"] {
+  pointer-events: none;
+}
+
+/* ========================
+   コントラスト対応
+   ======================== */
+
+/* 高コントラストモード - WCAG 1.4.3 Contrast (Minimum) */
+[data-high-contrast="true"] {
+  --text-color: hsl(0, 0%, 10%);
+  --background-color: hsl(0, 0%, 98%);
+  --border-color: hsl(0, 0%, 30%);
+  --primary-color: hsl(210, 100%, 35%);
+  --secondary-color: hsl(210, 50%, 25%);
+}
+
+[data-high-contrast="true"] .text-gray-600 {
+  color: hsl(0, 0%, 20%) !important;
+}
+
+[data-high-contrast="true"] .text-gray-500 {
+  color: hsl(0, 0%, 25%) !important;
+}
+
+[data-high-contrast="true"] .bg-gray-100 {
+  background-color: hsl(0, 0%, 90%) !important;
+  border: 1px solid hsl(0, 0%, 70%);
+}
+
+/* ステータス色の高コントラスト対応 */
+[data-high-contrast="true"] .status-todo {
+  color: hsl(220, 60%, 30%) !important;
+  background-color: hsl(220, 60%, 95%) !important;
+}
+
+[data-high-contrast="true"] .status-in-progress {
+  color: hsl(210, 80%, 25%) !important;
+  background-color: hsl(210, 80%, 90%) !important;
+}
+
+[data-high-contrast="true"] .status-done {
+  color: hsl(120, 70%, 25%) !important;
+  background-color: hsl(120, 70%, 90%) !important;
+}
+
+/* 優先度色の高コントラスト対応 */
+[data-high-contrast="true"] .priority-low {
+  color: hsl(120, 60%, 30%) !important;
+  background-color: hsl(120, 60%, 95%) !important;
+}
+
+[data-high-contrast="true"] .priority-medium {
+  color: hsl(45, 90%, 30%) !important;
+  background-color: hsl(45, 90%, 90%) !important;
+}
+
+[data-high-contrast="true"] .priority-high {
+  color: hsl(25, 90%, 30%) !important;
+  background-color: hsl(25, 90%, 90%) !important;
+}
+
+[data-high-contrast="true"] .priority-urgent {
+  color: hsl(0, 80%, 35%) !important;
+  background-color: hsl(0, 80%, 95%) !important;
+}
+
+/* ========================
+   タッチターゲットサイズ
+   ======================== */
+
+/* 大きいタッチターゲット - WCAG 2.5.5 Target Size (Enhanced) */
+[data-large-targets="true"] button,
+[data-large-targets="true"] [role="button"],
+[data-large-targets="true"] a,
+[data-large-targets="true"] input[type="checkbox"],
+[data-large-targets="true"] input[type="radio"] {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 12px;
+}
+
+[data-large-targets="true"] .touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* アイコンボタンの最小サイズ確保 */
+[data-large-targets="true"] .icon-button {
+  width: 48px;
+  height: 48px;
+  padding: 12px;
+}
+
+/* ========================
+   モーション削減
+   ======================== */
+
+/* アニメーション削減 - WCAG 2.3.3 Animation from Interactions */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-reduced-motion="true"] *,
+[data-reduced-motion="true"] *::before,
+[data-reduced-motion="true"] *::after {
+  animation-duration: var(--animation-duration, 0s) !important;
+  transition-duration: var(--transition-duration, 0s) !important;
+  scroll-behavior: auto !important;
+}
+
+/* 重要なフィードバック用のアニメーションは保持 */
+[data-reduced-motion="true"] .loading-spinner,
+[data-reduced-motion="true"] .progress-indicator {
+  animation-duration: 1s !important;
+}
+
+/* ========================
+   スクリーンリーダー対応
+   ======================== */
+
+/* スクリーンリーダー専用テキスト */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* フォーカス時に表示（スキップリンクなど）*/
+.sr-only:focus {
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 8px !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  clip: auto !important;
+  white-space: normal !important;
+  background-color: hsl(210, 100%, 95%) !important;
+  color: hsl(210, 100%, 20%) !important;
+  border: 2px solid hsl(210, 100%, 50%) !important;
+  border-radius: 4px !important;
+  z-index: 9999 !important;
+}
+
+/* ========================
+   キーボードナビゲーション
+   ======================== */
+
+/* スキップリンク */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: hsl(210, 100%, 95%);
+  color: hsl(210, 100%, 20%);
+  padding: 8px 12px;
+  text-decoration: none;
+  border-radius: 4px;
+  border: 2px solid hsl(210, 100%, 50%);
+  font-weight: 600;
+  z-index: 9999;
+  transition: top 0.2s ease-in-out;
+}
+
+.skip-link:focus {
+  top: 6px;
+  outline: none;
+}
+
+/* キーボードナビゲーション専用ヘルプ */
+[data-keyboard-nav="true"] .keyboard-hint {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: hsl(210, 100%, 95%);
+  color: hsl(210, 100%, 20%);
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid hsl(210, 50%, 70%);
+  font-size: 0.875rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 1000;
+}
+
+[data-keyboard-focus="true"] .keyboard-hint {
+  opacity: 1;
+}
+
+/* ========================
+   エラー・ステータス表示
+   ======================== */
+
+/* エラーメッセージ */
+.error-message {
+  color: hsl(0, 80%, 35%);
+  background-color: hsl(0, 80%, 95%);
+  border: 1px solid hsl(0, 80%, 70%);
+  padding: 12px;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+[data-high-contrast="true"] .error-message {
+  color: hsl(0, 90%, 25%) !important;
+  background-color: hsl(0, 90%, 98%) !important;
+  border: 2px solid hsl(0, 90%, 40%) !important;
+}
+
+/* 成功メッセージ */
+.success-message {
+  color: hsl(120, 70%, 25%);
+  background-color: hsl(120, 70%, 95%);
+  border: 1px solid hsl(120, 70%, 70%);
+  padding: 12px;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+[data-high-contrast="true"] .success-message {
+  color: hsl(120, 80%, 20%) !important;
+  background-color: hsl(120, 80%, 98%) !important;
+  border: 2px solid hsl(120, 80%, 40%) !important;
+}
+
+/* 警告メッセージ */
+.warning-message {
+  color: hsl(45, 90%, 25%);
+  background-color: hsl(45, 90%, 95%);
+  border: 1px solid hsl(45, 90%, 70%);
+  padding: 12px;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+[data-high-contrast="true"] .warning-message {
+  color: hsl(45, 100%, 20%) !important;
+  background-color: hsl(45, 100%, 95%) !important;
+  border: 2px solid hsl(45, 100%, 40%) !important;
+}
+
+/* ========================
+   モーダル・ダイアログ
+   ======================== */
+
+/* モーダルオーバーレイ */
+.modal-overlay {
+  background-color: hsla(0, 0%, 0%, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+[data-high-contrast="true"] .modal-overlay {
+  background-color: hsla(0, 0%, 0%, 0.8) !important;
+}
+
+/* モーダルコンテンツ */
+.modal-content {
+  position: relative;
+  background: hsl(0, 0%, 100%);
+  border-radius: 8px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+[data-high-contrast="true"] .modal-content {
+  border: 3px solid hsl(0, 0%, 30%) !important;
+  box-shadow: 0 0 0 1px hsl(0, 0%, 70%) !important;
+}
+
+/* ========================
+   テーブル・リスト
+   ======================== */
+
+/* テーブル行のhover状態 */
+.table-row:hover {
+  background-color: hsl(210, 20%, 95%);
+}
+
+[data-high-contrast="true"] .table-row:hover {
+  background-color: hsl(210, 40%, 90%) !important;
+  border: 1px solid hsl(210, 40%, 70%) !important;
+}
+
+/* 選択された行 */
+.table-row[aria-selected="true"] {
+  background-color: hsl(210, 100%, 95%);
+  border: 2px solid hsl(210, 100%, 70%);
+}
+
+[data-high-contrast="true"] .table-row[aria-selected="true"] {
+  background-color: hsl(210, 100%, 90%) !important;
+  border: 3px solid hsl(210, 100%, 50%) !important;
+}
+
+/* ========================
+   ユーティリティクラス
+   ======================== */
+
+/* フォーカス可能要素の基本スタイル */
+.focusable {
+  position: relative;
+  border-radius: 4px;
+  transition: outline 0.15s ease-in-out;
+}
+
+.focusable:focus {
+  outline: 2px solid hsl(210, 100%, 50%);
+  outline-offset: 2px;
+}
+
+/* 非アクティブ要素 */
+[aria-disabled="true"],
+.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 必須フィールドマーカー */
+.required::after {
+  content: " *";
+  color: hsl(0, 80%, 50%);
+  font-weight: bold;
+}
+
+[data-high-contrast="true"] .required::after {
+  color: hsl(0, 90%, 30%) !important;
+}
+
+/* ロード状態 */
+.loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.loading::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+[data-reduced-motion="true"] .loading::after {
+  animation: none;
+  opacity: 0.3;
+}
+
+/* ========================
+   カスタムプロパティ
+   ======================== */
+
+:root {
+  --focus-width: 2px;
+  --animation-duration: 0.2s;
+  --transition-duration: 0.15s;
+  --contrast-multiplier: 1;
+  
+  /* WCAG AA準拠カラーパレット（4.5:1以上のコントラスト比）*/
+  --color-text: hsl(220, 15%, 20%);
+  --color-text-muted: hsl(220, 10%, 40%);
+  --color-background: hsl(0, 0%, 100%);
+  --color-background-muted: hsl(220, 15%, 97%);
+  --color-border: hsl(220, 15%, 85%);
+  --color-border-focus: hsl(210, 100%, 50%);
+  
+  /* 状態色（AA準拠）*/
+  --color-success: hsl(120, 70%, 25%);
+  --color-success-bg: hsl(120, 70%, 95%);
+  --color-error: hsl(0, 80%, 35%);
+  --color-error-bg: hsl(0, 80%, 95%);
+  --color-warning: hsl(45, 90%, 25%);
+  --color-warning-bg: hsl(45, 90%, 95%);
+  --color-info: hsl(210, 90%, 30%);
+  --color-info-bg: hsl(210, 90%, 95%);
+}
+
+/* Dark mode対応（高コントラスト）*/
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-text: hsl(220, 15%, 95%);
+    --color-text-muted: hsl(220, 10%, 70%);
+    --color-background: hsl(220, 15%, 10%);
+    --color-background-muted: hsl(220, 15%, 15%);
+    --color-border: hsl(220, 15%, 25%);
+    --color-border-focus: hsl(210, 100%, 60%);
+  }
+}

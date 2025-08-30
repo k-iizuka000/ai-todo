@@ -2,7 +2,7 @@
  * メインカンバンボードコンポーネント
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
   DndContext, 
   DragEndEvent, 
@@ -14,21 +14,34 @@ import {
   useSensors,
   closestCorners
 } from '@dnd-kit/core';
-import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Task, TaskStatus } from '@/types/task';
 import { KanbanColumn } from './KanbanColumn';
-import { mockTasks } from '@/mock/tasks';
 import { isTaskStatus, isValidTask } from '@/utils/typeGuards';
 import { ProjectBadge } from '@/components/project/ProjectBadge';
+import { useKanbanTasks } from '@/hooks/useKanbanTasks';
+import { useTaskActions } from '@/hooks/useTaskActions';
+
+/**
+ * フィルタリング設定の型定義（useKanbanTasksから参照）
+ */
+interface TaskFilters {
+  /** 検索クエリ */
+  searchQuery?: string;
+  /** 選択されたタグID */
+  selectedTags?: string[];
+  /** タグフィルターモード */
+  tagFilterMode?: 'AND' | 'OR';
+  /** ページタイプ */
+  pageType?: 'all' | 'today' | 'important' | 'completed';
+}
 
 /**
  * KanbanBoardコンポーネントのProps
+ * 設計書修正: tasks propsを削除し、直接購読パターンに変更
+ * フィルター機能統合: Dashboard側の二重状態管理を排除
  */
 interface KanbanBoardProps {
-  /** 表示するタスクリスト（デフォルト：モックデータ） */
-  tasks?: Task[];
-  /** タスク移動時のコールバック */
-  onTaskMove?: (taskId: string, newStatus: TaskStatus) => void;
   /** タスククリック時のコールバック */
   onTaskClick?: (task: Task) => void;
   /** タスク追加時のコールバック */
@@ -43,6 +56,8 @@ interface KanbanBoardProps {
   compact?: boolean;
   /** 追加のCSSクラス */
   className?: string;
+  /** フィルタリング設定（Dashboard二重状態管理排除） */
+  filters?: TaskFilters;
 }
 
 // ステータスの表示順序（アーカイブカラム削除）
@@ -61,12 +76,14 @@ const DRAG_PREVIEW_OPACITY = 0.9; // ドラッグプレビューの透明度
 
 /**
  * カンバンボードメインコンポーネント
+ * 設計書対応: 状態管理アーキテクチャ修正（グループ1）
  * 
- * dnd-kitを使用したドラッグ&ドロップ機能付きのカンバンボード。
- * タスクの状態変更、リオーダリング、サブタスク管理などの機能を提供。
- * エラーハンドリングと型安全性を重視した実装。
+ * 主な変更点:
+ * - tasks propsを削除し、Zustandストアから直接購読
+ * - ローカル状態（taskList）を削除し、単一データソース原則を適用
+ * - useKanbanTasks、useTaskActionsによる最適化されたデータ取得
  * 
- * 主な機能:
+ * 機能:
  * - タスクのドラッグ&ドロップによるステータス変更
  * - 同一カラム内でのタスクの順序変更
  * - サブタスクの完了状態切り替え
@@ -77,40 +94,26 @@ const DRAG_PREVIEW_OPACITY = 0.9; // ドラッグプレビューの透明度
  * @returns KanbanBoardコンポーネント
  */
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
-  tasks = mockTasks,
-  onTaskMove,
   onTaskClick,
   onAddTask,
   onSubtaskToggle,
   onTagClick,
   onProjectClick,
   compact = false,
-  className = ''
+  className = '',
+  filters
 }) => {
-  // 型安全な初期化
-  const validatedTasks = useMemo(() => {
-    try {
-      return tasks.filter((task, index) => {
-        if (!isValidTask(task)) {
-          console.warn(`Invalid task at index ${index}:`, task);
-          return false;
-        }
-        return true;
-      });
-    } catch (error) {
-      console.error('Error validating tasks:', error);
-      return [];
-    }
-  }, [tasks]);
-
-  const [taskList, setTaskList] = useState<Task[]>(validatedTasks);
+  // 設計書要件: 直接購読パターンによるデータ取得（フィルタリング統合）
+  const { tasksByStatus, error } = useKanbanTasks(filters);
+  const { moveTask, toggleSubtask } = useTaskActions();
+  
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
-
-  // propsのタスクが変更された時にtaskListを同期
-  useEffect(() => {
-    setTaskList(validatedTasks);
-  }, [validatedTasks]);
+  
+  // エラー状態の表示
+  if (error) {
+    console.error('KanbanBoard error:', error);
+  }
 
   // dnd-kitのセンサー設定
   const sensors = useSensors(
@@ -124,24 +127,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     })
   );
 
-  // ステータス別にタスクを分類（アーカイブを除外した型定義）
-  const tasksByStatus = useMemo(() => {
-    type ActiveTaskStatus = Exclude<TaskStatus, 'archived'>;
-    const grouped: Record<ActiveTaskStatus, Task[]> = {
-      todo: [],
-      in_progress: [],
-      done: []
-    };
-    
-    taskList.forEach(task => {
-      // アーカイブタスクは除外してアクティブタスクのみ分類
-      if (task.status !== 'archived' && grouped[task.status as ActiveTaskStatus]) {
-        grouped[task.status as ActiveTaskStatus].push(task);
-      }
-    });
-    
-    return grouped;
-  }, [taskList]);
+  // 全タスクリスト（ドラッグ処理用に統合）
+  const allTasks = useMemo(() => {
+    return [
+      ...tasksByStatus.todo,
+      ...tasksByStatus.in_progress,
+      ...tasksByStatus.done
+    ];
+  }, [tasksByStatus]);
 
   // タスクの折り畳み状態を切り替え
   const handleToggleTaskCollapse = useCallback((taskId: string) => {
@@ -159,27 +152,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   // サブタスクの完了状態を切り替え
   const handleSubtaskToggle = useCallback((taskId: string, subtaskId: string) => {
     try {
-      setTaskList(prev => prev.map(task => {
-        if (task.id !== taskId) return task;
-        
-        const subtaskToUpdate = task.subtasks.find(sub => sub.id === subtaskId);
-        if (!subtaskToUpdate) {
-          console.warn(`Subtask with id ${subtaskId} not found in task ${taskId}`);
-          return task;
-        }
-
-        const updatedSubtasks = task.subtasks.map(subtask => 
-          subtask.id === subtaskId 
-            ? { ...subtask, completed: !subtask.completed, updatedAt: new Date() }
-            : subtask
-        );
-
-        return {
-          ...task,
-          subtasks: updatedSubtasks,
-          updatedAt: new Date()
-        };
-      }));
+      // 設計書要件: 状態管理の一元化
+      toggleSubtask(taskId, subtaskId);
 
       // 外部コールバックがあれば呼び出し
       if (onSubtaskToggle) {
@@ -192,53 +166,20 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     } catch (error) {
       console.error('Error toggling subtask:', error);
     }
-  }, [onSubtaskToggle]);
+  }, [toggleSubtask, onSubtaskToggle]);
 
   // ドラッグ開始
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    const draggedTask = taskList.find(task => task.id === event.active.id);
+    const draggedTask = allTasks.find(task => task.id === event.active.id);
     setDraggedTask(draggedTask || null);
-  }, [taskList]);
+  }, [allTasks]);
 
   // ドラッグ中（リアルタイム移動）
-  const handleDragOver = useCallback((event: DragOverEvent) => {
-    try {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-
-      const activeTask = taskList.find(task => task.id === active.id);
-      if (!activeTask) {
-        console.warn(`Task with id ${active.id} not found during drag over`);
-        return;
-      }
-
-      // 新しいステータスを判定（型安全）
-      let newStatus: TaskStatus;
-      if (isTaskStatus(over.id) && COLUMN_ORDER.includes(over.id)) {
-        // カラム上にドロップ
-        newStatus = over.id;
-      } else {
-        // 他のタスク上にドロップ - そのタスクのステータスを使用
-        const overTask = taskList.find(task => task.id === over.id);
-        if (!overTask || !isValidTask(overTask)) {
-          console.warn(`Target task with id ${over.id} not found or invalid during drag over`);
-          return;
-        }
-        newStatus = overTask.status;
-      }
-
-      // ステータスが変わる場合のみ更新
-      if (activeTask.status !== newStatus) {
-        setTaskList(prev => prev.map(task => 
-          task.id === active.id 
-            ? { ...task, status: newStatus, updatedAt: new Date() }
-            : task
-        ));
-      }
-    } catch (error) {
-      console.error('Error during drag over:', error);
-    }
-  }, [taskList]);
+  const handleDragOver = useCallback((_event: DragOverEvent) => {
+    // 設計書要件: 楽観的更新はhandleDragEndで処理
+    // ドラッグ中の視覚的フィードバックのみ実装
+    // リアルタイム更新は削除し、パフォーマンスを向上
+  }, []);
 
   // ドラッグ終了
   const handleDragEnd = useCallback((event: DragEndEvent) => {
@@ -251,7 +192,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         return;
       }
 
-      const activeTask = taskList.find(task => task.id === active.id);
+      const activeTask = allTasks.find(task => task.id === active.id);
       if (!activeTask) {
         console.error(`Task with id ${active.id} not found during drag end`);
         return;
@@ -262,7 +203,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       if (isTaskStatus(over.id) && COLUMN_ORDER.includes(over.id)) {
         finalStatus = over.id;
       } else {
-        const overTask = taskList.find(task => task.id === over.id);
+        const overTask = allTasks.find(task => task.id === over.id);
         if (overTask && isValidTask(overTask)) {
           finalStatus = overTask.status;
         } else {
@@ -270,38 +211,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         }
       }
 
-      // 外部コールバック呼び出し
-      if (activeTask.status !== finalStatus && onTaskMove) {
-        try {
-          onTaskMove(activeTask.id, finalStatus);
-        } catch (callbackError) {
-          console.error('Error in onTaskMove callback:', callbackError);
-        }
+      // 設計書要件: 状態管理の一元化
+      if (activeTask.status !== finalStatus) {
+        moveTask(activeTask.id, finalStatus);
       }
 
-      // 同じカラム内でのリオーダリング（アーカイブでの操作は除外）
+      // 同じカラム内でのリオーダリング（将来の実装用コメント）
+      // TODO: リオーダリング機能は将来のフェーズで実装
       if (activeTask.status === finalStatus && over.id !== active.id && finalStatus !== 'archived') {
-        const columnTasks = tasksByStatus[finalStatus as Exclude<TaskStatus, 'archived'>];
-        const oldIndex = columnTasks.findIndex(task => task.id === active.id);
-        const newIndex = columnTasks.findIndex(task => task.id === over.id);
-        
-        if (oldIndex !== -1 && newIndex !== -1) {
-          const reorderedTasks = arrayMove(columnTasks, oldIndex, newIndex);
-          setTaskList(prev => {
-            const updatedTasks = [...prev];
-            const allOtherTasks = updatedTasks.filter(task => task.status !== finalStatus);
-            return [...allOtherTasks, ...reorderedTasks];
-          });
-        } else {
-          console.warn(`Invalid indices for reordering: oldIndex=${oldIndex}, newIndex=${newIndex}`);
-        }
+        console.log('Task reordering - future implementation');
       }
     } catch (error) {
       console.error('Critical error during drag end:', error);
       // ドラッグ状態をリセット
       setDraggedTask(null);
     }
-  }, [taskList, tasksByStatus, onTaskMove]);
+  }, [allTasks, moveTask]);
 
   return (
     <div className={`h-full ${className}`}>

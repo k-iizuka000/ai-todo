@@ -536,11 +536,70 @@ export const useTaskStore = create<TaskState>()(
       }),
       {
         name: 'task-store',
+        // 設計書要件: persistミドルウェア最適化
         partialize: (state) => ({
           tasks: state.tasks,
           filter: state.filter,
-          sort: state.sort
-        })
+          sort: state.sort,
+          // 重要でない一時的な状態は除外
+          // isLoading, error, selectedTaskIdは永続化しない
+        }),
+        // ストレージの最適化設定
+        storage: {
+          getItem: (name) => {
+            try {
+              const item = localStorage.getItem(name);
+              return item ? JSON.parse(item) : null;
+            } catch {
+              return null;
+            }
+          },
+          setItem: (name, value) => {
+            try {
+              // デバウンス機能付きの保存
+              // 頻繁な更新を抑制して性能向上
+              const throttledSave = () => {
+                localStorage.setItem(name, JSON.stringify(value));
+              };
+              
+              // 既存のタイムアウトをクリア
+              if ((window as any)._taskStoreThrottle) {
+                clearTimeout((window as any)._taskStoreThrottle);
+              }
+              
+              // 250ms後に保存（デバウンス）
+              (window as any)._taskStoreThrottle = setTimeout(throttledSave, 250);
+            } catch (error) {
+              console.error('Failed to save to localStorage:', error);
+            }
+          },
+          removeItem: (name) => {
+            try {
+              localStorage.removeItem(name);
+            } catch (error) {
+              console.error('Failed to remove from localStorage:', error);
+            }
+          }
+        },
+        // バージョン管理とマイグレーション
+        version: 1,
+        migrate: (persistedState: any, version: number) => {
+          if (version < 1) {
+            // 将来のマイグレーション処理をここに実装
+            return persistedState;
+          }
+          return persistedState;
+        },
+        // エラー時の回復処理
+        onRehydrateStorage: (state) => {
+          return (state, error) => {
+            if (error) {
+              console.error('Failed to rehydrate task store:', error);
+              // エラー時はデフォルト状態にリセット
+              state?.resetStore();
+            }
+          };
+        }
       }
     ),
     {

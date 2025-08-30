@@ -488,7 +488,6 @@ export class ApiClient {
     if (responseTime < 2000) return 'very_slow';
     return 'critical';
   }
-  }
 
   /**
    * GET リクエスト

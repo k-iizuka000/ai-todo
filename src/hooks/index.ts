@@ -33,3 +33,7 @@ export {
 // アクセシビリティ関連hooks
 export { useFocusManagement } from './useFocusManagement';
 export type { FocusManagementOptions } from './useFocusManagement';
+
+// 設計書対応: グループ1状態管理アーキテクチャ修正
+export { useKanbanTasks } from './useKanbanTasks';
+export { useTaskActions } from './useTaskActions';

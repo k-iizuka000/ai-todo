@@ -16,6 +16,7 @@ import { Plus, Search, Filter, Columns, List, X } from 'lucide-react';
 import { TagBadge } from '@/components/tag/TagBadge';
 import { useTagStore } from '@/stores/tagStore';
 import { useTaskStore } from '@/stores/taskStore';
+import { useKanbanTasks } from '@/hooks/useKanbanTasks';
 import type { Task, TaskStatus, TaskDetail, CreateTaskInput } from '@/types/task';
 import { Tag } from '@/types/tag';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
@@ -41,7 +42,7 @@ const Dashboard: React.FC = () => {
   // タグストアから利用可能なタグを取得
   const { tags: availableTags } = useTagStore();
   
-  // タスクストア - 通常のパターンを使用
+  // タスクストア - 通常のパターンを使用（Archive用の基本データ取得）
   const { tasks: tasksFromStore, addTask, isLoading, error } = useTaskStore();
   
   // URLからタスクページの種類を判定
@@ -78,113 +79,22 @@ const Dashboard: React.FC = () => {
     }
   }, [location.search]);
   
-  // タグフィルタリング機能の実装（パフォーマンス最適化）
-  const filterTasksByTags = useCallback((tasks: Task[], tagIds: string[], mode: 'AND' | 'OR'): Task[] => {
-    if (tagIds.length === 0) return tasks;
-    
-    // 大量タグ選択時のパフォーマンス最適化: SetでO(1)検索
-    const tagIdSet = new Set(tagIds);
-    
-    return tasks.filter(task => {
-      // タスクのタグIDを事前にSetに変換してO(1)検索を可能にする
-      const taskTagIdSet = new Set(task.tags.map(tag => tag.id));
-      
-      if (mode === 'AND') {
-        // すべてのタグが含まれること（早期リターンでパフォーマンス向上）
-        for (const tagId of tagIdSet) {
-          if (!taskTagIdSet.has(tagId)) {
-            return false;
-          }
-        }
-        return true;
-      } else {
-        // いずれかのタグが含まれること（早期リターンでパフォーマンス向上）
-        for (const tagId of tagIdSet) {
-          if (taskTagIdSet.has(tagId)) {
-            return true;
-          }
-        }
-        return false;
-      }
-    });
-  }, []);
+  // 設計書対応: フィルタリング処理をKanbanBoard側に統合（二重状態管理排除）
+  // フィルタリング関数群とdisplayTasksメモ化を削除し、KanbanBoardに委譲
   
-  // 検索機能の実装
-  const filterTasksBySearch = useCallback((tasks: Task[], query: string): Task[] => {
-    if (!query.trim()) return tasks;
-    
-    const lowerQuery = query.toLowerCase();
-    return tasks.filter(task => 
-      task.title.toLowerCase().includes(lowerQuery) ||
-      task.description?.toLowerCase().includes(lowerQuery) ||
-      task.tags.some(tag => tag.name.toLowerCase().includes(lowerQuery))
-    );
-  }, []);
+  // リストビュー用のフィルタリング済みタスク（KanbanBoardと同じロジック）
+  const { tasks: filteredTasksForList } = useKanbanTasks({
+    searchQuery,
+    selectedTags,
+    tagFilterMode,
+    pageType
+  });
   
-  // ページタイプに基づくタスク取得をメモ化（パフォーマンス最適化）
-  const baseTasksByPage = useMemo(() => {
-    const allTasks = tasksFromStore.length > 0 ? tasksFromStore : mockTasks; // フォールバック
-    
-    switch (pageType) {
-      case 'today':
-        // 今日のタスク: 今日が期限のもの、または今日作成されたもの
-        const today = new Date().toISOString().split('T')[0];
-        return allTasks.filter(task => 
-          (task.dueDate && task.dueDate.startsWith(today)) ||
-          (task.createdAt && task.createdAt.startsWith(today))
-        );
-      case 'important':
-        return allTasks.filter(task => task.priority === 'urgent' || task.priority === 'high');
-      case 'completed':
-        return allTasks.filter(task => task.status === 'done');
-      default:
-        return allTasks;
-    }
-  }, [pageType, tasksFromStore]);
-
-  // アクティブタスクのみを抽出（設計書2.2: activeTasksOnlyのメモ化実装）
-  const activeTasksOnly = useMemo(() => 
-    baseTasksByPage.filter(task => task.status !== 'archived'),
-    [baseTasksByPage]
-  );
-
-  // 表示するタスクを決定（メモ化とパフォーマンス最適化）
-  const displayTasks = useMemo(() => {
-    let tasks = activeTasksOnly;
-    
-    // フィルターが設定されていない場合は早期リターン
-    if (selectedTags.length === 0 && !searchQuery.trim()) {
-      return tasks;
-    }
-    
-    // タグフィルタリングを適用
-    if (selectedTags.length > 0) {
-      tasks = filterTasksByTags(tasks, selectedTags, tagFilterMode);
-    }
-    
-    // 検索フィルタリングを適用
-    if (searchQuery.trim()) {
-      tasks = filterTasksBySearch(tasks, searchQuery);
-    }
-    
-    return tasks;
-  }, [activeTasksOnly, selectedTags, tagFilterMode, searchQuery, filterTasksByTags, filterTasksBySearch]);
-
-  // アーカイブセクション用のタスクを取得（baseTasksByPageを再利用）
-  const allTasksForArchived = useMemo(() => {
-    let tasks = baseTasksByPage;
-    
-    // アーカイブタスクにもフィルターを適用
-    if (selectedTags.length > 0) {
-      tasks = filterTasksByTags(tasks, selectedTags, tagFilterMode);
-    }
-    
-    if (searchQuery.trim()) {
-      tasks = filterTasksBySearch(tasks, searchQuery);
-    }
-    
-    return tasks;
-  }, [baseTasksByPage, selectedTags, tagFilterMode, searchQuery, filterTasksByTags, filterTasksBySearch]);
+  // ArchivedTasksSection用の最小限のフィルタリング（一時的な解決策）
+  const archivedTasksForDisplay = useMemo(() => {
+    // 基本的にはtasksFromStoreをそのまま使用（KanbanBoardと同じデータソース）
+    return tasksFromStore.length > 0 ? tasksFromStore : mockTasks;
+  }, [tasksFromStore]);
   
   // ページタイトルを決定
   const getPageTitle = (): string => {
@@ -226,9 +136,8 @@ const Dashboard: React.FC = () => {
     };
   }, [location.pathname, showTaskDetailModal]);
 
-  const handleTaskMove = (_taskId: string, _newStatus: TaskStatus) => {
-    // TODO: タスクのステータス更新処理
-  };
+  // 設計書対応: KanbanBoardが直接状態管理するため、handleTaskMoveは不要
+  // タスク移動処理はuseTaskActions内のmoveTaskで処理される
 
   const handleTaskClick = (task: Task) => {
     console.log('Task clicked:', task.id, task.title);
@@ -526,18 +435,22 @@ const Dashboard: React.FC = () => {
         {viewMode === 'kanban' ? (
           <>
             <KanbanBoard
-              tasks={displayTasks}
-              onTaskMove={handleTaskMove}
               onTaskClick={handleTaskClick}
               onAddTask={handleAddTask}
               onTagClick={handleTagSelect}
               onProjectClick={handleProjectClick}
               className="h-[calc(100vh-20rem)]"
+              filters={{
+                searchQuery,
+                selectedTags,
+                tagFilterMode,
+                pageType
+              }}
             />
             {/* 設計書2.1: カンバンビューにアーカイブセクションを追加 */}
             <div className="mt-6">
               <ArchivedTasksSection
-                tasks={allTasksForArchived}
+                tasks={archivedTasksForDisplay}
                 storageKey="dashboard-kanban"
                 onTaskClick={handleTaskClick}
                 onTagSelect={handleTagSelect}
@@ -548,7 +461,7 @@ const Dashboard: React.FC = () => {
         ) : (
           <>
             <div className="space-y-4">
-              {displayTasks.map((task) => (
+              {filteredTasksForList.map((task) => (
                 <Card key={task.id} variant="interactive" onClick={() => handleTaskClick(task)}>
                   <CardHeader>
                     <div className="flex justify-between items-start">
@@ -583,7 +496,7 @@ const Dashboard: React.FC = () => {
             {/* リストビューのアーカイブセクション */}
             <div className="mt-6">
               <ArchivedTasksSection
-                tasks={allTasksForArchived}
+                tasks={archivedTasksForDisplay}
                 storageKey="dashboard-list"
                 onTaskClick={handleTaskClick}
                 onTagSelect={handleTagSelect}

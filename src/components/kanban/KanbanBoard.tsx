@@ -1,5 +1,6 @@
 /**
  * メインカンバンボードコンポーネント
+ * Issue #026 Group 3 Task 3.2: 型安全性強化とエラーバウンダリ統合
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
@@ -21,43 +22,52 @@ import { isTaskStatus, isValidTask } from '@/utils/typeGuards';
 import { ProjectBadge } from '@/components/project/ProjectBadge';
 import { useKanbanTasks } from '@/hooks/useKanbanTasks';
 import { useTaskActions } from '@/hooks/useTaskActions';
+import { KanbanErrorBoundary } from './KanbanErrorBoundary';
 
 /**
  * フィルタリング設定の型定義（useKanbanTasksから参照）
+ * Issue #026 Group 3: 型安全性強化
  */
 interface TaskFilters {
   /** 検索クエリ */
-  searchQuery?: string;
+  readonly searchQuery?: string;
   /** 選択されたタグID */
-  selectedTags?: string[];
+  readonly selectedTags?: readonly string[];
   /** タグフィルターモード */
-  tagFilterMode?: 'AND' | 'OR';
+  readonly tagFilterMode?: 'AND' | 'OR';
   /** ページタイプ */
-  pageType?: 'all' | 'today' | 'important' | 'completed';
+  readonly pageType?: 'all' | 'today' | 'important' | 'completed';
 }
 
 /**
  * KanbanBoardコンポーネントのProps
+ * Issue #026 Group 3 Task 3.2: プロップス型の厳密化とエラーバウンダリ統合
  * 設計書修正: tasks propsを削除し、直接購読パターンに変更
  * フィルター機能統合: Dashboard側の二重状態管理を排除
  */
 interface KanbanBoardProps {
-  /** タスククリック時のコールバック */
-  onTaskClick?: (task: Task) => void;
-  /** タスク追加時のコールバック */
-  onAddTask?: (status: TaskStatus) => void;
-  /** サブタスク完了切り替え時のコールバック */
-  onSubtaskToggle?: (taskId: string, subtaskId: string) => void;
-  /** タグクリック時のコールバック */
-  onTagClick?: (tagId: string) => void;
-  /** プロジェクトクリック時のコールバック */
-  onProjectClick?: (projectId: string) => void;
-  /** コンパクト表示モード */
-  compact?: boolean;
-  /** 追加のCSSクラス */
-  className?: string;
-  /** フィルタリング設定（Dashboard二重状態管理排除） */
-  filters?: TaskFilters;
+  /** タスククリック時のコールバック - 必須でvalidなTaskオブジェクトを保証 */
+  readonly onTaskClick?: (task: Readonly<Task>) => void;
+  /** タスク追加時のコールバック - 有効なTaskStatusのみ許可 */
+  readonly onAddTask?: (status: TaskStatus) => void;
+  /** サブタスク完了切り替え時のコールバック - 非空文字列のみ許可 */
+  readonly onSubtaskToggle?: (taskId: NonNullable<string>, subtaskId: NonNullable<string>) => void;
+  /** タグクリック時のコールバック - 非空文字列のみ許可 */
+  readonly onTagClick?: (tagId: NonNullable<string>) => void;
+  /** プロジェクトクリック時のコールバック - 非空文字列のみ許可 */
+  readonly onProjectClick?: (projectId: NonNullable<string>) => void;
+  /** コンパクト表示モード - デフォルトはfalse */
+  readonly compact?: boolean;
+  /** 追加のCSSクラス - デフォルトは空文字列 */
+  readonly className?: string;
+  /** フィルタリング設定（Dashboard二重状態管理排除） - 読み取り専用 */
+  readonly filters?: Readonly<TaskFilters>;
+  /** エラーハンドリング関連のコールバック */
+  readonly onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
+  /** エラー復旧時のコールバック */
+  readonly onRecoverySuccess?: () => void;
+  /** デバッグモードの有効化（開発環境での詳細エラー情報表示） */
+  readonly enableDebugMode?: boolean;
 }
 
 // ステータスの表示順序（アーカイブカラム削除）
@@ -75,13 +85,15 @@ const DRAG_ACTIVATION_DISTANCE = 8; // ピクセル単位でのドラッグ開�
 const DRAG_PREVIEW_OPACITY = 0.9; // ドラッグプレビューの透明度
 
 /**
- * カンバンボードメインコンポーネント
+ * 内部KanbanBoardコンポーネント（エラーバウンダリで包まれる前）
+ * Issue #026 Group 3 Task 3.2: 型安全性強化とエラーバウンダリ統合
  * 設計書対応: 状態管理アーキテクチャ修正（グループ1）
  * 
  * 主な変更点:
  * - tasks propsを削除し、Zustandストアから直接購読
  * - ローカル状態（taskList）を削除し、単一データソース原則を適用
  * - useKanbanTasks、useTaskActionsによる最適化されたデータ取得
+ * - 型安全性の強化とエラーハンドリングの改善
  * 
  * 機能:
  * - タスクのドラッグ&ドロップによるステータス変更
@@ -89,11 +101,9 @@ const DRAG_PREVIEW_OPACITY = 0.9; // ドラッグプレビューの透明度
  * - サブタスクの完了状態切り替え
  * - コンパクト表示モードの切り替え
  * - アクセシビリティ対応
- * 
- * @param props KanbanBoardコンポーネントのプロパティ
- * @returns KanbanBoardコンポーネント
+ * - 包括的エラーハンドリング
  */
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({
+const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   onTaskClick,
   onAddTask,
   onSubtaskToggle,
@@ -101,8 +111,36 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onProjectClick,
   compact = false,
   className = '',
-  filters
+  filters,
+  enableDebugMode = false
 }) => {
+  // Issue #026 Group 3: プロップスの型安全性検証
+  React.useEffect(() => {
+    if (enableDebugMode || process.env.NODE_ENV === 'development') {
+      // 型安全性のランタイムチェック
+      if (onTaskClick && typeof onTaskClick !== 'function') {
+        console.error('KanbanBoard: onTaskClick must be a function');
+      }
+      if (onAddTask && typeof onAddTask !== 'function') {
+        console.error('KanbanBoard: onAddTask must be a function');
+      }
+      if (onSubtaskToggle && typeof onSubtaskToggle !== 'function') {
+        console.error('KanbanBoard: onSubtaskToggle must be a function');
+      }
+      if (onTagClick && typeof onTagClick !== 'function') {
+        console.error('KanbanBoard: onTagClick must be a function');
+      }
+      if (onProjectClick && typeof onProjectClick !== 'function') {
+        console.error('KanbanBoard: onProjectClick must be a function');
+      }
+      if (className && typeof className !== 'string') {
+        console.error('KanbanBoard: className must be a string');
+      }
+      if (compact !== undefined && typeof compact !== 'boolean') {
+        console.error('KanbanBoard: compact must be a boolean');
+      }
+    }
+  }, [onTaskClick, onAddTask, onSubtaskToggle, onTagClick, onProjectClick, compact, className, enableDebugMode]);
   // 設計書要件: 直接購読パターンによるデータ取得（フィルタリング統合）
   const { tasksByStatus, error } = useKanbanTasks(filters);
   const { moveTask, toggleSubtask } = useTaskActions();
@@ -149,9 +187,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     });
   }, []);
 
-  // サブタスクの完了状態を切り替え
+  // サブタスクの完了状態を切り替え - Issue #026 Group 3: エラーハンドリング強化
   const handleSubtaskToggle = useCallback((taskId: string, subtaskId: string) => {
     try {
+      // Issue #026 Group 3: 入力値の型安全性チェック
+      if (!taskId || typeof taskId !== 'string' || taskId.trim().length === 0) {
+        throw new Error('Invalid taskId provided to handleSubtaskToggle');
+      }
+      if (!subtaskId || typeof subtaskId !== 'string' || subtaskId.trim().length === 0) {
+        throw new Error('Invalid subtaskId provided to handleSubtaskToggle');
+      }
+
       // 設計書要件: 状態管理の一元化
       toggleSubtask(taskId, subtaskId);
 
@@ -161,10 +207,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           onSubtaskToggle(taskId, subtaskId);
         } catch (callbackError) {
           console.error('Error in onSubtaskToggle callback:', callbackError);
+          // コールバックのエラーは上位に伝播させない
         }
       }
     } catch (error) {
       console.error('Error toggling subtask:', error);
+      // エラーを再スローして上位のエラーバウンダリでキャッチ
+      throw new Error(`Failed to toggle subtask: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, [toggleSubtask, onSubtaskToggle]);
 
@@ -305,4 +354,61 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       </DndContext>
     </div>
   );
+};
+
+/**
+ * エラーバウンダリで包まれたKanbanBoardコンポーネント
+ * Issue #026 Group 3 Task 3.2: エラーバウンダリ統合
+ * 
+ * このコンポーネントは自動的に以下の機能を提供します:
+ * - React Error Boundariesによるエラーキャッチ
+ * - ユーザーフレンドリーなエラー表示
+ * - 自動リカバリー機能
+ * - 開発者向け詳細デバッグ情報
+ * 
+ * @param props KanbanBoardコンポーネントのプロパティ
+ * @returns エラーバウンダリで包まれたKanbanBoardコンポーネント
+ */
+export const KanbanBoard: React.FC<KanbanBoardProps> = (props) => {
+  return (
+    <KanbanErrorBoundary
+      onError={props.onError}
+      onRecoverySuccess={props.onRecoverySuccess}
+      enableDebugMode={props.enableDebugMode}
+      onRecoveryAttempt={() => {
+        console.log('KanbanBoard: Attempting error recovery...');
+      }}
+    >
+      <KanbanBoardInternal {...props} />
+    </KanbanErrorBoundary>
+  );
+};
+
+// 型安全なプロップス検証のためのユーティリティ関数
+export const validateKanbanBoardProps = (props: Partial<KanbanBoardProps>): string[] => {
+  const errors: string[] = [];
+
+  if (props.onTaskClick !== undefined && typeof props.onTaskClick !== 'function') {
+    errors.push('onTaskClick must be a function');
+  }
+  if (props.onAddTask !== undefined && typeof props.onAddTask !== 'function') {
+    errors.push('onAddTask must be a function');
+  }
+  if (props.onSubtaskToggle !== undefined && typeof props.onSubtaskToggle !== 'function') {
+    errors.push('onSubtaskToggle must be a function');
+  }
+  if (props.onTagClick !== undefined && typeof props.onTagClick !== 'function') {
+    errors.push('onTagClick must be a function');
+  }
+  if (props.onProjectClick !== undefined && typeof props.onProjectClick !== 'function') {
+    errors.push('onProjectClick must be a function');
+  }
+  if (props.compact !== undefined && typeof props.compact !== 'boolean') {
+    errors.push('compact must be a boolean');
+  }
+  if (props.className !== undefined && typeof props.className !== 'string') {
+    errors.push('className must be a string');
+  }
+
+  return errors;
 };

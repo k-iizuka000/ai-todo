@@ -87,3 +87,8 @@ issues/
 
 database/
 script/
+
+# スラッシュコマンド関連
+.issue-state/
+.validation-*-proof.marker
+.issue-context.env

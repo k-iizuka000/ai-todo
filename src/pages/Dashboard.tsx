@@ -323,6 +323,7 @@ const Dashboard: React.FC = () => {
               className="pl-10"
               aria-label="タスクを検索"
               role="searchbox"
+              name="タスクを検索"
             />
           </div>
         </div>
@@ -434,6 +435,11 @@ const Dashboard: React.FC = () => {
       <div className="flex-1 min-h-0">
         {viewMode === 'kanban' ? (
           <>
+            {filteredTasksForList.length === 0 && searchQuery.trim() && (
+              <div className="text-center text-muted-foreground py-8" role="status" aria-live="polite">
+                検索結果が見つかりません
+              </div>
+            )}
             <KanbanBoard
               onTaskClick={handleTaskClick}
               onAddTask={handleAddTask}
@@ -460,6 +466,11 @@ const Dashboard: React.FC = () => {
           </>
         ) : (
           <>
+            {filteredTasksForList.length === 0 && searchQuery.trim() && (
+              <div className="text-center text-muted-foreground py-8" role="status" aria-live="polite">
+                検索結果が見つかりません
+              </div>
+            )}
             <div className="space-y-4">
               {filteredTasksForList.map((task) => (
                 <Card key={task.id} variant="interactive" onClick={() => handleTaskClick(task)}>

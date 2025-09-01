@@ -22,7 +22,7 @@ import { isTaskStatus, isValidTask } from '@/utils/typeGuards';
 import { ProjectBadge } from '@/components/project/ProjectBadge';
 import { useKanbanTasks } from '@/hooks/useKanbanTasks';
 import { useTaskActions } from '@/hooks/useTaskActions';
-import { KanbanErrorBoundary } from './KanbanErrorBoundary';
+import { TaskErrorBoundary } from '../task/TaskErrorBoundary';
 
 /**
  * フィルタリング設定の型定義（useKanbanTasksから参照）
@@ -358,10 +358,11 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
 
 /**
  * エラーバウンダリで包まれたKanbanBoardコンポーネント
- * Issue #026 Group 3 Task 3.2: エラーバウンダリ統合
+ * Issue #027: 無限レンダリングループ対応 - TaskErrorBoundaryに統合
  * 
  * このコンポーネントは自動的に以下の機能を提供します:
  * - React Error Boundariesによるエラーキャッチ
+ * - 🚨 無限レンダリングループの検出・保護
  * - ユーザーフレンドリーなエラー表示
  * - 自動リカバリー機能
  * - 開発者向け詳細デバッグ情報
@@ -371,16 +372,19 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
  */
 export const KanbanBoard: React.FC<KanbanBoardProps> = (props) => {
   return (
-    <KanbanErrorBoundary
-      onError={props.onError}
-      onRecoverySuccess={props.onRecoverySuccess}
-      enableDebugMode={props.enableDebugMode}
-      onRecoveryAttempt={() => {
-        console.log('KanbanBoard: Attempting error recovery...');
+    <TaskErrorBoundary
+      onError={(error, errorInfo) => {
+        // Issue 027: 無限レンダリングループの特別ログ
+        console.log('🚨 KanbanBoard: TaskErrorBoundary activated', {
+          error: error.message,
+          component: 'KanbanBoard',
+          useKanbanTasks: true
+        });
+        props.onError?.(error, errorInfo);
       }}
     >
       <KanbanBoardInternal {...props} />
-    </KanbanErrorBoundary>
+    </TaskErrorBoundary>
   );
 };
 

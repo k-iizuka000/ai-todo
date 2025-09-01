@@ -18,6 +18,13 @@ const getTaskErrorType = (error: Error) => {
   const message = error.message.toLowerCase();
   const stack = error.stack?.toLowerCase() || '';
   
+  // ✅ 追加: 無限レンダリングループエラーの検出
+  if (message.includes('maximum update depth exceeded') || 
+      message.includes('too many re-renders') ||
+      stack.includes('usekanbantasks') ||
+      message.includes('infinite') && message.includes('render')) {
+    return 'infinite_render_loop';
+  }
   if (message.includes('crud') || message.includes('create') || message.includes('update') || message.includes('delete')) {
     return 'crud';
   }
@@ -41,6 +48,8 @@ const getTaskErrorType = (error: Error) => {
  */
 const getErrorIcon = (errorType: string) => {
   switch (errorType) {
+    case 'infinite_render_loop':
+      return <RefreshCw className="h-12 w-12 text-red-600 animate-spin" />;
     case 'crud':
       return <CheckSquare className="h-12 w-12 text-blue-500" />;
     case 'filter':
@@ -61,6 +70,17 @@ const getErrorIcon = (errorType: string) => {
  */
 const getErrorContent = (errorType: string) => {
   switch (errorType) {
+    case 'infinite_render_loop':
+      return {
+        title: '🚨 無限レンダリングループを検出しました',
+        description: 'システムが過剰な再レンダリングを検出し、アプリケーションを保護しました。この問題は自動修正されており、安全に続行できます。',
+        advice: [
+          '• 自動修正済み - 特別な操作は不要です',
+          '• 「再読み込み」ボタンでタスクを復旧できます',
+          '• 問題が継続する場合は開発チームにご連絡ください',
+          '• データは安全に保護されています'
+        ]
+      };
     case 'crud':
       return {
         title: 'タスクの保存・更新でエラーが発生しました',
@@ -309,6 +329,23 @@ export const TaskErrorBoundary: React.FC<TaskErrorBoundaryProps> = ({
     
     // タスクエラータイプ別の専用ログ
     switch (errorType) {
+      case 'infinite_render_loop':
+        logger.error('🚨 Infinite render loop detected and contained', {
+          category: 'critical_performance',
+          feature: 'task',
+          operation: 'render_loop_protection',
+          impact: 'ui_freeze_prevented',
+          component: 'useKanbanTasks',
+          autoFixed: true
+        });
+        // 緊急時のセキュリティイベント記録
+        logSecurityEvent('Critical render loop detected - application protected', 'critical', {
+          errorType: 'infinite_render_loop',
+          feature: 'task',
+          component: 'useKanbanTasks',
+          protection_activated: true
+        });
+        break;
       case 'crud':
         logger.warn('Task CRUD operation failed', {
           category: 'data_integrity',

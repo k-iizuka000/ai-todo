@@ -170,14 +170,19 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
   }, []);
   
   /**
-   * タグ参照の整合性検証
+   * タグ参照の整合性検証（null安全版）
    */
-  const validateTagReferences = useCallback((task: Task): IntegrityIssue[] => {
+  const validateTagReferences = useCallback((task: any): IntegrityIssue[] => {
     const issues: IntegrityIssue[] = [];
+    
+    // nullやundefinedタスクを安全に処理
+    if (!task || typeof task !== 'object') {
+      return issues;
+    }
     
     if (!Array.isArray(task.tags)) {
       issues.push({
-        id: `tags_not_array_${task.id}_${Date.now()}`,
+        id: `tags_not_array_${task.id || 'unknown'}_${Date.now()}`,
         type: 'INVALID_TAG_REFERENCE',
         severity: 'HIGH',
         description: 'タスクのtagsプロパティが配列ではありません',
@@ -192,10 +197,10 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
       return issues;
     }
     
-    task.tags.forEach((tag, index) => {
+    task.tags.forEach((tag: any, index: number) => {
       if (!isTag(tag)) {
         issues.push({
-          id: `invalid_tag_${task.id}_${index}_${Date.now()}`,
+          id: `invalid_tag_${task.id || 'unknown'}_${index}_${Date.now()}`,
           type: 'INVALID_TAG_REFERENCE',
           severity: 'MEDIUM',
           description: `無効なタグオブジェクト（インデックス: ${index}）`,
@@ -214,14 +219,19 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
   }, []);
   
   /**
-   * タイムスタンプ異常の検証
+   * タイムスタンプ異常の検証（null安全版）
    */
-  const validateTimestamps = useCallback((task: Task): IntegrityIssue[] => {
+  const validateTimestamps = useCallback((task: any): IntegrityIssue[] => {
     const issues: IntegrityIssue[] = [];
+    
+    // nullやundefinedタスクを安全に処理
+    if (!task || typeof task !== 'object') {
+      return issues;
+    }
     
     if (!(task.createdAt instanceof Date) || isNaN(task.createdAt.getTime())) {
       issues.push({
-        id: `invalid_created_at_${task.id}_${Date.now()}`,
+        id: `invalid_created_at_${task.id || 'unknown'}_${Date.now()}`,
         type: 'TIMESTAMP_ANOMALY',
         severity: 'HIGH',
         description: 'createdAtが無効な日付です',
@@ -237,7 +247,7 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
     
     if (!(task.updatedAt instanceof Date) || isNaN(task.updatedAt.getTime())) {
       issues.push({
-        id: `invalid_updated_at_${task.id}_${Date.now()}`,
+        id: `invalid_updated_at_${task.id || 'unknown'}_${Date.now()}`,
         type: 'TIMESTAMP_ANOMALY',
         severity: 'HIGH',
         description: 'updatedAtが無効な日付です',
@@ -255,7 +265,7 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
     if (task.createdAt instanceof Date && task.updatedAt instanceof Date &&
         task.createdAt.getTime() > task.updatedAt.getTime()) {
       issues.push({
-        id: `timestamp_order_${task.id}_${Date.now()}`,
+        id: `timestamp_order_${task.id || 'unknown'}_${Date.now()}`,
         type: 'TIMESTAMP_ANOMALY',
         severity: 'MEDIUM',
         description: 'createdAtがupdatedAtより新しい時刻になっています',
@@ -272,13 +282,16 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
   }, []);
   
   /**
-   * 重複IDの検証
+   * 重複IDの検証（null安全版）
    */
-  const validateDuplicateIds = useCallback((tasks: Task[]): IntegrityIssue[] => {
+  const validateDuplicateIds = useCallback((tasks: any[]): IntegrityIssue[] => {
     const issues: IntegrityIssue[] = [];
     const idCounts = new Map<string, number>();
     
-    tasks.forEach(task => {
+    // null/undefinedタスクを安全にフィルタリング
+    const validTasks = tasks.filter(task => task && typeof task === 'object');
+    
+    validTasks.forEach(task => {
       if (typeof task.id !== 'string' || !task.id.trim()) {
         issues.push({
           id: `empty_id_${Date.now()}_${Math.random()}`,
@@ -383,7 +396,7 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
     }
     
     try {
-      const task = tasks.find(t => t.id === issue.affectedTaskId);
+      const task = tasks.find(t => t && t.id === issue.affectedTaskId);
       if (!task) {
         return false;
       }
@@ -433,7 +446,7 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
   }, [finalConfig.enableAutoFix, tasks, updateTask]);
   
   /**
-   * 包括的なデータ整合性チェック
+   * 包括的なデータ整合性チェック（null安全版）
    */
   const performIntegrityCheck = useCallback(async (): Promise<IntegrityStats> => {
     const startTime = Date.now();
@@ -443,8 +456,11 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
       console.log('🔍 データ整合性チェック開始:', new Date().toISOString());
     }
     
+    // null/undefinedタスクを安全にフィルタリング
+    const safeTasks = tasks.filter(task => task !== null && task !== undefined);
+    
     // 各タスクに対する検証
-    for (const task of tasks) {
+    for (const task of safeTasks) {
       const taskIssues = [
         ...validateTaskStructure(task),
         ...validateTagReferences(task),
@@ -453,7 +469,7 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
       allIssues = allIssues.concat(taskIssues);
     }
     
-    // 全体に対する検証
+    // 全体に対する検証（原配列を使用してnull/undefinedも検出）
     allIssues = allIssues.concat(validateDuplicateIds(tasks));
     allIssues = allIssues.concat(detectMemoryLeaks());
     
@@ -485,7 +501,7 @@ export const useDataIntegrityMonitor = (config: Partial<MonitoringConfig> = {}) 
     ));
     
     const newStats: IntegrityStats = {
-      tasksChecked: tasks.length,
+      tasksChecked: safeTasks.length, // 有効なタスクのみカウント
       issuesFound: allIssues.length,
       autoFixedIssues: autoFixedCount,
       issuesBySeverity,

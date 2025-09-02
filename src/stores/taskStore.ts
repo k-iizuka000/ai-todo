@@ -1,14 +1,16 @@
 /**
  * Zustandを使用したタスク管理のグローバル状態管理
+ * localStorage依存を完全除去し、API層統合版として実装
+ * 設計書：Issue 029 フルスタックアーキテクチャ移行対応
  */
 
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools } from 'zustand/middleware';
 import { Task, TaskFilter, TaskSort, CreateTaskInput, UpdateTaskInput, TaskScheduleInfo } from '../types/task';
 import { UnscheduledTaskData } from '../types/schedule';
-import { mockTasks } from '../mock/tasks';
+import { taskAPI } from './api/taskApi';
 
-// タスクストアの状態型定義
+// タスクストアの状態型定義 - API統合版
 interface TaskState {
   // 状態
   tasks: Task[];
@@ -17,12 +19,14 @@ interface TaskState {
   sort: TaskSort;
   isLoading: boolean;
   error: string | null;
+  isInitialized: boolean;
   
-  // アクション
+  // アクション（非同期API統合版）
   setTasks: (tasks: Task[]) => void;
-  addTask: (taskInput: CreateTaskInput) => void;
-  updateTask: (id: string, taskInput: UpdateTaskInput) => void;
-  deleteTask: (id: string) => void;
+  addTask: (taskInput: CreateTaskInput) => Promise<Task>;
+  updateTask: (id: string, taskInput: UpdateTaskInput) => Promise<Task>;
+  deleteTask: (id: string) => Promise<void>;
+  loadTasks: () => Promise<void>;
   selectTask: (id: string | null) => void;
   
   // フィルター・ソート関連
@@ -50,9 +54,10 @@ interface TaskState {
   setError: (error: string | null) => void;
   clearError: () => void;
   
-  // データ初期化
-  loadMockData: () => void;
+  // データ初期化（API版）
+  initializeStore: () => Promise<void>;
   resetStore: () => void;
+  syncWithServer: () => Promise<void>;
   
   // スケジュール関連メソッド
   getUnscheduledTasks: () => UnscheduledTaskData[];
@@ -79,85 +84,263 @@ const defaultSort: TaskSort = {
   order: 'desc'
 };
 
-// IDジェネレーター（実際のプロジェクトではUUIDライブラリを使用することを推奨）
-const generateId = (): string => {
-  return `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+// API 定数設定
+const API_ENDPOINTS = {
+  TASKS: '/api/tasks',
+  TASK_BY_ID: (id: string) => `/api/tasks/${id}`,
+} as const;
+
+// ログ用のシンプルな関数（loggerに依存しないように）
+const logInfo = (message: string, data?: any) => {
+  console.log(`[TaskStore] ${message}`, data || '');
 };
 
-// Zustandストアの作成
+const logError = (message: string, data?: any, error?: any) => {
+  console.error(`[TaskStore] ${message}`, data || '', error || '');
+};
+
+// Zustandストアの作成（localStorage除去、API統合版）
 export const useTaskStore = create<TaskState>()(
   devtools(
-    persist(
-      (set, get) => ({
-        // 初期状態
-        tasks: [],
-        selectedTaskId: null,
-        filter: defaultFilter,
-        sort: defaultSort,
-        isLoading: false,
-        error: null,
+    (set, get) => ({
+      // 初期状態
+      tasks: [],
+      selectedTaskId: null,
+      filter: defaultFilter,
+      sort: defaultSort,
+      isLoading: false,
+      error: null,
+      isInitialized: false,
 
-        // 基本的なCRUD操作
+        // 基本的なCRUD操作（API統合版）
         setTasks: (tasks) => {
           set({ tasks }, false, 'setTasks');
         },
 
-        addTask: (taskInput) => {
-          const { tasks } = get();
-          const newTask: Task = {
-            id: generateId(),
-            title: taskInput.title,
-            description: taskInput.description,
-            status: 'todo',
-            priority: taskInput.priority || 'medium',
-            projectId: taskInput.projectId,
-            assigneeId: taskInput.assigneeId,
-            tags: taskInput.tags || [],
-            subtasks: [],
-            dueDate: taskInput.dueDate,
-            estimatedHours: taskInput.estimatedHours,
-            actualHours: 0,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            createdBy: 'current-user', // 実際の実装では認証されたユーザーIDを使用
-            updatedBy: 'current-user'
-          };
+        addTask: async (taskInput) => {
+          set({ isLoading: true, error: null }, false, 'addTask:start');
           
-          set(
-            { tasks: [...tasks, newTask] },
-            false,
-            'addTask'
-          );
+          try {
+            // Optimistic Update
+            const { tasks } = get();
+            const tempId = `temp-${Date.now()}`;
+            const optimisticTask: Task = {
+              id: tempId,
+              title: taskInput.title,
+              description: taskInput.description,
+              status: 'todo',
+              priority: taskInput.priority || 'medium',
+              projectId: taskInput.projectId,
+              assigneeId: taskInput.assigneeId,
+              tags: taskInput.tags || [],
+              subtasks: [],
+              dueDate: taskInput.dueDate,
+              estimatedHours: taskInput.estimatedHours,
+              actualHours: 0,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              createdBy: 'current-user',
+              updatedBy: 'current-user'
+            };
+
+            set(
+              { tasks: [...tasks, optimisticTask] },
+              false,
+              'addTask:optimistic'
+            );
+
+            // API コール
+            const newTask = await taskAPI.createTask(taskInput);
+            
+            // 実際のタスクで置換
+            const updatedTasks = get().tasks.map(task => 
+              task.id === tempId ? newTask : task
+            );
+            
+            set({
+              tasks: updatedTasks,
+              isLoading: false,
+              error: null
+            }, false, 'addTask:success');
+            
+            logInfo('Task created successfully', { taskId: newTask.id });
+            return newTask;
+            
+          } catch (error) {
+            // Optimistic Update のロールバック
+            const { tasks } = get();
+            const rolledBackTasks = tasks.filter(task => !task.id.startsWith('temp-'));
+            
+            const errorMessage = error instanceof Error ? error.message : 'Failed to create task';
+            
+            set({
+              tasks: rolledBackTasks,
+              isLoading: false,
+              error: errorMessage
+            }, false, 'addTask:error');
+            
+            logError('Failed to create task', { taskInput }, error);
+            throw error;
+          }
         },
 
-        updateTask: (id, taskInput) => {
-          const { tasks } = get();
-          const updatedTasks = tasks.map(task =>
-            task.id === id
-              ? {
-                  ...task,
-                  ...taskInput,
-                  updatedAt: new Date(),
-                  updatedBy: 'current-user'
-                }
-              : task
-          );
+        updateTask: async (id, taskInput) => {
+          set({ isLoading: true, error: null }, false, 'updateTask:start');
           
-          set({ tasks: updatedTasks }, false, 'updateTask');
+          try {
+            // 元のタスクを保存（ロールバック用）
+            const { tasks } = get();
+            const originalTask = tasks.find(task => task.id === id);
+            
+            if (!originalTask) {
+              throw new Error(`Task with id ${id} not found`);
+            }
+
+            // Optimistic Update
+            const optimisticUpdatedTasks = tasks.map(task =>
+              task.id === id
+                ? {
+                    ...task,
+                    ...taskInput,
+                    updatedAt: new Date(),
+                    updatedBy: 'current-user'
+                  }
+                : task
+            );
+            
+            set(
+              { tasks: optimisticUpdatedTasks },
+              false,
+              'updateTask:optimistic'
+            );
+
+            // API コール
+            const updatedTask = await taskAPI.updateTask(id, taskInput);
+            
+            // 実際のレスポンスでタスクを更新
+            const finalTasks = get().tasks.map(task =>
+              task.id === id ? updatedTask : task
+            );
+            
+            set({
+              tasks: finalTasks,
+              isLoading: false,
+              error: null
+            }, false, 'updateTask:success');
+            
+            logInfo('Task updated successfully', { taskId: id });
+            return updatedTask;
+            
+          } catch (error) {
+            // Optimistic Update のロールバック
+            const { tasks } = get();
+            const originalTask = tasks.find(task => task.id === id);
+            
+            if (originalTask) {
+              const rolledBackTasks = tasks.map(task =>
+                task.id === id ? originalTask : task
+              );
+              
+              const errorMessage = error instanceof Error ? error.message : 'Failed to update task';
+              
+              set({
+                tasks: rolledBackTasks,
+                isLoading: false,
+                error: errorMessage
+              }, false, 'updateTask:error');
+            }
+            
+            logError('Failed to update task', { taskId: id, taskInput }, error);
+            throw error;
+          }
         },
 
-        deleteTask: (id) => {
-          const { tasks } = get();
-          const filteredTasks = tasks.filter(task => task.id !== id);
+        deleteTask: async (id) => {
+          set({ isLoading: true, error: null }, false, 'deleteTask:start');
           
-          set(
-            {
-              tasks: filteredTasks,
-              selectedTaskId: get().selectedTaskId === id ? null : get().selectedTaskId
-            },
-            false,
-            'deleteTask'
-          );
+          try {
+            // 削除対象タスクを保存（ロールバック用）
+            const { tasks } = get();
+            const taskToDelete = tasks.find(task => task.id === id);
+            
+            if (!taskToDelete) {
+              throw new Error(`Task with id ${id} not found`);
+            }
+
+            // Optimistic Update
+            const optimisticTasks = tasks.filter(task => task.id !== id);
+            
+            set(
+              {
+                tasks: optimisticTasks,
+                selectedTaskId: get().selectedTaskId === id ? null : get().selectedTaskId
+              },
+              false,
+              'deleteTask:optimistic'
+            );
+
+            // API コール
+            await taskAPI.deleteTask(id);
+            
+            set({
+              isLoading: false,
+              error: null
+            }, false, 'deleteTask:success');
+            
+            logInfo('Task deleted successfully', { taskId: id });
+            
+          } catch (error) {
+            // Optimistic Update のロールバック
+            const { tasks } = get();
+            const taskToDelete = tasks.find(task => task.id === id);
+            
+            if (!taskToDelete) {
+              // 削除したタスクを復元
+              set({
+                tasks: [...get().tasks, taskToDelete],
+                isLoading: false,
+                error: error instanceof Error ? error.message : 'Failed to delete task'
+              }, false, 'deleteTask:error');
+            } else {
+              set({
+                isLoading: false,
+                error: error instanceof Error ? error.message : 'Failed to delete task'
+              }, false, 'deleteTask:error');
+            }
+            
+            logError('Failed to delete task', { taskId: id }, error);
+            throw error;
+          }
+        },
+
+        loadTasks: async () => {
+          set({ isLoading: true, error: null }, false, 'loadTasks:start');
+          
+          try {
+            const tasks = await taskAPI.fetchTasks();
+            
+            set({
+              tasks,
+              isLoading: false,
+              error: null,
+              isInitialized: true
+            }, false, 'loadTasks:success');
+            
+            logInfo('Tasks loaded successfully', { count: tasks.length });
+            
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to load tasks';
+            
+            set({
+              tasks: [],
+              isLoading: false,
+              error: errorMessage,
+              isInitialized: false
+            }, false, 'loadTasks:error');
+            
+            logError('Failed to load tasks', {}, error);
+            throw error;
+          }
         },
 
         selectTask: (id) => {
@@ -404,35 +587,124 @@ export const useTaskStore = create<TaskState>()(
           return filteredTasks;
         },
 
-        // 一括操作
-        bulkUpdateTasks: (ids, updates) => {
-          const { tasks } = get();
-          const updatedTasks = tasks.map(task =>
-            ids.includes(task.id)
-              ? {
-                  ...task,
-                  ...updates,
-                  updatedAt: new Date(),
-                  updatedBy: 'current-user'
-                }
-              : task
-          );
+        // 一括操作（API統合版）
+        bulkUpdateTasks: async (ids, updates) => {
+          set({ isLoading: true, error: null }, false, 'bulkUpdateTasks:start');
           
-          set({ tasks: updatedTasks }, false, 'bulkUpdateTasks');
+          try {
+            // 元のタスクを保存（ロールバック用）
+            const { tasks } = get();
+            const originalTasks = tasks.filter(task => ids.includes(task.id));
+            
+            // Optimistic Update
+            const optimisticTasks = tasks.map(task =>
+              ids.includes(task.id)
+                ? {
+                    ...task,
+                    ...updates,
+                    updatedAt: new Date(),
+                    updatedBy: 'current-user'
+                  }
+                : task
+            );
+            
+            set({ tasks: optimisticTasks }, false, 'bulkUpdateTasks:optimistic');
+
+            // 各タスクを並行で更新
+            const updatePromises = ids.map(id => taskAPI.updateTask(id, updates));
+            const updatedTasks = await Promise.all(updatePromises);
+            
+            // 実際のレスポンスでタスクを更新
+            const finalTasks = get().tasks.map(task => {
+              const updated = updatedTasks.find(ut => ut.id === task.id);
+              return updated || task;
+            });
+            
+            set({
+              tasks: finalTasks,
+              isLoading: false,
+              error: null
+            }, false, 'bulkUpdateTasks:success');
+            
+            logInfo('Bulk task update successful', { taskIds: ids });
+            
+          } catch (error) {
+            // Optimistic Update のロールバック
+            const { tasks } = get();
+            const originalTasks = tasks.filter(task => ids.includes(task.id));
+            
+            const rolledBackTasks = tasks.map(task => {
+              const original = originalTasks.find(ot => ot.id === task.id);
+              return original || task;
+            });
+            
+            const errorMessage = error instanceof Error ? error.message : 'Failed to update tasks';
+            
+            set({
+              tasks: rolledBackTasks,
+              isLoading: false,
+              error: errorMessage
+            }, false, 'bulkUpdateTasks:error');
+            
+            logError('Failed to bulk update tasks', { taskIds: ids }, error);
+            throw error;
+          }
         },
 
-        bulkDeleteTasks: (ids) => {
-          const { tasks } = get();
-          const filteredTasks = tasks.filter(task => !ids.includes(task.id));
+        bulkDeleteTasks: async (ids) => {
+          set({ isLoading: true, error: null }, false, 'bulkDeleteTasks:start');
           
-          set(
-            {
-              tasks: filteredTasks,
-              selectedTaskId: ids.includes(get().selectedTaskId || '') ? null : get().selectedTaskId
-            },
-            false,
-            'bulkDeleteTasks'
-          );
+          try {
+            // 削除対象タスクを保存（ロールバック用）
+            const { tasks } = get();
+            const tasksToDelete = tasks.filter(task => ids.includes(task.id));
+            
+            // Optimistic Update
+            const optimisticTasks = tasks.filter(task => !ids.includes(task.id));
+            
+            set(
+              {
+                tasks: optimisticTasks,
+                selectedTaskId: ids.includes(get().selectedTaskId || '') ? null : get().selectedTaskId
+              },
+              false,
+              'bulkDeleteTasks:optimistic'
+            );
+
+            // 各タスクを並行で削除
+            const deletePromises = ids.map(id => taskAPI.deleteTask(id));
+            await Promise.all(deletePromises);
+            
+            set({
+              isLoading: false,
+              error: null
+            }, false, 'bulkDeleteTasks:success');
+            
+            logInfo('Bulk task deletion successful', { taskIds: ids });
+            
+          } catch (error) {
+            // Optimistic Update のロールバック
+            const { tasks } = get();
+            const tasksToDelete = tasks.filter(task => ids.includes(task.id));
+            
+            if (tasksToDelete.length > 0) {
+              const restoredTasks = [...get().tasks, ...tasksToDelete];
+              
+              set({
+                tasks: restoredTasks,
+                isLoading: false,
+                error: error instanceof Error ? error.message : 'Failed to delete tasks'
+              }, false, 'bulkDeleteTasks:error');
+            } else {
+              set({
+                isLoading: false,
+                error: error instanceof Error ? error.message : 'Failed to delete tasks'
+              }, false, 'bulkDeleteTasks:error');
+            }
+            
+            logError('Failed to bulk delete tasks', { taskIds: ids }, error);
+            throw error;
+          }
         },
 
         // 状態管理
@@ -448,9 +720,25 @@ export const useTaskStore = create<TaskState>()(
           set({ error: null }, false, 'clearError');
         },
 
-        // データ初期化
-        loadMockData: () => {
-          set({ tasks: mockTasks }, false, 'loadMockData');
+        // データ初期化（API版）
+        initializeStore: async () => {
+          try {
+            await get().loadTasks();
+            logInfo('Task store initialized successfully');
+          } catch (error) {
+            logError('Failed to initialize task store', {}, error);
+            throw error;
+          }
+        },
+
+        syncWithServer: async () => {
+          try {
+            await get().loadTasks();
+            logInfo('Task store synced with server');
+          } catch (error) {
+            logError('Failed to sync with server', {}, error);
+            throw error;
+          }
         },
 
         resetStore: () => {
@@ -460,7 +748,8 @@ export const useTaskStore = create<TaskState>()(
             filter: defaultFilter,
             sort: defaultSort,
             isLoading: false,
-            error: null
+            error: null,
+            isInitialized: false
           }, false, 'resetStore');
         },
 
@@ -534,98 +823,11 @@ export const useTaskStore = create<TaskState>()(
           set({ tasks: updatedTasks }, false, 'clearTaskSchedule');
         }
       }),
-      {
-        name: 'task-store',
-        // 設計書要件: persistミドルウェア最適化
-        partialize: (state) => ({
-          tasks: state.tasks,
-          filter: state.filter,
-          sort: state.sort,
-          // 重要でない一時的な状態は除外
-          // isLoading, error, selectedTaskIdは永続化しない
-        }),
-        // ストレージの最適化設定
-        storage: {
-          getItem: (name) => {
-            try {
-              const item = localStorage.getItem(name);
-              if (!item) return null;
-              
-              const parsed = JSON.parse(item);
-              
-              // Critical Fix: Dateオブジェクトを正しく復元
-              if (parsed?.state?.tasks) {
-                parsed.state.tasks = parsed.state.tasks.map((task: any) => ({
-                  ...task,
-                  createdAt: new Date(task.createdAt),
-                  updatedAt: new Date(task.updatedAt),
-                  dueDate: task.dueDate ? new Date(task.dueDate) : undefined
-                }));
-              }
-              
-              return parsed;
-            } catch (error) {
-              console.warn('Failed to parse task store from localStorage:', error);
-              return null;
-            }
-          },
-          setItem: (name, value) => {
-            try {
-              // デバウンス機能付きの保存
-              // 頻繁な更新を抑制して性能向上
-              const throttledSave = () => {
-                localStorage.setItem(name, JSON.stringify(value));
-              };
-              
-              // 既存のタイムアウトをクリア
-              if ((window as any)._taskStoreThrottle) {
-                clearTimeout((window as any)._taskStoreThrottle);
-              }
-              
-              // 250ms後に保存（デバウンス）
-              (window as any)._taskStoreThrottle = setTimeout(throttledSave, 250);
-            } catch (error) {
-              console.error('Failed to save to localStorage:', error);
-            }
-          },
-          removeItem: (name) => {
-            try {
-              localStorage.removeItem(name);
-            } catch (error) {
-              console.error('Failed to remove from localStorage:', error);
-            }
-          }
-        },
-        // バージョン管理とマイグレーション
-        version: 1,
-        migrate: (persistedState: any, version: number) => {
-          if (version < 1) {
-            // 将来のマイグレーション処理をここに実装
-            return persistedState;
-          }
-          return persistedState;
-        },
-        // エラー時の回復処理
-        onRehydrateStorage: (state) => {
-          return (state, error) => {
-            if (error) {
-              console.error('Failed to rehydrate task store:', error);
-              // Critical Fix: 軽微なエラーではリセットせず、致命的エラーのみリセット
-              if (error.message?.includes('JSON') || error.name === 'SyntaxError') {
-                console.warn('Task store corrupted, resetting to default');
-                state?.resetStore();
-              } else {
-                console.warn('Minor rehydration error, keeping existing data');
-              }
-            } else {
-              console.log('Task store rehydrated successfully');
-            }
-          };
-        }
-      }
-    ),
     {
-      name: 'task-store'
+      name: 'task-store',
+      // API統合版では、devtools でのデバッグのみでローカルストレージは除去
+      enabled: import.meta.env.DEV,
+      trace: true
     }
   )
 );

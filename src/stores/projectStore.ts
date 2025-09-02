@@ -1,34 +1,37 @@
 /**
  * Zustandを使用したプロジェクト管理のグローバル状態管理
+ * 設計書要件: localStorage除去、API統合版
  */
 
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
-import { 
+import { devtools } from 'zustand/middleware';
+import type { 
   Project, 
+  ProjectWithDetails,
   ProjectFilter, 
   ProjectSort, 
   CreateProjectInput, 
   UpdateProjectInput,
   ProjectWithStats
 } from '../types/project';
-import { mockProjects, mockProjectStats } from '../mock/projects';
+import { projectsAPI } from '../lib/api/projects';
+import { logger } from '../lib/logger';
 
-// プロジェクトストアの状態型定義
+// プロジェクトストアの状態型定義（API統合版）
 interface ProjectState {
   // 状態
-  projects: Project[];
+  projects: ProjectWithDetails[];
   selectedProjectId: string | null;
   filter: ProjectFilter;
   sort: ProjectSort;
   isLoading: boolean;
   error: string | null;
   
-  // アクション
-  setProjects: (projects: Project[]) => void;
-  addProject: (projectInput: CreateProjectInput) => void;
-  updateProject: (id: string, projectInput: UpdateProjectInput) => void;
-  deleteProject: (id: string) => void;
+  // API通信アクション
+  loadProjects: () => Promise<void>;
+  addProject: (projectInput: CreateProjectInput) => Promise<void>;
+  updateProject: (id: string, projectInput: UpdateProjectInput) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
   selectProject: (id: string | null) => void;
   
   // フィルター・ソート関連
@@ -37,18 +40,18 @@ interface ProjectState {
   setSort: (sort: ProjectSort) => void;
   
   // ユーティリティ
-  getFilteredProjects: () => Project[];
-  getProjectById: (id: string) => Project | undefined;
-  getProjectsByOwner: (ownerId: string) => Project[];
-  getProjectsByMember: (memberId: string) => Project[];
-  getActiveProjects: () => Project[];
+  getFilteredProjects: () => ProjectWithDetails[];
+  getProjectById: (id: string) => ProjectWithDetails | undefined;
+  getProjectsByOwner: (ownerId: string) => ProjectWithDetails[];
+  getProjectsByMember: (memberId: string) => ProjectWithDetails[];
+  getActiveProjects: () => ProjectWithDetails[];
   getProjectWithStats: (id: string) => ProjectWithStats | undefined;
   
-  // 一括操作
-  bulkUpdateProjects: (ids: string[], updates: UpdateProjectInput) => void;
-  bulkDeleteProjects: (ids: string[]) => void;
-  archiveProjects: (ids: string[]) => void;
-  unarchiveProjects: (ids: string[]) => void;
+  // 一括操作（API統合）
+  bulkUpdateProjects: (ids: string[], updates: UpdateProjectInput) => Promise<void>;
+  bulkDeleteProjects: (ids: string[]) => Promise<void>;
+  archiveProjects: (ids: string[]) => Promise<void>;
+  unarchiveProjects: (ids: string[]) => Promise<void>;
   
   // 状態管理
   setLoading: (isLoading: boolean) => void;
@@ -56,8 +59,12 @@ interface ProjectState {
   clearError: () => void;
   
   // データ初期化
-  loadMockData: () => void;
   resetStore: () => void;
+  
+  // 内部状態管理
+  _setProjects: (projects: ProjectWithDetails[]) => void;
+  _updateProjectInState: (project: Project) => void;
+  _removeProjectFromState: (id: string) => void;
 }
 
 // デフォルトのフィルター設定
@@ -77,618 +84,600 @@ const defaultSort: ProjectSort = {
   order: 'desc'
 };
 
-// IDジェネレーター
-const generateId = (): string => {
-  return `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
-
-// Zustandストアの作成
+// Zustandストアの作成（API統合版）
 export const useProjectStore = create<ProjectState>()(
   devtools(
-    persist(
-      (set, get) => ({
-        // 初期状態
-        projects: [],
-        selectedProjectId: null,
-        filter: defaultFilter,
-        sort: defaultSort,
-        isLoading: false,
-        error: null,
+    (set, get) => ({
+      // 初期状態
+      projects: [],
+      selectedProjectId: null,
+      filter: defaultFilter,
+      sort: defaultSort,
+      isLoading: false,
+      error: null,
 
-        // 基本的なCRUD操作
-        setProjects: (projects) => {
-          set({ projects }, false, 'setProjects');
-        },
-
-        addProject: (projectInput) => {
-          try {
-            // 入力値の検証
-            if (!projectInput.name || projectInput.name.trim() === '') {
-              get().setError('プロジェクト名は必須です');
-              return;
-            }
-
-            const { projects } = get();
-            
-            // プロジェクト名の重複チェック
-            const existingProject = projects.find(p => 
-              p.name.toLowerCase().trim() === projectInput.name.toLowerCase().trim()
-            );
-            if (existingProject) {
-              get().setError('同じ名前のプロジェクトが既に存在します');
-              return;
-            }
-            
-            const newProject: Project = {
-              id: generateId(),
-              name: projectInput.name.trim(),
-              description: projectInput.description?.trim(),
-              status: 'planning',
-              priority: projectInput.priority || 'medium',
-              color: projectInput.color || '#3B82F6',
-              icon: projectInput.icon,
-              ownerId: 'current-user', // 実際の実装では認証されたユーザーIDを使用
-              members: [],
-              startDate: projectInput.startDate,
-              endDate: projectInput.endDate,
-              deadline: projectInput.deadline,
-              budget: projectInput.budget,
-              tags: projectInput.tags || [],
-              isArchived: false,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              createdBy: 'current-user',
-              updatedBy: 'current-user'
-            };
-            
-            // 日付の論理チェック
-            if (newProject.startDate && newProject.endDate && 
-                newProject.startDate > newProject.endDate) {
-              get().setError('開始日は終了日より前に設定してください');
-              return;
-            }
-
-            if (newProject.deadline && newProject.startDate && 
-                newProject.deadline < newProject.startDate) {
-              get().setError('締切日は開始日以降に設定してください');
-              return;
-            }
-            
-            get().clearError();
-            set(
-              { projects: [...projects, newProject] },
-              false,
-              'addProject'
-            );
-          } catch (error) {
-            console.error('Failed to add project:', error);
-            get().setError('プロジェクトの作成に失敗しました');
-          }
-        },
-
-        updateProject: (id, projectInput) => {
-          try {
-            if (!id) {
-              get().setError('プロジェクトIDが必要です');
-              return;
-            }
-
-            const { projects } = get();
-            const targetProject = projects.find(p => p.id === id);
-            
-            if (!targetProject) {
-              get().setError('指定されたプロジェクトが見つかりません');
-              return;
-            }
-
-            // プロジェクト名の検証（更新時）
-            if (projectInput.name !== undefined) {
-              if (!projectInput.name || projectInput.name.trim() === '') {
-                get().setError('プロジェクト名は必須です');
-                return;
-              }
-
-              // 他のプロジェクトとの重複チェック
-              const duplicateProject = projects.find(p => 
-                p.id !== id && 
-                p.name.toLowerCase().trim() === projectInput.name!.toLowerCase().trim()
-              );
-              if (duplicateProject) {
-                get().setError('同じ名前のプロジェクトが既に存在します');
-                return;
-              }
-            }
-
-            const updatedProject = {
-              ...targetProject,
-              ...projectInput,
-              name: projectInput.name ? projectInput.name.trim() : targetProject.name,
-              description: projectInput.description !== undefined ? 
-                projectInput.description?.trim() : targetProject.description,
-              updatedAt: new Date(),
-              updatedBy: 'current-user'
-            };
-
-            // 日付の論理チェック
-            if (updatedProject.startDate && updatedProject.endDate && 
-                updatedProject.startDate > updatedProject.endDate) {
-              get().setError('開始日は終了日より前に設定してください');
-              return;
-            }
-
-            if (updatedProject.deadline && updatedProject.startDate && 
-                updatedProject.deadline < updatedProject.startDate) {
-              get().setError('締切日は開始日以降に設定してください');
-              return;
-            }
-
-            const updatedProjects = projects.map(project =>
-              project.id === id ? updatedProject : project
-            );
-            
-            get().clearError();
-            set({ projects: updatedProjects }, false, 'updateProject');
-          } catch (error) {
-            console.error('Failed to update project:', error);
-            get().setError('プロジェクトの更新に失敗しました');
-          }
-        },
-
-        deleteProject: (id) => {
-          try {
-            if (!id) {
-              get().setError('プロジェクトIDが必要です');
-              return;
-            }
-
-            const { projects } = get();
-            const targetProject = projects.find(p => p.id === id);
-            
-            if (!targetProject) {
-              get().setError('指定されたプロジェクトが見つかりません');
-              return;
-            }
-
-            const filteredProjects = projects.filter(project => project.id !== id);
-            
-            get().clearError();
-            set(
-              {
-                projects: filteredProjects,
-                selectedProjectId: get().selectedProjectId === id ? null : get().selectedProjectId
-              },
-              false,
-              'deleteProject'
-            );
-          } catch (error) {
-            console.error('Failed to delete project:', error);
-            get().setError('プロジェクトの削除に失敗しました');
-          }
-        },
-
-        selectProject: (id) => {
-          set({ selectedProjectId: id }, false, 'selectProject');
-        },
-
-        // フィルター・ソート関連
-        setFilter: (newFilter) => {
-          const { filter } = get();
-          set(
-            { filter: { ...filter, ...newFilter } },
-            false,
-            'setFilter'
-          );
-        },
-
-        clearFilter: () => {
-          set({ filter: defaultFilter }, false, 'clearFilter');
-        },
-
-        setSort: (sort) => {
-          set({ sort }, false, 'setSort');
-        },
-
-        // ユーティリティ関数
-        getFilteredProjects: () => {
-          const { projects, filter, sort } = get();
+      // API通信でのプロジェクト一覧読み込み
+      loadProjects: async () => {
+        try {
+          set({ isLoading: true, error: null }, false, 'loadProjects:start');
           
-          let filteredProjects = projects.filter(project => {
-            // ステータスフィルター
-            if (filter.status && filter.status.length > 0) {
-              if (!filter.status.includes(project.status)) return false;
-            }
-            
-            // 優先度フィルター
-            if (filter.priority && filter.priority.length > 0) {
-              if (!filter.priority.includes(project.priority)) return false;
-            }
-            
-            // オーナーフィルター
-            if (filter.ownerId) {
-              if (project.ownerId !== filter.ownerId) return false;
-            }
-            
-            // メンバーフィルター
-            if (filter.memberId) {
-              const memberIds = project.members.map(member => member.userId);
-              if (!memberIds.includes(filter.memberId)) return false;
-            }
-            
-            // タグフィルター
-            if (filter.tags && filter.tags.length > 0) {
-              if (!filter.tags.some(tag => project.tags.includes(tag))) return false;
-            }
-            
-            // アーカイブフィルター
-            if (filter.isArchived !== undefined) {
-              if (project.isArchived !== filter.isArchived) return false;
-            }
-            
-            // 検索フィルター
-            if (filter.search) {
-              const searchLower = filter.search.toLowerCase();
-              const nameMatch = project.name.toLowerCase().includes(searchLower);
-              const descriptionMatch = project.description?.toLowerCase().includes(searchLower);
-              const tagMatch = project.tags.some(tag => tag.toLowerCase().includes(searchLower));
-              if (!nameMatch && !descriptionMatch && !tagMatch) return false;
-            }
-            
-            return true;
+          const projects = await projectsAPI.getAll({
+            filter: get().filter,
+            sort: get().sort,
+            includeStats: true,
+            includeMembers: true,
+            includeTags: true
           });
           
-          // ソート処理
-          filteredProjects.sort((a, b) => {
-            const { field, order } = sort;
-            let aValue: any;
-            let bValue: any;
-            
-            try {
-              // Date型の安全な処理ユーティリティ
-              const getDateValue = (date: Date | undefined | null): number => {
-                if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
-                  return order === 'asc' ? Number.MAX_SAFE_INTEGER : Number.MIN_SAFE_INTEGER;
-                }
-                return date.getTime();
-              };
+          set({ 
+            projects, 
+            isLoading: false, 
+            error: null 
+          }, false, 'loadProjects:success');
+          
+          logger.info('Projects loaded successfully', { 
+            count: projects.length,
+            category: 'project_store' 
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'プロジェクトの読み込みに失敗しました';
+          set({ 
+            isLoading: false, 
+            error: errorMessage 
+          }, false, 'loadProjects:error');
+          
+          logger.error('Failed to load projects', { 
+            category: 'project_store',
+            error: errorMessage 
+          });
+        }
+      },
 
-              switch (field) {
-                case 'name':
-                  aValue = (a.name || '').toLowerCase().trim();
-                  bValue = (b.name || '').toLowerCase().trim();
-                  break;
-                case 'status':
-                  aValue = a.status || '';
-                  bValue = b.status || '';
-                  break;
-                case 'priority':
-                  const priorityOrder = { low: 1, medium: 2, high: 3, critical: 4 } as const;
-                  aValue = priorityOrder[a.priority] || 0;
-                  bValue = priorityOrder[b.priority] || 0;
-                  break;
-                case 'deadline':
-                  aValue = getDateValue(a.deadline);
-                  bValue = getDateValue(b.deadline);
-                  break;
-                case 'startDate':
-                  aValue = getDateValue(a.startDate);
-                  bValue = getDateValue(b.startDate);
-                  break;
-                case 'endDate':
-                  aValue = getDateValue(a.endDate);
-                  bValue = getDateValue(b.endDate);
-                  break;
-                case 'createdAt':
-                  aValue = getDateValue(a.createdAt);
-                  bValue = getDateValue(b.createdAt);
-                  break;
-                case 'updatedAt':
-                  aValue = getDateValue(a.updatedAt);
-                  bValue = getDateValue(b.updatedAt);
-                  break;
-                default:
-                  // 不明なフィールドの場合はIDで比較
-                  aValue = a.id;
-                  bValue = b.id;
-                  console.warn(`Unknown sort field: ${field}`);
+      // 内部状態管理用のヘルパー
+      _setProjects: (projects) => {
+        set({ projects }, false, '_setProjects');
+      },
+
+      _updateProjectInState: (updatedProject) => {
+        const { projects } = get();
+        const updatedProjects = projects.map(project => 
+          project.id === updatedProject.id 
+            ? { ...project, ...updatedProject } as ProjectWithDetails
+            : project
+        );
+        set({ projects: updatedProjects }, false, '_updateProjectInState');
+      },
+
+      _removeProjectFromState: (id) => {
+        const { projects, selectedProjectId } = get();
+        const filteredProjects = projects.filter(project => project.id !== id);
+        set({
+          projects: filteredProjects,
+          selectedProjectId: selectedProjectId === id ? null : selectedProjectId
+        }, false, '_removeProjectFromState');
+      },
+
+      addProject: async (projectInput) => {
+        try {
+          // 入力値の基本検証
+          if (!projectInput.name || projectInput.name.trim() === '') {
+            get().setError('プロジェクト名は必須です');
+            return;
+          }
+
+          set({ isLoading: true, error: null }, false, 'addProject:start');
+          
+          // APIを通じてプロジェクト作成
+          const newProject = await projectsAPI.create(projectInput);
+          
+          // Optimistic Update: 即座にUIに反映
+          const { projects } = get();
+          const projectWithDetails: ProjectWithDetails = {
+            ...newProject,
+            owner: { id: newProject.ownerId, email: 'current@user.com', profile: null },
+            members: [],
+            tags: [],
+            _count: { tasks: 0, members: 0 }
+          };
+          
+          set({ 
+            projects: [...projects, projectWithDetails],
+            isLoading: false,
+            error: null
+          }, false, 'addProject:success');
+          
+          logger.info('Project created successfully', {
+            category: 'project_store',
+            projectId: newProject.id,
+            projectName: newProject.name
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'プロジェクトの作成に失敗しました';
+          set({ 
+            isLoading: false, 
+            error: errorMessage 
+          }, false, 'addProject:error');
+          
+          logger.error('Failed to create project', {
+            category: 'project_store',
+            projectName: projectInput.name,
+            error: errorMessage
+          });
+        }
+      },
+
+      updateProject: async (id, projectInput) => {
+        try {
+          if (!id) {
+            get().setError('プロジェクトIDが必要です');
+            return;
+          }
+
+          set({ isLoading: true, error: null }, false, 'updateProject:start');
+          
+          // APIを通じてプロジェクト更新
+          const updatedProject = await projectsAPI.update(id, projectInput);
+          
+          // 状態に反映
+          get()._updateProjectInState(updatedProject);
+          
+          set({ 
+            isLoading: false, 
+            error: null 
+          }, false, 'updateProject:success');
+          
+          logger.info('Project updated successfully', {
+            category: 'project_store',
+            projectId: id,
+            updates: Object.keys(projectInput)
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'プロジェクトの更新に失敗しました';
+          set({ 
+            isLoading: false, 
+            error: errorMessage 
+          }, false, 'updateProject:error');
+          
+          logger.error('Failed to update project', {
+            category: 'project_store',
+            projectId: id,
+            error: errorMessage
+          });
+        }
+      },
+
+      deleteProject: async (id) => {
+        try {
+          if (!id) {
+            get().setError('プロジェクトIDが必要です');
+            return;
+          }
+
+          set({ isLoading: true, error: null }, false, 'deleteProject:start');
+          
+          // APIを通じてプロジェクト削除
+          await projectsAPI.delete(id);
+          
+          // 状態から除去
+          get()._removeProjectFromState(id);
+          
+          set({ 
+            isLoading: false, 
+            error: null 
+          }, false, 'deleteProject:success');
+          
+          logger.info('Project deleted successfully', {
+            category: 'project_store',
+            projectId: id
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'プロジェクトの削除に失敗しました';
+          set({ 
+            isLoading: false, 
+            error: errorMessage 
+          }, false, 'deleteProject:error');
+          
+          logger.error('Failed to delete project', {
+            category: 'project_store',
+            projectId: id,
+            error: errorMessage
+          });
+        }
+      },
+
+      selectProject: (id) => {
+        set({ selectedProjectId: id }, false, 'selectProject');
+      },
+
+      // フィルター・ソート関連
+      setFilter: (newFilter) => {
+        const { filter } = get();
+        set(
+          { filter: { ...filter, ...newFilter } },
+          false,
+          'setFilter'
+        );
+      },
+
+      clearFilter: () => {
+        set({ filter: defaultFilter }, false, 'clearFilter');
+      },
+
+      setSort: (sort) => {
+        set({ sort }, false, 'setSort');
+      },
+
+      // ユーティリティ関数
+      getFilteredProjects: () => {
+        const { projects, filter, sort } = get();
+        
+        let filteredProjects = projects.filter(project => {
+          // ステータスフィルター
+          if (filter.status && filter.status.length > 0) {
+            if (!filter.status.includes(project.status)) return false;
+          }
+          
+          // 優先度フィルター
+          if (filter.priority && filter.priority.length > 0) {
+            if (!filter.priority.includes(project.priority)) return false;
+          }
+          
+          // オーナーフィルター
+          if (filter.ownerId) {
+            if (project.ownerId !== filter.ownerId) return false;
+          }
+          
+          // メンバーフィルター
+          if (filter.memberId) {
+            const memberIds = project.members.map(member => member.user.id);
+            if (!memberIds.includes(filter.memberId)) return false;
+          }
+          
+          // タグフィルター
+          if (filter.tags && filter.tags.length > 0) {
+            const projectTagNames = project.tags.map(tag => tag.name);
+            if (!filter.tags.some(tag => projectTagNames.includes(tag))) return false;
+          }
+          
+          // アーカイブフィルター
+          if (filter.isArchived !== undefined) {
+            if (project.isArchived !== filter.isArchived) return false;
+          }
+          
+          // 検索フィルター
+          if (filter.search) {
+            const searchLower = filter.search.toLowerCase();
+            const nameMatch = project.name.toLowerCase().includes(searchLower);
+            const descriptionMatch = project.description?.toLowerCase().includes(searchLower);
+            const tagMatch = project.tags.some(tag => tag.name.toLowerCase().includes(searchLower));
+            if (!nameMatch && !descriptionMatch && !tagMatch) return false;
+          }
+          
+          return true;
+        });
+        
+        // ソート処理
+        filteredProjects.sort((a, b) => {
+          const { field, order } = sort;
+          let aValue: any;
+          let bValue: any;
+          
+          try {
+            // Date型の安全な処理ユーティリティ
+            const getDateValue = (date: Date | undefined | null): number => {
+              if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+                return order === 'asc' ? Number.MAX_SAFE_INTEGER : Number.MIN_SAFE_INTEGER;
               }
-              
-              // 値が等しい場合の安定ソートのため、IDで比較
-              if (aValue === bValue) {
-                const idCompare = a.id.localeCompare(b.id);
-                return order === 'asc' ? idCompare : -idCompare;
-              }
-              
-              // 文字列の場合はlocaleCompareを使用
-              if (typeof aValue === 'string' && typeof bValue === 'string') {
-                const stringCompare = aValue.localeCompare(bValue);
-                return order === 'asc' ? stringCompare : -stringCompare;
-              }
-              
-              // 数値の場合は通常の比較
-              if (order === 'asc') {
-                return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-              } else {
-                return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-              }
-            } catch (error) {
-              console.error('Sort comparison error:', error, { 
-                field, 
-                aId: a.id, 
-                bId: b.id,
-                aValue: a[field as keyof Project],
-                bValue: b[field as keyof Project]
-              });
-              // エラー時はIDで比較
+              return date.getTime();
+            };
+
+            switch (field) {
+              case 'name':
+                aValue = (a.name || '').toLowerCase().trim();
+                bValue = (b.name || '').toLowerCase().trim();
+                break;
+              case 'status':
+                aValue = a.status || '';
+                bValue = b.status || '';
+                break;
+              case 'priority':
+                const priorityOrder = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 } as const;
+                aValue = priorityOrder[a.priority] || 0;
+                bValue = priorityOrder[b.priority] || 0;
+                break;
+              case 'deadline':
+                aValue = getDateValue(a.deadline);
+                bValue = getDateValue(b.deadline);
+                break;
+              case 'startDate':
+                aValue = getDateValue(a.startDate);
+                bValue = getDateValue(b.startDate);
+                break;
+              case 'endDate':
+                aValue = getDateValue(a.endDate);
+                bValue = getDateValue(b.endDate);
+                break;
+              case 'createdAt':
+                aValue = getDateValue(a.createdAt);
+                bValue = getDateValue(b.createdAt);
+                break;
+              case 'updatedAt':
+                aValue = getDateValue(a.updatedAt);
+                bValue = getDateValue(b.updatedAt);
+                break;
+              default:
+                // 不明なフィールドの場合はIDで比較
+                aValue = a.id;
+                bValue = b.id;
+                console.warn(`Unknown sort field: ${field}`);
+            }
+            
+            // 値が等しい場合の安定ソートのため、IDで比較
+            if (aValue === bValue) {
               const idCompare = a.id.localeCompare(b.id);
               return order === 'asc' ? idCompare : -idCompare;
             }
+            
+            // 文字列の場合はlocaleCompareを使用
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+              const stringCompare = aValue.localeCompare(bValue);
+              return order === 'asc' ? stringCompare : -stringCompare;
+            }
+            
+            // 数値の場合は通常の比較
+            if (order === 'asc') {
+              return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+            } else {
+              return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+            }
+          } catch (error) {
+            console.error('Sort comparison error:', error, { 
+              field, 
+              aId: a.id, 
+              bId: b.id,
+              aValue: a[field as keyof Project],
+              bValue: b[field as keyof Project]
+            });
+            // エラー時はIDで比較
+            const idCompare = a.id.localeCompare(b.id);
+            return order === 'asc' ? idCompare : -idCompare;
+          }
+        });
+        
+        return filteredProjects;
+      },
+
+      getProjectById: (id) => {
+        return get().projects.find(project => project.id === id);
+      },
+
+      getProjectsByOwner: (ownerId) => {
+        return get().projects.filter(project => project.ownerId === ownerId);
+      },
+
+      getProjectsByMember: (memberId) => {
+        return get().projects.filter(project => 
+          project.members.some(member => member.user.id === memberId)
+        );
+      },
+
+      getActiveProjects: () => {
+        return get().projects.filter(project => 
+          project.status === 'ACTIVE' && !project.isArchived
+        );
+      },
+
+      getProjectWithStats: (id) => {
+        const project = get().getProjectById(id);
+        if (!project) return undefined;
+        
+        // ProjectWithDetailsにはすでに統計情報が含まれている場合がある
+        if ('stats' in project) {
+          return project as ProjectWithStats;
+        }
+        
+        // 統計情報がない場合は基本プロジェクト情報を返す
+        return {
+          ...project,
+          stats: {
+            totalTasks: 0,
+            completedTasks: 0,
+            activeTasks: 0,
+            todoTasks: 0,
+            inProgressTasks: 0,
+            completionRate: 0,
+            totalEstimatedHours: 0,
+            totalActualHours: 0,
+            overdueTasks: 0,
+            tasksByPriority: { low: 0, medium: 0, high: 0, urgent: 0, critical: 0 },
+            tasksByStatus: { todo: 0, inProgress: 0, done: 0, archived: 0 }
+          }
+        };
+      },
+
+      // 一括操作（API統合）
+      bulkUpdateProjects: async (ids, updates) => {
+        try {
+          if (!Array.isArray(ids) || ids.length === 0) {
+            get().setError('更新対象のプロジェクトIDが指定されていません');
+            return;
+          }
+
+          set({ isLoading: true, error: null }, false, 'bulkUpdateProjects:start');
+          
+          // APIを通じて一括更新
+          const updatedProjects = await projectsAPI.bulkUpdate(ids, updates);
+          
+          // 状態を更新
+          updatedProjects.forEach(project => {
+            get()._updateProjectInState(project);
           });
           
-          return filteredProjects;
-        },
-
-        getProjectById: (id) => {
-          return get().projects.find(project => project.id === id);
-        },
-
-        getProjectsByOwner: (ownerId) => {
-          return get().projects.filter(project => project.ownerId === ownerId);
-        },
-
-        getProjectsByMember: (memberId) => {
-          return get().projects.filter(project => 
-            project.members.some(member => member.userId === memberId)
-          );
-        },
-
-        getActiveProjects: () => {
-          return get().projects.filter(project => 
-            project.status === 'active' && !project.isArchived
-          );
-        },
-
-        getProjectWithStats: (id) => {
-          const project = get().getProjectById(id);
-          if (!project) return undefined;
+          set({ 
+            isLoading: false, 
+            error: null 
+          }, false, 'bulkUpdateProjects:success');
           
-          const stats = mockProjectStats[id];
-          if (!stats) return undefined;
+          logger.info('Projects bulk updated successfully', {
+            category: 'project_store',
+            count: updatedProjects.length,
+            updates: Object.keys(updates)
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'プロジェクトの一括更新に失敗しました';
+          set({ 
+            isLoading: false, 
+            error: errorMessage 
+          }, false, 'bulkUpdateProjects:error');
           
-          return {
-            ...project,
-            stats
-          };
-        },
-
-        // 一括操作
-        bulkUpdateProjects: (ids, updates) => {
-          try {
-            if (!Array.isArray(ids) || ids.length === 0) {
-              get().setError('更新対象のプロジェクトIDが指定されていません');
-              return;
-            }
-
-            if (!updates || typeof updates !== 'object') {
-              get().setError('更新データが無効です');
-              return;
-            }
-
-            const { projects } = get();
-            const existingIds = projects.map(p => p.id);
-            const invalidIds = ids.filter(id => !existingIds.includes(id));
-            
-            if (invalidIds.length > 0) {
-              console.warn('Invalid project IDs in bulk update:', invalidIds);
-            }
-
-            const updatedProjects = projects.map(project => {
-              if (!ids.includes(project.id)) {
-                return project;
-              }
-
-              // 更新データのバリデーション
-              const validatedUpdates = { ...updates };
-              
-              // 名前の検証
-              if (validatedUpdates.name !== undefined) {
-                if (!validatedUpdates.name || validatedUpdates.name.trim() === '') {
-                  console.warn(`Invalid name in bulk update for project ${project.id}`);
-                  delete validatedUpdates.name; // 無効な名前は除外
-                } else {
-                  validatedUpdates.name = validatedUpdates.name.trim();
-                }
-              }
-
-              // 日付の検証
-              ['startDate', 'endDate', 'deadline'].forEach(dateField => {
-                const dateValue = validatedUpdates[dateField as keyof typeof validatedUpdates] as Date | undefined;
-                if (dateValue && !(dateValue instanceof Date) || (dateValue && isNaN(dateValue.getTime()))) {
-                  console.warn(`Invalid ${dateField} in bulk update for project ${project.id}`);
-                  delete validatedUpdates[dateField as keyof typeof validatedUpdates];
-                }
-              });
-
-              return {
-                ...project,
-                ...validatedUpdates,
-                updatedAt: new Date(),
-                updatedBy: 'current-user'
-              };
-            });
-            
-            get().clearError();
-            set({ projects: updatedProjects }, false, 'bulkUpdateProjects');
-          } catch (error) {
-            console.error('Failed to bulk update projects:', error);
-            get().setError('プロジェクトの一括更新に失敗しました');
-          }
-        },
-
-        bulkDeleteProjects: (ids) => {
-          try {
-            if (!Array.isArray(ids) || ids.length === 0) {
-              get().setError('削除対象のプロジェクトIDが指定されていません');
-              return;
-            }
-
-            const { projects } = get();
-            const existingIds = projects.map(p => p.id);
-            const validIds = ids.filter(id => existingIds.includes(id));
-            const invalidIds = ids.filter(id => !existingIds.includes(id));
-
-            if (invalidIds.length > 0) {
-              console.warn('Invalid project IDs in bulk delete:', invalidIds);
-            }
-
-            if (validIds.length === 0) {
-              get().setError('削除可能なプロジェクトがありません');
-              return;
-            }
-
-            const filteredProjects = projects.filter(project => !validIds.includes(project.id));
-            const currentSelectedId = get().selectedProjectId;
-            
-            get().clearError();
-            set(
-              {
-                projects: filteredProjects,
-                selectedProjectId: (currentSelectedId && validIds.includes(currentSelectedId)) ? null : currentSelectedId
-              },
-              false,
-              'bulkDeleteProjects'
-            );
-          } catch (error) {
-            console.error('Failed to bulk delete projects:', error);
-            get().setError('プロジェクトの一括削除に失敗しました');
-          }
-        },
-
-        archiveProjects: (ids) => {
-          get().bulkUpdateProjects(ids, { isArchived: true });
-        },
-
-        unarchiveProjects: (ids) => {
-          get().bulkUpdateProjects(ids, { isArchived: false });
-        },
-
-        // 状態管理
-        setLoading: (isLoading) => {
-          set({ isLoading }, false, 'setLoading');
-        },
-
-        setError: (error) => {
-          set({ error }, false, 'setError');
-        },
-
-        clearError: () => {
-          set({ error: null }, false, 'clearError');
-        },
-
-        // データ初期化
-        loadMockData: () => {
-          try {
-            get().clearError();
-            set({ projects: mockProjects }, false, 'loadMockData');
-          } catch (error) {
-            console.error('Failed to load mock data:', error);
-            get().setError('モックデータの読み込みに失敗しました');
-          }
-        },
-
-        resetStore: () => {
-          set({
-            projects: [],
-            selectedProjectId: null,
-            filter: defaultFilter,
-            sort: defaultSort,
-            isLoading: false,
-            error: null
-          }, false, 'resetStore');
+          logger.error('Failed to bulk update projects', {
+            category: 'project_store',
+            count: ids.length,
+            error: errorMessage
+          });
         }
-      }),
-      {
-        name: 'project-store',
-        partialize: (state) => ({
-          projects: state.projects,
-          filter: state.filter,
-          sort: state.sort
-        }),
-        // Date型の適切なシリアライズ・デシリアライズ処理
-        serialize: (state) => {
-          try {
-            // partializeで指定した部分のみがstateに含まれる
-            const serializedProjects = (state as any).projects?.map((project: Project) => ({
-              ...project,
-              // Date型フィールドを安全にシリアライズ
-              createdAt: project.createdAt instanceof Date ? project.createdAt.toISOString() : new Date().toISOString(),
-              updatedAt: project.updatedAt instanceof Date ? project.updatedAt.toISOString() : new Date().toISOString(),
-              startDate: project.startDate instanceof Date ? project.startDate.toISOString() : project.startDate || undefined,
-              endDate: project.endDate instanceof Date ? project.endDate.toISOString() : project.endDate || undefined,
-              deadline: project.deadline instanceof Date ? project.deadline.toISOString() : project.deadline || undefined
-            })) || [];
-            
-            return JSON.stringify({
-              projects: serializedProjects,
-              filter: (state as any).filter || defaultFilter,
-              sort: (state as any).sort || defaultSort
-            });
-          } catch (error) {
-            console.error('Failed to serialize project store:', error);
-            // シリアライズに失敗した場合はデフォルト状態を返す
-            return JSON.stringify({
-              projects: [],
-              filter: defaultFilter,
-              sort: defaultSort
-            });
-          }
-        },
-        deserialize: (str) => {
-          try {
-            const parsed = JSON.parse(str);
-            if (parsed && typeof parsed === 'object' && Array.isArray(parsed.projects)) {
-              const deserializedProjects = parsed.projects.map((project: any): Project => {
-                // Date型フィールドを安全にデシリアライズ
-                const safeParseDate = (dateValue: any): Date | undefined => {
-                  if (!dateValue) return undefined;
-                  if (dateValue instanceof Date) return dateValue;
-                  if (typeof dateValue === 'string') {
-                    const parsed = new Date(dateValue);
-                    return isNaN(parsed.getTime()) ? undefined : parsed;
-                  }
-                  return undefined;
-                };
+      },
 
-                return {
-                  ...project,
-                  createdAt: safeParseDate(project.createdAt) || new Date(),
-                  updatedAt: safeParseDate(project.updatedAt) || new Date(),
-                  startDate: safeParseDate(project.startDate),
-                  endDate: safeParseDate(project.endDate),
-                  deadline: safeParseDate(project.deadline)
-                };
-              });
-              return {
-                ...parsed,
-                projects: deserializedProjects
-              };
-            }
-            // データ形式が不正な場合はデフォルト状態を返す
-            return {
-              projects: [],
-              filter: defaultFilter,
-              sort: defaultSort
-            };
-          } catch (error) {
-            console.error('Failed to deserialize project store:', error);
-            return {
-              projects: [],
-              filter: defaultFilter,
-              sort: defaultSort
-            };
+      bulkDeleteProjects: async (ids) => {
+        try {
+          if (!Array.isArray(ids) || ids.length === 0) {
+            get().setError('削除対象のプロジェクトIDが指定されていません');
+            return;
           }
+
+          set({ isLoading: true, error: null }, false, 'bulkDeleteProjects:start');
+          
+          // APIを通じて一括削除
+          await projectsAPI.bulkDelete(ids);
+          
+          // 状態から一括除去
+          ids.forEach(id => {
+            get()._removeProjectFromState(id);
+          });
+          
+          set({ 
+            isLoading: false, 
+            error: null 
+          }, false, 'bulkDeleteProjects:success');
+          
+          logger.info('Projects bulk deleted successfully', {
+            category: 'project_store',
+            count: ids.length
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'プロジェクトの一括削除に失敗しました';
+          set({ 
+            isLoading: false, 
+            error: errorMessage 
+          }, false, 'bulkDeleteProjects:error');
+          
+          logger.error('Failed to bulk delete projects', {
+            category: 'project_store',
+            count: ids.length,
+            error: errorMessage
+          });
         }
+      },
+
+      archiveProjects: async (ids) => {
+        try {
+          set({ isLoading: true, error: null }, false, 'archiveProjects:start');
+          
+          const archivedProjects = await projectsAPI.archive(ids);
+          
+          // 状態を更新
+          archivedProjects.forEach(project => {
+            get()._updateProjectInState(project);
+          });
+          
+          set({ 
+            isLoading: false, 
+            error: null 
+          }, false, 'archiveProjects:success');
+          
+          logger.info('Projects archived successfully', {
+            category: 'project_store',
+            count: archivedProjects.length
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'プロジェクトのアーカイブに失敗しました';
+          set({ 
+            isLoading: false, 
+            error: errorMessage 
+          }, false, 'archiveProjects:error');
+          
+          logger.error('Failed to archive projects', {
+            category: 'project_store',
+            count: ids.length,
+            error: errorMessage
+          });
+        }
+      },
+
+      unarchiveProjects: async (ids) => {
+        try {
+          set({ isLoading: true, error: null }, false, 'unarchiveProjects:start');
+          
+          const unarchivedProjects = await projectsAPI.unarchive(ids);
+          
+          // 状態を更新
+          unarchivedProjects.forEach(project => {
+            get()._updateProjectInState(project);
+          });
+          
+          set({ 
+            isLoading: false, 
+            error: null 
+          }, false, 'unarchiveProjects:success');
+          
+          logger.info('Projects unarchived successfully', {
+            category: 'project_store',
+            count: unarchivedProjects.length
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'プロジェクトのアーカイブ解除に失敗しました';
+          set({ 
+            isLoading: false, 
+            error: errorMessage 
+          }, false, 'unarchiveProjects:error');
+          
+          logger.error('Failed to unarchive projects', {
+            category: 'project_store',
+            count: ids.length,
+            error: errorMessage
+          });
+        }
+      },
+
+      // 状態管理
+      setLoading: (isLoading) => {
+        set({ isLoading }, false, 'setLoading');
+      },
+
+      setError: (error) => {
+        set({ error }, false, 'setError');
+      },
+
+      clearError: () => {
+        set({ error: null }, false, 'clearError');
+      },
+
+      // データ初期化
+      resetStore: () => {
+        set({
+          projects: [],
+          selectedProjectId: null,
+          filter: defaultFilter,
+          sort: defaultSort,
+          isLoading: false,
+          error: null
+        }, false, 'resetStore');
+        
+        logger.info('Project store reset', {
+          category: 'project_store'
+        });
       }
-    ),
+    }),
     {
       name: 'project-store'
     }
@@ -717,11 +706,11 @@ export const useProjectStats = () => {
   return useProjectStore(state => {
     const projects = state.projects;
     const total = projects.length;
-    const active = projects.filter(project => project.status === 'active').length;
-    const completed = projects.filter(project => project.status === 'completed').length;
-    const planning = projects.filter(project => project.status === 'planning').length;
-    const onHold = projects.filter(project => project.status === 'on_hold').length;
-    const cancelled = projects.filter(project => project.status === 'cancelled').length;
+    const active = projects.filter(project => project.status === 'ACTIVE').length;
+    const completed = projects.filter(project => project.status === 'COMPLETED').length;
+    const planning = projects.filter(project => project.status === 'PLANNING').length;
+    const onHold = projects.filter(project => project.status === 'ON_HOLD').length;
+    const cancelled = projects.filter(project => project.status === 'CANCELLED').length;
     const archived = projects.filter(project => project.isArchived).length;
     
     return {
@@ -767,7 +756,7 @@ export const useProjectHelper = () => {
           name: project.name || 'Unnamed Project',
           color: project.color || '#3B82F6',
           icon: project.icon,
-          status: project.status || 'planning'
+          status: project.status || 'PLANNING'
         };
       } catch (error) {
         console.error('Failed to get project display data:', error, { projectId });

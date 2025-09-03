@@ -10,7 +10,7 @@ import { Task, TaskFilter, TaskSort, CreateTaskInput, UpdateTaskInput, TaskSched
 import { UnscheduledTaskData } from '../types/schedule';
 import { taskAPI } from './api/taskApi';
 
-// タスクストアの状態型定義 - API統合版
+// タスクストアの状態型定義 - API統合版（Issue #038対応）
 interface TaskState {
   // 状態
   tasks: Task[];
@@ -20,6 +20,7 @@ interface TaskState {
   isLoading: boolean;
   error: string | null;
   isInitialized: boolean;
+  lastUpdated: Date | null; // Issue #038: 最終更新時刻の追跡
   
   // アクション（非同期API統合版）
   setTasks: (tasks: Task[]) => void;
@@ -111,6 +112,7 @@ export const useTaskStore = create<TaskState>()(
       isLoading: false,
       error: null,
       isInitialized: false,
+      lastUpdated: null, // Issue #038: 最終更新時刻の初期化
 
         // 基本的なCRUD操作（API統合版）
         setTasks: (tasks) => {
@@ -118,12 +120,17 @@ export const useTaskStore = create<TaskState>()(
         },
 
         addTask: async (taskInput) => {
+          const startTime = Date.now();
+          logInfo('[Issue #038] addTask started', { taskInput, startTime });
+          
           set({ isLoading: true, error: null }, false, 'addTask:start');
           
           try {
             // Optimistic Update
             const { tasks } = get();
             const tempId = `temp-${Date.now()}`;
+            const currentTime = new Date();
+            
             const optimisticTask: Task = {
               id: tempId,
               title: taskInput.title,
@@ -137,19 +144,26 @@ export const useTaskStore = create<TaskState>()(
               dueDate: taskInput.dueDate,
               estimatedHours: taskInput.estimatedHours,
               actualHours: 0,
-              createdAt: new Date(),
-              updatedAt: new Date(),
+              createdAt: currentTime,
+              updatedAt: currentTime,
               createdBy: 'current-user',
               updatedBy: 'current-user'
             };
+            
+            logInfo('[Issue #038] Optimistic update applied', { tempId, optimisticTask: { id: optimisticTask.id, title: optimisticTask.title } });
 
+            // Issue #038: UI即座表示のための状態更新通知強化
             set(
-              { tasks: [...tasks, optimisticTask] },
+              { 
+                tasks: [...tasks, optimisticTask],
+                lastUpdated: currentTime // Issue #038: 最終更新時刻の記録
+              },
               false,
               'addTask:optimistic'
             );
 
             // API コール
+            logInfo('[Issue #038] API call starting', { taskInput });
             const newTask = await taskAPI.createTask(taskInput);
             
             // 実際のタスクで置換
@@ -157,13 +171,26 @@ export const useTaskStore = create<TaskState>()(
               task.id === tempId ? newTask : task
             );
             
+            const successTime = new Date();
+            logInfo('[Issue #038] API call successful, replacing optimistic task', { 
+              tempId, 
+              realTaskId: newTask.id, 
+              duration: Date.now() - startTime 
+            });
+            
+            // Issue #038: API成功時の状態更新通知強化
             set({
               tasks: updatedTasks,
               isLoading: false,
-              error: null
+              error: null,
+              lastUpdated: successTime // Issue #038: 成功時の最終更新時刻
             }, false, 'addTask:success');
             
-            logInfo('Task created successfully', { taskId: newTask.id });
+            logInfo('[Issue #038] Task creation completed successfully', { 
+              taskId: newTask.id, 
+              totalDuration: Date.now() - startTime,
+              lastUpdated: successTime
+            });
             return newTask;
             
           } catch (error) {
@@ -172,14 +199,28 @@ export const useTaskStore = create<TaskState>()(
             const rolledBackTasks = tasks.filter(task => !task.id.startsWith('temp-'));
             
             const errorMessage = error instanceof Error ? error.message : 'Failed to create task';
+            const errorTime = new Date();
             
+            logError('[Issue #038] API call failed, rolling back optimistic update', { 
+              taskInput, 
+              error: errorMessage, 
+              duration: Date.now() - startTime,
+              rolledBackCount: tasks.length - rolledBackTasks.length
+            }, error);
+            
+            // Issue #038: API失敗時の状態更新通知強化
             set({
               tasks: rolledBackTasks,
               isLoading: false,
-              error: errorMessage
+              error: errorMessage,
+              lastUpdated: errorTime // Issue #038: エラー時の最終更新時刻
             }, false, 'addTask:error');
             
-            logError('Failed to create task', { taskInput }, error);
+            logError('[Issue #038] Task creation failed', { 
+              taskInput, 
+              error: errorMessage,
+              totalDuration: Date.now() - startTime
+            }, error);
             throw error;
           }
         },
@@ -749,7 +790,8 @@ export const useTaskStore = create<TaskState>()(
             sort: defaultSort,
             isLoading: false,
             error: null,
-            isInitialized: false
+            isInitialized: false,
+            lastUpdated: null // Issue #038: リセット時のlastUpdated初期化
           }, false, 'resetStore');
         },
 
@@ -826,7 +868,7 @@ export const useTaskStore = create<TaskState>()(
     {
       name: 'task-store',
       // API統合版では、devtools でのデバッグのみでローカルストレージは除去
-      enabled: import.meta.env.DEV,
+      enabled: process.env.NODE_ENV === 'development',
       trace: true
     }
   )

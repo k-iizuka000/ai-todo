@@ -162,15 +162,29 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
         onSettings={onSettings}
       />
 
-      {/* タスクリスト */}
+      {/* ドロップゾーン（カラム全体をカバー） */}
       <div
         ref={setNodeRef}
-        className="flex-1 p-4 space-y-3 overflow-y-auto min-h-[200px]"
-        role="list"
-        aria-label={`${title || status} のタスク一覧`}
-        aria-live="polite"
-        aria-atomic="false"
+        className="flex-1 relative"
+        role="region"
+        aria-label={`${title || status} ドロップエリア`}
+        data-testid={`column-${status}`}
       >
+        {/* 透明ドロップレイヤー（カラム全体をカバー） */}
+        <div 
+          className="absolute inset-0 z-0" 
+          aria-hidden="true"
+          title={`${title || status} エリアにタスクをドロップ`}
+        />
+        
+        {/* タスクリスト */}
+        <div
+          className="p-4 space-y-3 overflow-y-auto min-h-[200px] relative z-10"
+          role="list"
+          aria-label={`${title || status} のタスク一覧`}
+          aria-live="polite"
+          aria-atomic="false"
+        >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {tasks.length === 0 ? (
             <div 
@@ -185,6 +199,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
               <div 
                 key={task.id}
                 role="listitem"
+                data-testid="task-item"
               >
                 {compact ? (
                   <TaskCardCompact
@@ -208,6 +223,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
             ))
           )}
         </SortableContext>
+        </div>
       </div>
       
       {/* ドロップエリアインジケーター */}

@@ -5,6 +5,7 @@
 
 // API クライアント
 export { ApiClient, apiClient, type ApiRequestConfig, type ApiResponse, type ApiStats } from './client';
+import { apiClient } from './client';
 
 // エラークラス
 export {

@@ -302,6 +302,15 @@ describe('useKanbanTasks - Issue #027 無限レンダリングループ修正', 
       
       expect(result.current.hasUpdates()).toBe(false);
     });
+
+    it('空のタスク配列の場合は更新を検知しない', () => {
+      mockTaskStore.tasks = [];
+      
+      const { result } = renderHook(() => useKanbanTasks());
+      
+      // 空配列の場合はfalseを返すことを確認
+      expect(result.current.hasUpdates()).toBe(false);
+    });
   });
 
   describe('Issue #038対応: デバウンス最適化', () => {

@@ -8,7 +8,8 @@ import { Modal } from '@/components/ui/modal';
 import { TagList } from './TagList';
 import { TagCreateModal } from './TagCreateModal';
 import { TagEditModal } from './TagEditModal';
-import { mockTags, getTagStats } from '@/mock/tags';
+import { getTagStats } from '@/mock/tags';
+import { useTagStore } from '@/stores/tagStore';
 import type { Tag, TagFilter } from '@/types/tag';
 
 export interface TagManagerProps {
@@ -20,6 +21,11 @@ export interface TagManagerProps {
  * タグの一覧表示、検索、フィルタリング、統計表示を行う
  */
 export const TagManager = React.memo<TagManagerProps>(({ className }) => {
+  // ストアからタグデータを取得（エラーハンドリング対応）
+  const { tags, error, isLoading } = useTagStore();
+  // エラー時は空配列をフォールバックとして使用
+  const safeTags = error ? [] : tags;
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'usageCount' | 'createdAt'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -37,18 +43,28 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
     sortOrder,
   }), [searchQuery, sortBy, sortOrder]);
 
-  // 統計情報の計算
+  // 統計情報の計算（エラーハンドリング対応）
   const stats = useMemo(() => {
-    const tagStats = getTagStats(mockTags);
-    const unusedTags = mockTags.filter(tag => (tag.usageCount || 0) === 0).length;
-    
-    return {
-      totalTags: tagStats.total,
-      totalUsage: tagStats.totalUsage,
-      mostUsedTag: tagStats.mostUsedTag?.name || 'なし',
-      unusedTags,
-    };
-  }, []);
+    try {
+      const tagStats = getTagStats(safeTags);
+      const unusedTags = safeTags.filter(tag => (tag.usageCount || 0) === 0).length;
+      
+      return {
+        totalTags: tagStats.total,
+        totalUsage: tagStats.totalUsage,
+        mostUsedTag: tagStats.mostUsedTag?.name || 'なし',
+        unusedTags,
+      };
+    } catch (error) {
+      console.error('統計計算エラー:', error);
+      return {
+        totalTags: 0,
+        totalUsage: 0,
+        mostUsedTag: 'なし',
+        unusedTags: 0,
+      };
+    }
+  }, [safeTags]);
 
   // 新規タグ作成ハンドラー
   const handleCreateTag = useCallback(() => {
@@ -168,7 +184,7 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
             <div>
               <p className="text-sm text-muted-foreground">平均使用回数</p>
               <p className="text-2xl font-bold">
-                {(stats.totalUsage / stats.totalTags).toFixed(1)}
+                {stats.totalTags > 0 ? (stats.totalUsage / stats.totalTags).toFixed(1) : '0.0'}
               </p>
             </div>
           </CardContent>
@@ -265,7 +281,7 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
         </CardHeader>
         <CardContent>
           <TagList
-            tags={mockTags}
+            tags={safeTags}
             filter={filter}
             selectedTagIds={selectedTags}
             onTagEdit={handleEditTag}

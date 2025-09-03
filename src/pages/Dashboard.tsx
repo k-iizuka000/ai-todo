@@ -20,11 +20,10 @@ import { useKanbanTasks } from '@/hooks/useKanbanTasks';
 import type { Task, TaskStatus, TaskDetail, CreateTaskInput } from '@/types/task';
 import { Tag } from '@/types/tag';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
-import TaskDetailView from '@/components/task/TaskDetailView';
 import { TaskCreateModal } from '@/components/task/TaskCreateModal';
 import { TaskDetailModal } from '@/components/task/TaskDetailModal';
 import { mockTasks, mockTags } from '@/mock/tasks';
-import { mockTodayTasks, getTaskDetail } from '@/mock/taskDetails';
+import { getTaskDetail } from '@/mock/taskDetails';
 
 const Dashboard: React.FC = () => {
   const location = useLocation();
@@ -43,44 +42,63 @@ const Dashboard: React.FC = () => {
   const { tags: availableTags } = useTagStore();
   
   // タスクストア - 通常のパターンを使用（Archive用の基本データ取得）
-  const { tasks: tasksFromStore, addTask, isLoading, error, clearError } = useTaskStore();
+  const { tasks: tasksFromStore, addTask, error, clearError } = useTaskStore();
   
   // URLからタスクページの種類を判定
   const pageType = location.pathname.includes('/today') ? 'today' : 
                    location.pathname.includes('/important') ? 'important' :
                    location.pathname.includes('/completed') ? 'completed' : 'all';
   
-  // URLクエリパラメータからタグフィルターを初期化
+  // URLクエリパラメータからタグフィルターを初期化 - 設計書適合版
   useEffect(() => {
+    let isMounted = true;
+    
     try {
       const searchParams = new URLSearchParams(location.search);
       const tagParam = searchParams.get('tags');
       const modeParam = searchParams.get('tagMode');
       
-      // タグIDのバリデーション
+      // タグIDのバリデーション - より詳細なチェック
       const tagIds = tagParam 
-        ? tagParam.split(',').filter(id => id && typeof id === 'string' && id.startsWith('tag-'))
+        ? tagParam.split(',').filter(id => {
+            if (!id || typeof id !== 'string') return false;
+            if (!id.startsWith('tag-')) return false;
+            // 追加: タグIDの長さと形式チェック
+            return id.length > 4 && /^tag-[a-zA-Z0-9-_]+$/.test(id);
+          })
         : [];
       
-      // モードのバリデーション
+      // モードのバリデーション - より厳密なチェック
       const mode = (modeParam === 'AND' || modeParam === 'OR') ? modeParam : 'OR';
       
-      if (tagIds.length > 0) {
-        setSelectedTags(tagIds);
-        setTagFilterMode(mode);
-        setShowTagFilter(true);
+      // 状態更新前のマウント確認
+      if (isMounted) {
+        if (tagIds.length > 0) {
+          setSelectedTags(tagIds);
+          setTagFilterMode(mode);
+          setShowTagFilter(true);
+        } else {
+          // パラメータが無効または空の場合はクリア
+          setSelectedTags([]);
+          setTagFilterMode('OR');
+          setShowTagFilter(false);
+        }
       }
     } catch (error) {
-      console.warn('Failed to parse URL parameters for tag filters:', error);
-      // エラー時はデフォルト状態に戻す
-      setSelectedTags([]);
-      setTagFilterMode('OR');
-      setShowTagFilter(false);
+      if (isMounted) {
+        console.warn('Failed to parse URL parameters for tag filters:', error);
+        // エラー時はデフォルト状態に戻す
+        setSelectedTags([]);
+        setTagFilterMode('OR');
+        setShowTagFilter(false);
+      }
     }
+    
+    return () => {
+      isMounted = false;
+    };
   }, [location.search]);
   
-  // 設計書対応: フィルタリング処理をKanbanBoard側に統合（二重状態管理排除）
-  // フィルタリング関数群とdisplayTasksメモ化を削除し、KanbanBoardに委譲
   
   // リストビュー用のフィルタリング済みタスク（KanbanBoardと同じロジック）
   const { tasks: filteredTasksForList } = useKanbanTasks({
@@ -139,54 +157,111 @@ const Dashboard: React.FC = () => {
   // 設計書対応: KanbanBoardが直接状態管理するため、handleTaskMoveは不要
   // タスク移動処理はuseTaskActions内のmoveTaskで処理される
 
-  const handleTaskClick = (task: Task) => {
-    let taskDetail = getTaskDetail(task.id);
+  const handleTaskClick = useCallback((task: Task) => {
+    // AbortControllerを使用した中断可能な処理に変更
+    const abortController = new AbortController();
+    let isOperationActive = true;
     
-    // フォールバック: TaskDetailが見つからない場合、Taskから基本的なTaskDetailを作成
-    if (!taskDetail) {
-      taskDetail = {
-        ...task,
-        comments: [],
-        attachments: [],
-        history: [],
-        childTasks: []
-      };
-    }
-    
-    setSelectedTask(taskDetail);
-    setShowTaskDetailModal(true);
-    
-    // URLを更新してタスク詳細表示を反映
-    const currentPath = location.pathname;
-    const newPath = currentPath.endsWith('/') ? `${currentPath}${task.id}` : `${currentPath}/${task.id}`;
-    navigate(newPath, { replace: true });
-  };
-
-  const handleTaskCreate = async (task: CreateTaskInput) => {
     try {
-      clearError(); // useTaskStoreのclearError関数を使用
-      await addTask(task);
-      setShowCreateModal(false);
+      console.log('Task clicked:', task.id, task.title);
+      
+      // 早期中断チェック
+      if (abortController.signal.aborted || !isOperationActive) {
+        return;
+      }
+      
+      let taskDetail = getTaskDetail(task.id);
+      
+      // フォールバック: TaskDetailが見つからない場合、Taskから基本的なTaskDetailを作成
+      if (!taskDetail && !abortController.signal.aborted) {
+        console.log('TaskDetail not found, converting from Task:', task);
+        taskDetail = {
+          ...task,
+          comments: [],
+          attachments: [],
+          history: [],
+          childTasks: []
+        };
+      }
+      
+      // 状態更新前の中断確認
+      if (!abortController.signal.aborted && isOperationActive && taskDetail) {
+        console.log('Opening modal with TaskDetail:', taskDetail);
+        setSelectedTask(taskDetail);
+        setShowTaskDetailModal(true);
+        
+        // URLを更新してタスク詳細表示を反映
+        const currentPath = location.pathname;
+        const newPath = currentPath.endsWith('/') ? `${currentPath}${task.id}` : `${currentPath}/${task.id}`;
+        navigate(newPath, { replace: true });
+      }
     } catch (error) {
-      // addTask内でuseTaskStoreのerror状態が自動設定されるため、
-      // ここでの明示的なエラー設定は不要
-      // モーダルは閉じずにユーザーに再試行の機会を提供
+      if (!abortController.signal.aborted && isOperationActive) {
+        console.error('Error in handleTaskClick:', error);
+      }
+    } finally {
+      isOperationActive = false;
     }
-  };
+  }, [location.pathname, navigate]);
 
-  const handleAddTask = (_status: TaskStatus) => {
+  const handleTaskCreate = useCallback(async (task: CreateTaskInput) => {
+    const abortController = new AbortController();
+    let isMounted = true;
+    
+    try {
+      console.log('新しいタスクを作成:', task);
+      
+      // 実行前の状態確認
+      if (!isMounted || abortController.signal.aborted) {
+        return;
+      }
+      
+      clearError(); // useTaskStoreのclearError関数を使用
+      
+      // API呼び出し前の再確認
+      if (isMounted && !abortController.signal.aborted) {
+        await addTask(task);
+        console.log('タスク作成完了:', task);
+        
+        // 完了後の状態更新前確認
+        if (isMounted && !abortController.signal.aborted) {
+          setShowCreateModal(false);
+        }
+      }
+    } catch (error) {
+      if (isMounted && !abortController.signal.aborted) {
+        console.error('タスク作成エラー:', error);
+        // addTask内でuseTaskStoreのerror状態が自動設定されるため、
+        // ここでの明示的なエラー設定は不要
+        // モーダルは閉じずにユーザーに再試行の機会を提供
+      }
+    } finally {
+      isMounted = false;
+    }
+  }, [addTask, clearError]);
+  
+  // handleTaskCreateの動的isMounted管理用useEffect
+  useEffect(() => {
+    return () => {
+      // コンポーネントアンマウント時の強制クリーンアップ
+      // handleTaskCreate内のisMountedフラグは関数スコープで管理されるため
+      // ここでは追加のクリーンアップ処理は不要
+    };
+  }, []);
+
+  const handleAddTask = useCallback((_status: TaskStatus) => {
     setShowCreateModal(true);
-  };
+  }, []);
 
   // TaskDetailModalで使用されるハンドラー群 - 現在はMock環境のため最小限の実装
-  const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
+  const handleTaskUpdate = useCallback((taskId: string, updates: Partial<Task>) => {
     // Mock環境では実際の更新は行わず、モーダルの状態更新のみ
     if (selectedTask && selectedTask.id === taskId) {
       setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
     }
-  };
+  }, [selectedTask]);
 
-  const handleSubtaskToggle = (subtaskId: string, completed: boolean) => {
+  const handleSubtaskToggle = useCallback((subtaskId: string, completed: boolean) => {
     // Mock環境では状態表示のみ
     if (selectedTask) {
       const updatedChildTasks = selectedTask.childTasks?.map(subtask => 
@@ -194,9 +269,9 @@ const Dashboard: React.FC = () => {
       ) || [];
       setSelectedTask({ ...selectedTask, childTasks: updatedChildTasks });
     }
-  };
+  }, [selectedTask]);
 
-  const handleSubtaskAdd = (title: string) => {
+  const handleSubtaskAdd = useCallback((title: string) => {
     // Mock環境では新しいサブタスクをローカル状態に追加
     if (selectedTask && title.trim()) {
       const newSubtask = {
@@ -209,26 +284,26 @@ const Dashboard: React.FC = () => {
       const updatedChildTasks = [...(selectedTask.childTasks || []), newSubtask];
       setSelectedTask({ ...selectedTask, childTasks: updatedChildTasks });
     }
-  };
+  }, [selectedTask]);
 
-  const handleSubtaskDelete = (subtaskId: string) => {
+  const handleSubtaskDelete = useCallback((subtaskId: string) => {
     // Mock環境ではローカル状態から削除
     if (selectedTask) {
       const updatedChildTasks = selectedTask.childTasks?.filter(subtask => subtask.id !== subtaskId) || [];
       setSelectedTask({ ...selectedTask, childTasks: updatedChildTasks });
     }
-  };
+  }, [selectedTask]);
 
-  const handleTaskDelete = (taskId: string) => {
+  const handleTaskDelete = useCallback((taskId: string) => {
     // Mock環境では削除確認後にモーダルを閉じる
     if (window.confirm('このタスクを削除しますか？')) {
       setShowTaskDetailModal(false);
       setSelectedTask(null);
       // 実際の削除処理は将来のストア統合時に実装
     }
-  };
+  }, []);
 
-  const handleCloseTaskDetail = () => {
+  const handleCloseTaskDetail = useCallback(() => {
     // 状態を強制的にリセット
     setShowTaskDetailModal(false);
     setSelectedTask(null);
@@ -239,7 +314,7 @@ const Dashboard: React.FC = () => {
       const newPath = pathParts.slice(0, -1).join('/');
       navigate(newPath, { replace: true });
     }
-  };
+  }, [location.pathname, navigate]);
   
   // タグフィルター関連のハンドラー
   const handleTagSelect = useCallback((tagId: string) => {

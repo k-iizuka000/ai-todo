@@ -1,23 +1,26 @@
 /**
  * Dashboard コンポーネントの単体テスト
+ * Issue #028: React状態更新警告-unmountedコンポーネント修正
  * Issue #038: レビュー指摘修正 - handleTaskCreate関数の修正
  * Issue #043: error変数重複宣言問題修正
  * 
  * テスト対象:
- * - エラーユーザー通知機能
- * - モーダル状態管理
+ * - アンマウント後の状態更新防止
+ * - useCallbackによる関数最適化
  * - エラーハンドリング
+ * - メモリリーク防止
  * - useTaskStoreのclearError統合
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from '../Dashboard';
 import { useTaskStore } from '@/stores/taskStore';
 import { useTagStore } from '@/stores/tagStore';
 import { useKanbanTasks } from '@/hooks/useKanbanTasks';
+import { getTaskDetail } from '@/mock/taskDetails';
 import type { CreateTaskInput } from '@/types/task';
 
 // モック設定
@@ -26,6 +29,9 @@ vi.mock('@/stores/tagStore');
 vi.mock('@/hooks/useKanbanTasks');
 vi.mock('@/mock/tasks');
 vi.mock('@/mock/taskDetails');
+
+// Issue #028: React状態更新警告のモック
+const mockGetTaskDetail = vi.mocked(getTaskDetail);
 
 // React Router DOM のモック
 vi.mock('react-router-dom', async () => {
@@ -43,7 +49,7 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-describe('Dashboard - Issue #038 & #043修正対応', () => {
+describe('Dashboard - Issue #028, #038 & #043修正対応', () => {
   let mockAddTask: ReturnType<typeof vi.fn>;
   let mockClearError: ReturnType<typeof vi.fn>;
   

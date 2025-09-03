@@ -126,6 +126,39 @@ services:
       start_period: 40s
 
   # ===========================================
+  # API Layer: JWT認証・RESTful API (ポート3010)
+  # ===========================================
+  api-layer:
+    build:
+      context: ./api-layer
+      dockerfile: Dockerfile
+    container_name: ai-todo-api-layer
+    ports:
+      - "3010:3010"  # APIレイヤー専用ポート
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - JWT_SECRET=${JWT_SECRET:-default_secret_change_in_production}
+      - API_PORT=3010
+      # データベース接続（コンテナ内部通信）
+      - DATABASE_URL=postgresql://${DB_USER:-ai_todo_user}:${DB_PASSWORD:-dev_password_2024}@database:5432/${DB_NAME:-ai_todo_dev}
+    volumes:
+      # ソースコードのホットリロード対応
+      - ./api-layer:/app
+      - api_layer_node_modules:/app/node_modules  # 専用node_modules
+    networks:
+      - ai-todo-network
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ===========================================
   # 開発ツール: Storybook（オプション）
   # ===========================================
   storybook:
@@ -154,6 +187,8 @@ services:
 # ===========================================
 volumes:
   node_modules:
+    driver: local
+  api_layer_node_modules:  # APIレイヤー専用node_modules
     driver: local
   postgres_data:
     driver: local

@@ -88,7 +88,7 @@ export class ApiClient {
     this.addErrorInterceptor(this.defaultErrorInterceptor.bind(this));
     
     // ヘルスモニタリングの定期実行（本番環境のみ）
-    if (process.env.NODE_ENV === 'production') {
+    if (import.meta.env.PROD) {
       setInterval(() => {
         const healthReport = this.getHealthReport();
         if (healthReport.healthStatus !== 'healthy') {
@@ -634,19 +634,39 @@ export class ApiClient {
  * デフォルトAPIクライアントインスタンス
  */
 export const apiClient = new ApiClient(
-  process.env.VITE_API_URL || '/api/v1'
+  import.meta.env.VITE_API_URL || 'http://localhost:3010'
 );
 
-// 認証トークン設定（将来実装）
-// apiClient.addRequestInterceptor((config) => {
-//   const token = localStorage.getItem('auth_token');
-//   if (token) {
-//     config.headers = {
-//       ...config.headers,
-//       'Authorization': `Bearer ${token}`
-//     };
-//   }
-//   return config;
-// });
+// 認証トークンインターセプター
+apiClient.addRequestInterceptor((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers = {
+      ...config.headers,
+      'Authorization': `Bearer ${token}`
+    };
+  }
+  return config;
+});
+
+// 401エラーの自動ログアウト処理
+apiClient.addErrorInterceptor(async (error) => {
+  if (error instanceof ApiError && error.status === 401) {
+    // userStoreのlogout処理を呼び出し
+    try {
+      // 動的インポートでuserStoreを取得（循環参照回避）
+      const { useUserStore } = await import('../../stores/userStore');
+      const logout = useUserStore.getState().logout;
+      await logout();
+    } catch (importError) {
+      console.error('Failed to import userStore for logout:', importError);
+      // フォールバック: トークンをクリア
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
+    }
+  }
+  
+  throw error;
+});
 
 export default apiClient;

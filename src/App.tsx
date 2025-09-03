@@ -24,14 +24,9 @@ const App: React.FC = () => {
 };
 
 const AppContent: React.FC = () => {
-  const loadMockData = useProjectStore(state => state.loadMockData);
+  // モックデータ読み込み機能は削除（projectStoreからloadMockData関数が削除されたため）
+  // 必要に応じてプロジェクト一覧を読み込む処理に置き換え可能
   
-  // アプリ起動時にモックデータを読み込む（互換性維持のため）
-  useEffect(() => {
-    // Hybrid版を使う場合は不要だが、既存コンポーネントとの互換性のため残す
-    loadMockData();
-  }, [loadMockData]);
-
   return <AppRouter />;
 };
 

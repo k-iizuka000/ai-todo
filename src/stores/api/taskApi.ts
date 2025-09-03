@@ -6,7 +6,7 @@
 import { Task, CreateTaskInput, UpdateTaskInput } from '../../types/task';
 
 // API基盤設定
-const API_BASE_URL = process.env.VITE_API_URL || 'http://localhost:3010';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3010';
 
 // 基本APIクライアント
 class SimpleApiClient {

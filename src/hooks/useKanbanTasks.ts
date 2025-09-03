@@ -88,8 +88,8 @@ export const useKanbanTasks = (filters: KanbanTaskFilters = {}) => {
       switch (pageType) {
         case 'today':
           result = result.filter(task => 
-            (task.dueDate && task.dueDate.startsWith(today)) ||
-            (task.createdAt && task.createdAt.toISOString().startsWith(today))
+            (task.dueDate?.startsWith(today)) ||
+            (task.createdAt?.toISOString().startsWith(today))
           );
           break;
         case 'important':
@@ -160,6 +160,7 @@ export const useKanbanTasks = (filters: KanbanTaskFilters = {}) => {
   
   // 更新検知機能
   const hasUpdates = useCallback(() => {
+    if (debouncedTasks.length === 0) return false;
     return Date.now() - new Date(Math.max(...debouncedTasks.map(task => new Date(task.updatedAt).getTime()))).getTime() < 1000;
   }, [debouncedTasks]);
 

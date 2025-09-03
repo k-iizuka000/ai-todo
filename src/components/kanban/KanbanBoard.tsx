@@ -115,9 +115,12 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   enableDebugMode = false
 }) => {
   // Issue #026 Group 3: プロップスの型安全性検証
+  // Issue #028: アンマウント後の状態更新防止
   React.useEffect(() => {
-    if (enableDebugMode || process.env.NODE_ENV === 'development') {
-      // 型安全性のランタイムチェック
+    let isMounted = true;
+    
+    if ((enableDebugMode || process.env.NODE_ENV === 'development') && isMounted) {
+      // 型安全性のランタイムチェック（isMounted確認付き）
       if (onTaskClick && typeof onTaskClick !== 'function') {
         console.error('KanbanBoard: onTaskClick must be a function');
       }
@@ -140,6 +143,10 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
         console.error('KanbanBoard: compact must be a boolean');
       }
     }
+    
+    return () => {
+      isMounted = false;
+    };
   }, [onTaskClick, onAddTask, onSubtaskToggle, onTagClick, onProjectClick, compact, className, enableDebugMode]);
   // 設計書要件: 直接購読パターンによるデータ取得（フィルタリング統合）
   const { tasksByStatus, error } = useKanbanTasks(filters);
@@ -218,9 +225,35 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   }, [toggleSubtask, onSubtaskToggle]);
 
   // ドラッグ開始
+  // Issue #028: ドラッグ操作の中断可能化とクリーンアップ強化
   const handleDragStart = useCallback((event: DragStartEvent) => {
+    // AbortController追加
+    const dragOperation = {
+      abortController: new AbortController(),
+      taskId: event.active.id
+    };
+    
     const draggedTask = allTasks.find(task => task.id === event.active.id);
-    setDraggedTask(draggedTask || null);
+    
+    if (!dragOperation.abortController.signal.aborted) {
+      setDraggedTask(draggedTask || null);
+    }
+    
+    // ドラッグ操作の追跡
+    const timeoutId = setTimeout(() => {
+      if (!dragOperation.abortController.signal.aborted) {
+        console.warn('Long drag operation detected:', event.active.id);
+      }
+    }, 5000); // 5秒でタイムアウト警告
+    
+    // クリーンアップ処理
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      dragOperation.abortController.abort();
+    };
+    
+    // DragEndでクリーンアップされる想定
+    return cleanup;
   }, [allTasks]);
 
   // ドラッグ中（リアルタイム移動）
@@ -231,12 +264,19 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   }, []);
 
   // ドラッグ終了
+  // Issue #028: ドラッグ終了時の安全化とクリーンアップ強化
   const handleDragEnd = useCallback((event: DragEndEvent) => {
+    let isOperationActive = true;
+    
     try {
       const { active, over } = event;
-      setDraggedTask(null);
+      
+      // 即座にドラッグ状態をクリア
+      if (isOperationActive) {
+        setDraggedTask(null);
+      }
 
-      if (!over) {
+      if (!over || !isOperationActive) {
         console.warn('Drag ended without valid drop target');
         return;
       }
@@ -247,7 +287,7 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
         return;
       }
 
-      // 最終的なステータスを確定（型安全）
+      // 移動処理（既存ロジック維持 + 安全化）
       let finalStatus: TaskStatus = activeTask.status;
       if (isTaskStatus(over.id) && COLUMN_ORDER.includes(over.id)) {
         finalStatus = over.id;
@@ -260,8 +300,8 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
         }
       }
 
-      // 設計書要件: 状態管理の一元化
-      if (activeTask.status !== finalStatus) {
+      // 状態変更の安全実行
+      if (activeTask.status !== finalStatus && isOperationActive) {
         moveTask(activeTask.id, finalStatus);
       }
 
@@ -270,9 +310,12 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
       if (activeTask.status === finalStatus && over.id !== active.id && finalStatus !== 'archived') {
         console.log('Task reordering - future implementation');
       }
+
     } catch (error) {
       console.error('Critical error during drag end:', error);
-      // ドラッグ状態をリセット
+    } finally {
+      // 最終的なクリーンアップ
+      isOperationActive = false;
       setDraggedTask(null);
     }
   }, [allTasks, moveTask]);

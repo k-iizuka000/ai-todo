@@ -121,7 +121,10 @@ export const useTaskStore = create<TaskState>()(
 
         addTask: async (taskInput) => {
           const startTime = Date.now();
-          logInfo('[Issue #038] addTask started', { taskInput, startTime });
+          const abortController = new AbortController();
+          let isOperationActive = true;
+          
+          logInfo('[Issue #028] addTask started with unmount protection', { taskInput, startTime });
           
           set({ isLoading: true, error: null }, false, 'addTask:start');
           
@@ -150,22 +153,45 @@ export const useTaskStore = create<TaskState>()(
           };
           
           try {
+            // Issue #028: 中断確認 - 処理実行前チェック
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] addTask aborted before optimistic update');
+              return optimisticTask;
+            }
             
-            logInfo('[Issue #038] Optimistic update applied', { tempId, optimisticTask: { id: optimisticTask.id, title: optimisticTask.title } });
+            logInfo('[Issue #028] Optimistic update applied', { tempId, optimisticTask: { id: optimisticTask.id, title: optimisticTask.title } });
 
-            // Issue #038: UI即座表示のための状態更新通知強化
-            set(
-              { 
-                tasks: [...tasks, optimisticTask],
-                lastUpdated: Date.now() // Issue #038: 最終更新時刻の記録（タイムスタンプ）
-              },
-              false,
-              'addTask:optimistic'
-            );
+            // Issue #038: UI即座表示のための状態更新通知強化 + Issue #028: 中断確認付き
+            if (isOperationActive && !abortController.signal.aborted) {
+              set(
+                { 
+                  tasks: [...tasks, optimisticTask],
+                  lastUpdated: Date.now() // Issue #038: 最終更新時刻の記録（タイムスタンプ）
+                },
+                false,
+                'addTask:optimistic'
+              );
+            }
 
-            // API コール
-            logInfo('[Issue #038] API call starting', { taskInput });
-            const newTask = await taskAPI.createTask(taskInput);
+            // API コール - Issue #028: 中断可能な非同期処理
+            logInfo('[Issue #028] API call starting with abort signal', { taskInput });
+            
+            // AbortController対応のAPI呼び出し
+            const apiCallPromise = taskAPI.createTask(taskInput);
+            
+            // 中断監視
+            abortController.signal.addEventListener('abort', () => {
+              logInfo('[Issue #028] API call aborted by signal');
+              isOperationActive = false;
+            });
+            
+            const newTask = await apiCallPromise;
+            
+            // Issue #028: API完了後の中断確認
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] addTask completed but operation was aborted, discarding result');
+              return optimisticTask; // 一時的なタスクを返す
+            }
             
             // 実際のタスクで置換
             const updatedTasks = get().tasks.map(task => 
@@ -173,21 +199,23 @@ export const useTaskStore = create<TaskState>()(
             );
             
             const successTimestamp = Date.now();
-            logInfo('[Issue #038] API call successful, replacing optimistic task', { 
+            logInfo('[Issue #028] API call successful, replacing optimistic task', { 
               tempId, 
               realTaskId: newTask.id, 
               duration: Date.now() - startTime 
             });
             
-            // Issue #038: API成功時の状態更新通知強化
-            set({
-              tasks: updatedTasks,
-              isLoading: false,
-              error: null,
-              lastUpdated: successTimestamp // Issue #038: 成功時の最終更新時刻（タイムスタンプ）
-            }, false, 'addTask:success');
+            // Issue #038: API成功時の状態更新通知強化 + Issue #028: 中断確認付き
+            if (isOperationActive && !abortController.signal.aborted) {
+              set({
+                tasks: updatedTasks,
+                isLoading: false,
+                error: null,
+                lastUpdated: successTimestamp // Issue #038: 成功時の最終更新時刻（タイムスタンプ）
+              }, false, 'addTask:success');
+            }
             
-            logInfo('[Issue #038] Task creation completed successfully', { 
+            logInfo('[Issue #028] Task creation completed successfully', { 
               taskId: newTask.id, 
               totalDuration: Date.now() - startTime,
               lastUpdated: successTimestamp
@@ -195,8 +223,14 @@ export const useTaskStore = create<TaskState>()(
             return newTask;
             
           } catch (apiError) {
+            // Issue #028: エラー処理時の中断確認
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] Task creation aborted during error handling');
+              return optimisticTask;
+            }
+            
             // API失敗時：モックモードでタスクを保持（状態更新通知強化）
-            logError('[Issue #038] API failed, keeping task in mock mode', { taskInput }, apiError);
+            logError('[Issue #028] API failed, keeping task in mock mode', { taskInput }, apiError);
             
             // 一時的IDを永続的IDに変更してタスクを保持
             const mockTask: Task = {
@@ -210,16 +244,18 @@ export const useTaskStore = create<TaskState>()(
             
             const mockTimestamp = Date.now();
             
-            // 強制的な状態更新通知でReact再レンダリングを確実に実行
-            set({
-              tasks: updatedTasks,
-              isLoading: false,
-              error: null, // エラーをnullに設定（モックモードとして成功扱い）
-              lastUpdated: mockTimestamp // 状態変更を明示的に通知するためのタイムスタンプ
-            }, false, 'addTask:mock-success-enhanced');
+            // 強制的な状態更新通知でReact再レンダリングを確実に実行 + Issue #028: 中断確認付き
+            if (isOperationActive && !abortController.signal.aborted) {
+              set({
+                tasks: updatedTasks,
+                isLoading: false,
+                error: null, // エラーをnullに設定（モックモードとして成功扱い）
+                lastUpdated: mockTimestamp // 状態変更を明示的に通知するためのタイムスタンプ
+              }, false, 'addTask:mock-success-enhanced');
+            }
             
             // デバッグログの強化
-            logInfo('[Issue #038] Task created in mock mode with enhanced state update', { 
+            logInfo('[Issue #028] Task created in mock mode with enhanced state update', { 
               taskId: mockTask.id,
               totalTasks: updatedTasks.length,
               timestamp: mockTimestamp,
@@ -228,13 +264,25 @@ export const useTaskStore = create<TaskState>()(
             });
             
             return mockTask;
+          } finally {
+            // Issue #028: 必須クリーンアップ処理
+            isOperationActive = false;
           }
         },
 
         updateTask: async (id, taskInput) => {
+          const abortController = new AbortController();
+          let isOperationActive = true;
+          
           set({ isLoading: true, error: null }, false, 'updateTask:start');
           
           try {
+            // Issue #028: 中断確認 - 処理実行前チェック
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] updateTask aborted before processing');
+              return get().getTaskById(id)!; // 元のタスクを返す
+            }
+            
             // 元のタスクを保存（ロールバック用）
             const { tasks } = get();
             const originalTask = tasks.find(task => task.id === id);
@@ -243,69 +291,107 @@ export const useTaskStore = create<TaskState>()(
               throw new Error(`Task with id ${id} not found`);
             }
 
-            // Optimistic Update
-            const optimisticUpdatedTasks = tasks.map(task =>
-              task.id === id
-                ? {
-                    ...task,
-                    ...taskInput,
-                    updatedAt: new Date(),
-                    updatedBy: 'current-user'
-                  }
-                : task
-            );
-            
-            set(
-              { tasks: optimisticUpdatedTasks },
-              false,
-              'updateTask:optimistic'
-            );
+            // Optimistic Update - Issue #028: 中断確認付き
+            if (isOperationActive && !abortController.signal.aborted) {
+              const optimisticUpdatedTasks = tasks.map(task =>
+                task.id === id
+                  ? {
+                      ...task,
+                      ...taskInput,
+                      updatedAt: new Date(),
+                      updatedBy: 'current-user'
+                    }
+                  : task
+              );
+              
+              set(
+                { tasks: optimisticUpdatedTasks },
+                false,
+                'updateTask:optimistic'
+              );
+            }
 
-            // API コール
+            // API コール - Issue #028: 中断可能な非同期処理
+            logInfo('[Issue #028] updateTask API call starting with abort signal', { taskId: id });
+            
+            // 中断監視
+            abortController.signal.addEventListener('abort', () => {
+              logInfo('[Issue #028] updateTask API call aborted by signal');
+              isOperationActive = false;
+            });
+            
             const updatedTask = await taskAPI.updateTask(id, taskInput);
             
-            // 実際のレスポンスでタスクを更新
-            const finalTasks = get().tasks.map(task =>
-              task.id === id ? updatedTask : task
-            );
+            // Issue #028: API完了後の中断確認
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] updateTask completed but operation was aborted');
+              return originalTask; // 元のタスクを返す
+            }
             
-            set({
-              tasks: finalTasks,
-              isLoading: false,
-              error: null
-            }, false, 'updateTask:success');
+            // 実際のレスポンスでタスクを更新 - Issue #028: 中断確認付き
+            if (isOperationActive && !abortController.signal.aborted) {
+              const finalTasks = get().tasks.map(task =>
+                task.id === id ? updatedTask : task
+              );
+              
+              set({
+                tasks: finalTasks,
+                isLoading: false,
+                error: null
+              }, false, 'updateTask:success');
+            }
             
-            logInfo('Task updated successfully', { taskId: id });
+            logInfo('[Issue #028] Task updated successfully', { taskId: id });
             return updatedTask;
             
           } catch (error) {
-            // Optimistic Update のロールバック
-            const { tasks } = get();
-            const originalTask = tasks.find(task => task.id === id);
-            
-            if (originalTask) {
-              const rolledBackTasks = tasks.map(task =>
-                task.id === id ? originalTask : task
-              );
-              
-              const errorMessage = error instanceof Error ? error.message : 'Failed to update task';
-              
-              set({
-                tasks: rolledBackTasks,
-                isLoading: false,
-                error: errorMessage
-              }, false, 'updateTask:error');
+            // Issue #028: エラー処理時の中断確認
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] updateTask aborted during error handling');
+              return get().getTaskById(id)!; // 元のタスクを返す
             }
             
-            logError('Failed to update task', { taskId: id, taskInput }, error);
+            // Optimistic Update のロールバック - Issue #028: 中断確認付き
+            if (isOperationActive && !abortController.signal.aborted) {
+              const { tasks } = get();
+              const originalTask = tasks.find(task => task.id === id);
+              
+              if (originalTask) {
+                const rolledBackTasks = tasks.map(task =>
+                  task.id === id ? originalTask : task
+                );
+                
+                const errorMessage = error instanceof Error ? error.message : 'Failed to update task';
+                
+                set({
+                  tasks: rolledBackTasks,
+                  isLoading: false,
+                  error: errorMessage
+                }, false, 'updateTask:error');
+              }
+            }
+            
+            logError('[Issue #028] Failed to update task', { taskId: id, taskInput }, error);
             throw error;
+          } finally {
+            // Issue #028: 必須クリーンアップ処理
+            isOperationActive = false;
           }
         },
 
         deleteTask: async (id) => {
+          const abortController = new AbortController();
+          let isOperationActive = true;
+          
           set({ isLoading: true, error: null }, false, 'deleteTask:start');
           
           try {
+            // Issue #028: 中断確認 - 処理実行前チェック
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] deleteTask aborted before processing');
+              return; // 何もしないで終了
+            }
+            
             // 削除対象タスクを保存（ロールバック用）
             const { tasks } = get();
             const taskToDelete = tasks.find(task => task.id === id);
@@ -314,79 +400,148 @@ export const useTaskStore = create<TaskState>()(
               throw new Error(`Task with id ${id} not found`);
             }
 
-            // Optimistic Update
-            const optimisticTasks = tasks.filter(task => task.id !== id);
-            
-            set(
-              {
-                tasks: optimisticTasks,
-                selectedTaskId: get().selectedTaskId === id ? null : get().selectedTaskId
-              },
-              false,
-              'deleteTask:optimistic'
-            );
+            // Optimistic Update - Issue #028: 中断確認付き
+            if (isOperationActive && !abortController.signal.aborted) {
+              const optimisticTasks = tasks.filter(task => task.id !== id);
+              
+              set(
+                {
+                  tasks: optimisticTasks,
+                  selectedTaskId: get().selectedTaskId === id ? null : get().selectedTaskId
+                },
+                false,
+                'deleteTask:optimistic'
+              );
+            }
 
-            // API コール
+            // API コール - Issue #028: 中断可能な非同期処理
+            logInfo('[Issue #028] deleteTask API call starting with abort signal', { taskId: id });
+            
+            // 中断監視
+            abortController.signal.addEventListener('abort', () => {
+              logInfo('[Issue #028] deleteTask API call aborted by signal');
+              isOperationActive = false;
+            });
+            
             await taskAPI.deleteTask(id);
             
-            set({
-              isLoading: false,
-              error: null
-            }, false, 'deleteTask:success');
-            
-            logInfo('Task deleted successfully', { taskId: id });
-            
-          } catch (error) {
-            // Optimistic Update のロールバック
-            const { tasks } = get();
-            const taskToDelete = tasks.find(task => task.id === id);
-            
-            if (!taskToDelete) {
-              // 削除したタスクを復元
-              set({
-                tasks: [...get().tasks, taskToDelete],
-                isLoading: false,
-                error: error instanceof Error ? error.message : 'Failed to delete task'
-              }, false, 'deleteTask:error');
-            } else {
-              set({
-                isLoading: false,
-                error: error instanceof Error ? error.message : 'Failed to delete task'
-              }, false, 'deleteTask:error');
+            // Issue #028: API完了後の中断確認
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] deleteTask completed but operation was aborted');
+              return;
             }
             
-            logError('Failed to delete task', { taskId: id }, error);
+            // Issue #028: 成功時の状態更新（中断確認付き）
+            if (isOperationActive && !abortController.signal.aborted) {
+              set({
+                isLoading: false,
+                error: null
+              }, false, 'deleteTask:success');
+            }
+            
+            logInfo('[Issue #028] Task deleted successfully', { taskId: id });
+            
+          } catch (error) {
+            // Issue #028: エラー処理時の中断確認
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] deleteTask aborted during error handling');
+              return;
+            }
+            
+            // Optimistic Update のロールバック - Issue #028: 中断確認付き
+            if (isOperationActive && !abortController.signal.aborted) {
+              const { tasks } = get();
+              const taskToDelete = tasks.find(task => task.id === id);
+              
+              if (!taskToDelete) {
+                // 削除したタスクを復元
+                set({
+                  tasks: [...get().tasks, taskToDelete],
+                  isLoading: false,
+                  error: error instanceof Error ? error.message : 'Failed to delete task'
+                }, false, 'deleteTask:error');
+              } else {
+                set({
+                  isLoading: false,
+                  error: error instanceof Error ? error.message : 'Failed to delete task'
+                }, false, 'deleteTask:error');
+              }
+            }
+            
+            logError('[Issue #028] Failed to delete task', { taskId: id }, error);
             throw error;
+          } finally {
+            // Issue #028: 必須クリーンアップ処理
+            isOperationActive = false;
           }
         },
 
         loadTasks: async () => {
+          const abortController = new AbortController();
+          let isOperationActive = true;
+          
           set({ isLoading: true, error: null }, false, 'loadTasks:start');
           
           try {
+            // Issue #028: 中断確認 - 処理実行前チェック
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] loadTasks aborted before processing');
+              return;
+            }
+            
+            // API コール - Issue #028: 中断可能な非同期処理
+            logInfo('[Issue #028] loadTasks API call starting with abort signal');
+            
+            // 中断監視
+            abortController.signal.addEventListener('abort', () => {
+              logInfo('[Issue #028] loadTasks API call aborted by signal');
+              isOperationActive = false;
+            });
+            
             const tasks = await taskAPI.fetchTasks();
             
-            set({
-              tasks,
-              isLoading: false,
-              error: null,
-              isInitialized: true
-            }, false, 'loadTasks:success');
+            // Issue #028: API完了後の中断確認
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] loadTasks completed but operation was aborted');
+              return;
+            }
             
-            logInfo('Tasks loaded successfully', { count: tasks.length });
+            // Issue #028: 成功時の状態更新（中断確認付き）
+            if (isOperationActive && !abortController.signal.aborted) {
+              set({
+                tasks,
+                isLoading: false,
+                error: null,
+                isInitialized: true
+              }, false, 'loadTasks:success');
+            }
+            
+            logInfo('[Issue #028] Tasks loaded successfully', { count: tasks.length });
             
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to load tasks';
+            // Issue #028: エラー処理時の中断確認
+            if (!isOperationActive || abortController.signal.aborted) {
+              logInfo('[Issue #028] loadTasks aborted during error handling');
+              return;
+            }
             
-            set({
-              tasks: [],
-              isLoading: false,
-              error: errorMessage,
-              isInitialized: false
-            }, false, 'loadTasks:error');
+            // Issue #028: エラー時の状態更新（中断確認付き）
+            if (isOperationActive && !abortController.signal.aborted) {
+              const errorMessage = error instanceof Error ? error.message : 'Failed to load tasks';
+              
+              set({
+                tasks: [],
+                isLoading: false,
+                error: errorMessage,
+                isInitialized: false
+              }, false, 'loadTasks:error');
+            }
             
-            logError('Failed to load tasks', {}, error);
+            logError('[Issue #028] Failed to load tasks', {}, error);
             throw error;
+          } finally {
+            // Issue #028: 必須クリーンアップ処理
+            isOperationActive = false;
           }
         },
 

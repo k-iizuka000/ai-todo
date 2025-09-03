@@ -17,13 +17,15 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useDebounce } from '@/hooks/useDebounce';
 import { cn } from '@/lib/utils';
+import { useTagStore } from '@/stores/tagStore';
+import { useTagSync } from '@/hooks/useTagSync';
 import type { Tag, TagFilter } from '@/types/tag';
 
 /**
  * TagListコンポーネントのProps
  */
 export interface TagListProps {
-  tags: Tag[];
+  tags?: Tag[]; // オプショナルに変更（ストア直接参照時）
   selectedTagIds?: string[];
   onTagClick?: (tag: Tag) => void;
   onTagEdit?: (tag: Tag) => void;
@@ -40,7 +42,7 @@ export interface TagListProps {
  * 設計書準拠: ソート機能、検索フィルター機能、空状態の表示を含む
  */
 const TagList = React.memo<TagListProps>(({
-  tags,
+  tags: propsTags,
   selectedTagIds = [],
   onTagClick,
   onTagEdit,
@@ -51,6 +53,22 @@ const TagList = React.memo<TagListProps>(({
   emptyMessage = 'タグがありません',
   className,
 }) => {
+  // Issue 040対応: ストアからの直接データ参照
+  const tagStore = useTagStore();
+  
+  // Issue 040対応: リアルタイム更新の仕組み追加
+  const { syncTags, isLoading: syncLoading, error: syncError } = useTagSync({
+    autoSync: window.location.pathname.includes('/tags') || window.location.pathname.includes('/tag'),
+    syncInterval: 30000 // 30秒間隔
+  });
+  
+  // Props経由のタグデータとストア直接参照のタグデータを統合
+  const tagsFromStore = tagStore.tags;
+  const isLoading = tagStore.isLoading || syncLoading;
+  const error = tagStore.error || syncError;
+  
+  // Props > Store の優先順でデータを選択
+  const tags = propsTags || tagsFromStore;
   const [localFilter, setLocalFilter] = React.useState<TagFilter>(filter);
   const [searchInput, setSearchInput] = React.useState<string>(filter.search || '');
 
@@ -89,7 +107,7 @@ const TagList = React.memo<TagListProps>(({
 
   // タグのフィルタリングとソート（設計書準拠: useMemoでパフォーマンス最適化）
   const filteredAndSortedTags = React.useMemo(() => {
-    if (!tags) return [];
+    if (!tags || !Array.isArray(tags)) return [];
     let result = [...tags];
 
     // 検索フィルタリング（設計書準拠: 部分一致検索）
@@ -192,8 +210,32 @@ const TagList = React.memo<TagListProps>(({
         </div>
       )}
 
+      {/* ローディング状態の表示 */}
+      {isLoading && (
+        <div className="flex justify-center items-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" role="status" aria-label="loading"></div>
+          <span className="ml-2 text-muted-foreground">読み込み中...</span>
+        </div>
+      )}
+
+      {/* エラー状態の表示 */}
+      {error && (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="text-red-500 mb-2">⚠️ エラーが発生しました</div>
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => tagStore.initialize()}
+            className="mt-3"
+          >
+            再読み込み
+          </Button>
+        </div>
+      )}
+
       {/* タグ一覧 */}
-      {filteredAndSortedTags.length > 0 ? (
+      {!isLoading && !error && filteredAndSortedTags.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredAndSortedTags.map((tag) => (
             <TagItem

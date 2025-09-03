@@ -13,6 +13,7 @@ import { useTagStore } from '@/stores/tagStore';
 import { useDebounce } from '@/hooks/useDebounce';
 import { validateTagData, sanitizeTagName } from '@/utils/tagValidation';
 import { TAG_PRESET_COLORS, CreateTagInput } from '@/types/tag';
+import { isApiError, getErrorMessage } from '@/utils/tagApi';
 
 interface TagCreateModalProps {
   /** モーダルの表示状態 */
@@ -74,6 +75,22 @@ export const TagCreateModal = React.memo<TagCreateModalProps>(({
     setValidationErrors(validation.errors);
   }, [validation.errors]);
   
+  // フォームリセット関数の共通化
+  const resetForm = useCallback(() => {
+    setFormData({
+      name: '',
+      color: TAG_PRESET_COLORS[0]
+    });
+    setValidationErrors([]);
+  }, []);
+  
+  // テスタビリティの向上: console.errorの条件付き実行
+  const logError = useCallback((error: unknown) => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('タグ作成エラー:', error);
+    }
+  }, []);
+  
   // タグ名変更ハンドラー
   const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -110,33 +127,31 @@ export const TagCreateModal = React.memo<TagCreateModalProps>(({
       };
       
       // タグを作成
-      await addTag(sanitizedData);
+      const newTag = await addTag(sanitizedData);
       
       // 成功時の処理
-      const newTagId = `tag-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      onSuccess?.(newTagId);
+      onSuccess?.(newTag?.id || 'unknown');
       onOpenChange(false);
       
       // フォームをリセット
-      setFormData({
-        name: '',
-        color: TAG_PRESET_COLORS[0]
-      });
-      setValidationErrors([]);
+      resetForm();
     } catch (err) {
-      console.error('タグ作成エラー:', err);
+      logError(err);
+      // APIエラーの場合はより詳細なメッセージを表示
+      if (isApiError(err)) {
+        setValidationErrors([getErrorMessage(err)]);
+      } else {
+        // 想定外エラー時の処理を追加
+        setValidationErrors(['タグの作成中に予期しないエラーが発生しました']);
+      }
     }
-  }, [formData, tags, addTag, onSuccess, onOpenChange]);
+  }, [formData, tags, addTag, onSuccess, onOpenChange, resetForm, logError]);
   
   // キャンセルハンドラー
   const handleCancel = useCallback(() => {
     onOpenChange(false);
-    setFormData({
-      name: '',
-      color: TAG_PRESET_COLORS[0]
-    });
-    setValidationErrors([]);
-  }, [onOpenChange]);
+    resetForm();
+  }, [onOpenChange, resetForm]);
   
   // フォームが有効かどうか
   const isFormValid = useMemo(() => {

@@ -5,6 +5,7 @@
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TagList } from '../TagList';
 import { Tag } from '../../../types/tag';
 
@@ -37,7 +38,7 @@ const mockTags: Tag[] = [
 ];
 
 // TagItemコンポーネントのモック
-jest.mock('../TagItem', () => ({
+vi.mock('../TagItem', () => ({
   TagItem: ({ tag, onClick, onEdit, onDelete, isSelected }: any) => (
     <div data-testid={`tag-item-${tag.id}`}>
       <span>{tag.name}</span>
@@ -51,13 +52,30 @@ jest.mock('../TagItem', () => ({
 }));
 
 // useDebounceフックのモック
-jest.mock('@/hooks/useDebounce', () => ({
+vi.mock('@/hooks/useDebounce', () => ({
   useDebounce: (value: string, delay: number) => value
+}));
+
+// useTagStoreのモック（Issue 040対応）
+const mockTagStore = {
+  tags: [],
+  isLoading: false,
+  error: null,
+  initialize: vi.fn(),
+};
+
+vi.mock('@/stores/tagStore', () => ({
+  useTagStore: () => mockTagStore
 }));
 
 describe('TagList', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    // モックの初期状態をリセット
+    mockTagStore.tags = [];
+    mockTagStore.isLoading = false;
+    mockTagStore.error = null;
+    (mockTagStore.initialize as any).mockClear();
   });
 
   it('タグ一覧が正しく表示される', () => {
@@ -159,7 +177,7 @@ describe('TagList', () => {
 
   it('タグクリック時にonTagClickが呼ばれる', async () => {
     const user = userEvent.setup();
-    const onTagClick = jest.fn();
+    const onTagClick = vi.fn();
     render(<TagList tags={mockTags} onTagClick={onTagClick} />);
     
     const clickButton = screen.getAllByText('クリック')[0];
@@ -170,7 +188,7 @@ describe('TagList', () => {
 
   it('タグ編集時にonTagEditが呼ばれる', async () => {
     const user = userEvent.setup();
-    const onTagEdit = jest.fn();
+    const onTagEdit = vi.fn();
     render(<TagList tags={mockTags} onTagEdit={onTagEdit} />);
     
     const editButton = screen.getAllByText('編集')[0];
@@ -181,7 +199,7 @@ describe('TagList', () => {
 
   it('タグ削除時にonTagDeleteが呼ばれる', async () => {
     const user = userEvent.setup();
-    const onTagDelete = jest.fn();
+    const onTagDelete = vi.fn();
     render(<TagList tags={mockTags} onTagDelete={onTagDelete} />);
     
     const deleteButton = screen.getAllByText('削除')[0];
@@ -205,7 +223,7 @@ describe('TagList', () => {
 
   it('フィルター変更時にonFilterChangeが呼ばれる', async () => {
     const user = userEvent.setup();
-    const onFilterChange = jest.fn();
+    const onFilterChange = vi.fn();
     render(<TagList tags={mockTags} onFilterChange={onFilterChange} />);
     
     const searchInput = screen.getByPlaceholderText('タグを検索...');
@@ -222,5 +240,109 @@ describe('TagList', () => {
     render(<TagList tags={mockTags} />);
     
     expect(screen.getByText('3 / 3 件のタグを表示')).toBeInTheDocument();
+  });
+
+  // Issue 040対応: 新機能のテスト
+  describe('Issue 040対応 - ストア統合機能', () => {
+    it('Props経由のタグよりもストアのタグが優先される（Propsが未定義の場合）', () => {
+      mockTagStore.tags = mockTags;
+      render(<TagList />); // tagsプロップを渡さない
+      
+      expect(screen.getByTestId('tag-item-tag-1')).toBeInTheDocument();
+      expect(screen.getByTestId('tag-item-tag-2')).toBeInTheDocument();
+      expect(screen.getByTestId('tag-item-tag-3')).toBeInTheDocument();
+    });
+
+    it('Props経由のタグがストアのタグより優先される', () => {
+      const propsOnlyTag: Tag[] = [{
+        id: 'props-tag',
+        name: 'Propsタグ',
+        color: '#000000',
+        usageCount: 1,
+        createdAt: new Date('2025-01-01'),
+        updatedAt: new Date('2025-01-01')
+      }];
+      
+      mockTagStore.tags = mockTags; // ストアには別のデータ
+      render(<TagList tags={propsOnlyTag} />);
+      
+      // Props経由のタグのみが表示される
+      expect(screen.getByTestId('tag-item-props-tag')).toBeInTheDocument();
+      expect(screen.queryByTestId('tag-item-tag-1')).not.toBeInTheDocument();
+    });
+
+    it('ローディング状態が正しく表示される', () => {
+      mockTagStore.isLoading = true;
+      render(<TagList />);
+      
+      expect(screen.getByText('読み込み中...')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toBeInTheDocument(); // スピナー要素
+    });
+
+    it('エラー状態が正しく表示される', () => {
+      mockTagStore.error = 'タグの読み込みに失敗しました';
+      render(<TagList />);
+      
+      expect(screen.getByText('⚠️ エラーが発生しました')).toBeInTheDocument();
+      expect(screen.getByText('タグの読み込みに失敗しました')).toBeInTheDocument();
+      expect(screen.getByText('再読み込み')).toBeInTheDocument();
+    });
+
+    it('再読み込みボタンをクリックするとtagStore.initialize()が呼ばれる', async () => {
+      const user = userEvent.setup();
+      mockTagStore.error = 'エラーメッセージ';
+      render(<TagList />);
+      
+      const reloadButton = screen.getByText('再読み込み');
+      await user.click(reloadButton);
+      
+      expect(mockTagStore.initialize).toHaveBeenCalledTimes(1);
+    });
+
+    it('タグ管理ページでコンポーネントがマウントされるとinitializeが呼ばれる', () => {
+      // URLパスをモック
+      Object.defineProperty(window, 'location', {
+        value: {
+          pathname: '/tags'
+        },
+        writable: true
+      });
+
+      render(<TagList />);
+      
+      expect(mockTagStore.initialize).toHaveBeenCalledTimes(1);
+    });
+
+    it('タグ管理ページ以外ではinitializeが呼ばれない', () => {
+      // URLパスをモック
+      Object.defineProperty(window, 'location', {
+        value: {
+          pathname: '/dashboard'
+        },
+        writable: true
+      });
+
+      render(<TagList />);
+      
+      expect(mockTagStore.initialize).not.toHaveBeenCalled();
+    });
+
+    it('ローディング中はタグ一覧が表示されない', () => {
+      mockTagStore.isLoading = true;
+      mockTagStore.tags = mockTags;
+      render(<TagList />);
+      
+      expect(screen.getByText('読み込み中...')).toBeInTheDocument();
+      expect(screen.queryByTestId('tag-item-tag-1')).not.toBeInTheDocument();
+    });
+
+    it('エラー時はタグ一覧が表示されない', () => {
+      mockTagStore.error = 'エラーメッセージ';
+      mockTagStore.tags = mockTags;
+      render(<TagList />);
+      
+      expect(screen.getByText('⚠️ エラーが発生しました')).toBeInTheDocument();
+      expect(screen.queryByTestId('tag-item-tag-1')).not.toBeInTheDocument();
+    });
   });
 });

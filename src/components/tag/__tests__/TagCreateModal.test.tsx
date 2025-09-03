@@ -201,4 +201,73 @@ describe('TagCreateModal', () => {
     expect(screen.getByText('タグ名を入力してください')).toBeInTheDocument();
     expect(createButton).toBeDisabled();
   });
+
+  // Issue 040対応: API統合に関するテストケース
+  describe('Issue 040: API統合対応', () => {
+    it('タグ作成成功時にAPIから返されたIDでonSuccessが呼ばれる', async () => {
+      const user = userEvent.setup();
+      const mockNewTag = {
+        id: 'api-generated-id-123',
+        name: '新しいタグ',
+        color: '#3B82F6'
+      };
+      
+      mockTagStore.addTag.mockResolvedValue(mockNewTag);
+      
+      render(<TagCreateModal {...defaultProps} />);
+      
+      const nameInput = screen.getByLabelText('タグ名');
+      await user.type(nameInput, '新しいタグ');
+      
+      const createButton = screen.getByText('作成');
+      await user.click(createButton);
+      
+      await waitFor(() => {
+        expect(defaultProps.onSuccess).toHaveBeenCalledWith('api-generated-id-123');
+      });
+    });
+
+    it('addTagがundefinedを返す場合もエラーにならない', async () => {
+      const user = userEvent.setup();
+      mockTagStore.addTag.mockResolvedValue(undefined);
+      
+      render(<TagCreateModal {...defaultProps} />);
+      
+      const nameInput = screen.getByLabelText('タグ名');
+      await user.type(nameInput, 'テストタグ');
+      
+      const createButton = screen.getByText('作成');
+      await user.click(createButton);
+      
+      await waitFor(() => {
+        expect(defaultProps.onSuccess).toHaveBeenCalledWith('unknown');
+      });
+    });
+
+    it('API統合対応でエラーハンドリングが改善される', async () => {
+      const user = userEvent.setup();
+      const mockApiError = {
+        code: 'HTTP_409',
+        message: 'タグ名が既に存在します',
+        status: 409
+      };
+      
+      mockTagStore.addTag.mockRejectedValue(mockApiError);
+      
+      render(<TagCreateModal {...defaultProps} />);
+      
+      const nameInput = screen.getByLabelText('タグ名');
+      await user.type(nameInput, '重複タグ');
+      
+      const createButton = screen.getByText('作成');
+      await user.click(createButton);
+      
+      await waitFor(() => {
+        expect(mockTagStore.addTag).toHaveBeenCalledWith({
+          name: '重複タグ',
+          color: '#3B82F6'
+        });
+      });
+    });
+  });
 });

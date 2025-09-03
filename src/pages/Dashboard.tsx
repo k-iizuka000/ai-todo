@@ -38,6 +38,7 @@ const Dashboard: React.FC = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagFilterMode, setTagFilterMode] = useState<'AND' | 'OR'>('OR');
   const [showTagFilter, setShowTagFilter] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // タグストアから利用可能なタグを取得
   const { tags: availableTags } = useTagStore();
@@ -140,13 +141,10 @@ const Dashboard: React.FC = () => {
   // タスク移動処理はuseTaskActions内のmoveTaskで処理される
 
   const handleTaskClick = (task: Task) => {
-    console.log('Task clicked:', task.id, task.title);
-    
     let taskDetail = getTaskDetail(task.id);
     
     // フォールバック: TaskDetailが見つからない場合、Taskから基本的なTaskDetailを作成
     if (!taskDetail) {
-      console.log('TaskDetail not found, converting from Task:', task);
       taskDetail = {
         ...task,
         comments: [],
@@ -156,7 +154,6 @@ const Dashboard: React.FC = () => {
       };
     }
     
-    console.log('Opening modal with TaskDetail:', taskDetail);
     setSelectedTask(taskDetail);
     setShowTaskDetailModal(true);
     
@@ -168,41 +165,68 @@ const Dashboard: React.FC = () => {
 
   const handleTaskCreate = async (task: CreateTaskInput) => {
     try {
-      console.log('新しいタスクを作成:', task);
-      addTask(task);
-      console.log('タスク作成完了:', task);
+      setError(null); // 前回のエラーをクリア
+      await addTask(task);
       setShowCreateModal(false);
-      // Note: taskStore will automatically update the display
     } catch (error) {
-      console.error('タスク作成エラー:', error);
+      const errorMessage = error instanceof Error ? error.message : 'タスクの作成に失敗しました';
+      setError(errorMessage);
+      // モーダルは閉じずにユーザーに再試行の機会を提供
     }
   };
 
   const handleAddTask = (_status: TaskStatus) => {
     setShowCreateModal(true);
-    // TODO: 指定ステータスでのタスク作成
   };
 
-  const handleTaskUpdate = (_taskId: string, _updates: Partial<Task>) => {
-    // TODO: タスクの更新処理（Mockの場合はログ出力のみ）
+  // TaskDetailModalで使用されるハンドラー群 - 現在はMock環境のため最小限の実装
+  const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
+    // Mock環境では実際の更新は行わず、モーダルの状態更新のみ
+    if (selectedTask && selectedTask.id === taskId) {
+      setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
+    }
   };
 
-  const handleSubtaskToggle = (_subtaskId: string, _completed: boolean) => {
-    // TODO: サブタスクの完了状態切り替え
+  const handleSubtaskToggle = (subtaskId: string, completed: boolean) => {
+    // Mock環境では状態表示のみ
+    if (selectedTask) {
+      const updatedChildTasks = selectedTask.childTasks?.map(subtask => 
+        subtask.id === subtaskId ? { ...subtask, completed } : subtask
+      ) || [];
+      setSelectedTask({ ...selectedTask, childTasks: updatedChildTasks });
+    }
   };
 
-  const handleSubtaskAdd = (_title: string) => {
-    // TODO: サブタスクの追加
+  const handleSubtaskAdd = (title: string) => {
+    // Mock環境では新しいサブタスクをローカル状態に追加
+    if (selectedTask && title.trim()) {
+      const newSubtask = {
+        id: `subtask-${Date.now()}`,
+        title: title.trim(),
+        completed: false,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      const updatedChildTasks = [...(selectedTask.childTasks || []), newSubtask];
+      setSelectedTask({ ...selectedTask, childTasks: updatedChildTasks });
+    }
   };
 
-  const handleSubtaskDelete = (_subtaskId: string) => {
-    // TODO: サブタスクの削除
+  const handleSubtaskDelete = (subtaskId: string) => {
+    // Mock環境ではローカル状態から削除
+    if (selectedTask) {
+      const updatedChildTasks = selectedTask.childTasks?.filter(subtask => subtask.id !== subtaskId) || [];
+      setSelectedTask({ ...selectedTask, childTasks: updatedChildTasks });
+    }
   };
 
-  const handleTaskDelete = (_taskId: string) => {
-    // TODO: タスクの削除
-    setShowTaskDetailModal(false);
-    setSelectedTask(null);
+  const handleTaskDelete = (taskId: string) => {
+    // Mock環境では削除確認後にモーダルを閉じる
+    if (window.confirm('このタスクを削除しますか？')) {
+      setShowTaskDetailModal(false);
+      setSelectedTask(null);
+      // 実際の削除処理は将来のストア統合時に実装
+    }
   };
 
   const handleCloseTaskDetail = () => {
@@ -517,6 +541,23 @@ const Dashboard: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* エラー表示 */}
+      {error && (
+        <div className="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50" role="alert">
+          <div className="flex items-center justify-between">
+            <span>{error}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setError(null)}
+              className="ml-2 text-white hover:bg-red-600"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* 新規タスク作成モーダル */}
       <TaskCreateModal

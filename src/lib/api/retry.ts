@@ -4,7 +4,7 @@
  */
 
 import { isRetryableError, isApiError, isNetworkError, isTimeoutError } from './errors';
-import { logger, logPerformanceMetrics } from '../logger';
+import { logger } from '../logger';
 
 /**
  * リトライ設定（統合強化版）
@@ -463,11 +463,14 @@ export class RetryManager {
     
     // パフォーマンスメトリクスをログ
     if (this.config.enablePerformanceMonitoring) {
-      logPerformanceMetrics('RetryManager.execute', totalDuration, {
+      logger.info('RetryManager.execute performance metrics', {
+        operation: 'RetryManager.execute',
+        duration: `${totalDuration.toFixed(2)}ms`,
         attempts: this.stats.totalAttempts,
         success: this.stats.success,
         totalDelay: this.stats.totalDelay,
-        errorCategories: this.stats.errorCategories
+        errorCategories: this.stats.errorCategories,
+        category: 'performance'
       });
     }
   }

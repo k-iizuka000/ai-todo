@@ -38,13 +38,12 @@ const Dashboard: React.FC = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagFilterMode, setTagFilterMode] = useState<'AND' | 'OR'>('OR');
   const [showTagFilter, setShowTagFilter] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   
   // タグストアから利用可能なタグを取得
   const { tags: availableTags } = useTagStore();
   
   // タスクストア - 通常のパターンを使用（Archive用の基本データ取得）
-  const { tasks: tasksFromStore, addTask, isLoading, error } = useTaskStore();
+  const { tasks: tasksFromStore, addTask, isLoading, error, clearError } = useTaskStore();
   
   // URLからタスクページの種類を判定
   const pageType = location.pathname.includes('/today') ? 'today' : 
@@ -165,12 +164,12 @@ const Dashboard: React.FC = () => {
 
   const handleTaskCreate = async (task: CreateTaskInput) => {
     try {
-      setError(null); // 前回のエラーをクリア
+      clearError(); // useTaskStoreのclearError関数を使用
       await addTask(task);
       setShowCreateModal(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'タスクの作成に失敗しました';
-      setError(errorMessage);
+      // addTask内でuseTaskStoreのerror状態が自動設定されるため、
+      // ここでの明示的なエラー設定は不要
       // モーダルは閉じずにユーザーに再試行の機会を提供
     }
   };
@@ -550,7 +549,7 @@ const Dashboard: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setError(null)}
+              onClick={clearError}
               className="ml-2 text-white hover:bg-red-600"
             >
               <X className="h-4 w-4" />

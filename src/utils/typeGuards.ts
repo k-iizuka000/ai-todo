@@ -107,11 +107,11 @@ let cacheStats: CacheStats = {
 
 /**
  * キャッシュクリア
+ * WeakMapは直接クリアできないため、統計情報のみリセット
  */
 export const clearValidationCache = (): void => {
-  // WeakMapはclearメソッドがないため、新しいインスタンスを作成
-  const newCache = new WeakMap<object, boolean>();
-  (validationCache as any) = newCache;
+  // WeakMapはclearメソッドがなく、constで宣言されているため直接変更不可
+  // 統計情報のみリセットし、WeakMapは自動ガベージコレクションに任せる
   cacheStats = { hits: 0, misses: 0, hitRate: 0, cacheSize: 0 };
 };
 

@@ -55,3 +55,15 @@ export const routes: RouteConfig[] = [
 ];
 
 export const mobileRoutes = routes.filter(route => !route.children);
+
+// DEBUG: 開発環境専用ルート定義
+export const debugRoutes: RouteConfig[] = process.env.NODE_ENV === 'development' ? [
+  {
+    path: '/debug',
+    label: 'DEBUG',
+    icon: 'Bug',
+    children: [
+      { path: '/debug/drag-drop-test', label: 'ドラッグ&ドロップテスト' },
+    ],
+  },
+] : [];

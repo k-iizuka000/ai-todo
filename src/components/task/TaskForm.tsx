@@ -77,6 +77,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({
 
   // バリデーションエラー
   const [errors, setErrors] = useState<ValidationErrors>({})
+  
+  // リアルタイムバリデーション状態
+  const [isFormValid, setIsFormValid] = useState(false)
 
   // 初期データの設定
   useEffect(() => {
@@ -92,6 +95,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       })
     }
   }, [initialData])
+
+  // フォーム入力変更時のリアルタイムバリデーション
+  useEffect(() => {
+    const isValid = formData.title.trim().length > 0 && Object.keys(errors).length === 0
+    setIsFormValid(isValid)
+  }, [formData, errors])
 
   // バリデーション関数
   const validateForm = useCallback((): boolean => {
@@ -330,7 +339,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         <Button
           type="submit"
           loading={loading}
-          disabled={loading || Object.keys(errors).length > 0}
+          disabled={loading || !isFormValid}
         >
           {submitLabel}
         </Button>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { CreateTaskInput, UpdateTaskInput } from '@/types/task'
@@ -40,29 +40,51 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
     setError(null)
 
     try {
+      // プロジェクトIDの明確な設定ロジック
+      const effectiveProjectId = projectId || formData.projectId
+      
       // プロジェクトIDが指定されている場合は追加
       const taskData: CreateTaskInput = {
         title: formData.title || '',
         description: formData.description,
         priority: formData.priority,
-        projectId: projectId || formData.projectId,
+        projectId: effectiveProjectId,
         assigneeId: formData.assigneeId,
         tags: formData.tags,
         dueDate: formData.dueDate,
         estimatedHours: formData.estimatedHours,
       }
 
+      // 必須フィールドの事前チェック
+      if (!taskData.title?.trim()) {
+        throw new Error('タスクのタイトルは必須です。')
+      }
+
       await onTaskCreate(taskData)
       
-      // 成功時はモーダルを閉じる
+      // 成功時はモーダルを閉じてエラー状態をクリア
+      setError(null)
       onOpenChange(false)
     } catch (err) {
       console.error('タスク作成エラー:', err)
-      setError(
-        err instanceof Error 
-          ? err.message 
-          : 'タスクの作成に失敗しました。再度お試しください。'
-      )
+      
+      // エラー種別に基づく詳細なエラーメッセージ
+      let errorMessage: string
+      if (err instanceof Error) {
+        if (err.message.includes('validation')) {
+          errorMessage = `入力エラー: ${err.message}`
+        } else if (err.message.includes('network')) {
+          errorMessage = 'ネットワークエラーが発生しました。インターネット接続を確認してください。'
+        } else if (err.message.includes('timeout')) {
+          errorMessage = 'サーバーからの応答がありません。しばらくお待ちください。'
+        } else {
+          errorMessage = err.message
+        }
+      } else {
+        errorMessage = 'タスクの作成に失敗しました。再度お試しください。'
+      }
+      
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -78,6 +100,19 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
 
   // エラーをクリア
   const clearError = () => setError(null)
+
+  // TaskFormプロップスの最適化とメモ化
+  const taskFormProps = useMemo(() => {
+    const effectiveProjectId = projectId || initialData?.projectId
+    return {
+      initialData: effectiveProjectId ? { ...initialData, projectId: effectiveProjectId } : initialData,
+      onSubmit: handleSubmit,
+      onCancel: handleCancel,
+      submitLabel: "タスクを作成",
+      title: "",
+      loading: isLoading
+    }
+  }, [projectId, initialData, handleSubmit, handleCancel, isLoading])
 
   return (
     <Modal
@@ -134,12 +169,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
 
         {/* メインフォーム */}
         <TaskForm
-          initialData={projectId || initialData?.projectId ? { ...initialData, projectId: projectId || initialData?.projectId } : initialData}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          submitLabel="タスクを作成"
-          title=""
-          loading={isLoading}
+          {...taskFormProps}
         />
       </div>
     </Modal>

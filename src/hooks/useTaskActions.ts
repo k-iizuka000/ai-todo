@@ -13,7 +13,7 @@ import { useCallback, useState, useRef, useEffect } from 'react';
 import { useTaskStore } from '@/stores/taskStore';
 import { TaskStatus, CreateTaskInput, UpdateTaskInput, Task } from '@/types/task';
 import { useAsyncHandler } from '@/hooks/useAsyncHandler';
-import { taskApi } from '@/api/tasks';
+import { taskApi, subtaskApi } from '@/api/tasks';
 
 /**
  * タスク操作アクション集約フック（設計書グループ2対応）
@@ -236,7 +236,19 @@ export const useTaskActions = () => {
       
       // 楽観的更新（即座のUI更新）- 生存確認付き
       if (isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
-        updateTask(taskId, { status: newStatus });
+        try {
+          await updateTask(taskId, { status: newStatus });
+          
+          // 修正: UI同期のための明示的な状態更新通知
+          const currentStore = useTaskStore.getState();
+          currentStore.setTasks([...currentStore.tasks]); // 強制再描画トリガー
+        } catch (updateError) {
+          console.error('Optimistic update failed:', updateError);
+          // 楽観的更新に失敗した場合はロールバックを準備
+          if (isMountedRef.current) {
+            setError('タスクの状態更新に失敗しました');
+          }
+        }
       }
       
       // 非同期処理ハンドラーを使用してAPI呼び出し
@@ -562,7 +574,7 @@ export const useTaskActions = () => {
         
         try {
           // 実際のAPI呼び出し
-          const response = await taskApi.updateSubtask(taskId, subtaskId, { 
+          const response = await subtaskApi.updateSubtask(subtaskId, { 
             completed: newCompletedState 
           });
           

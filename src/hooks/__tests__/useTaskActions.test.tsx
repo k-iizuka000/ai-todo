@@ -7,7 +7,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import { useTaskActions } from '../useTaskActions';
 import { useTaskStore } from '@/stores/taskStore';
-import { taskApi } from '@/api/tasks';
+import { taskApi, subtaskApi } from '@/api/tasks';
 
 // モック設定
 vi.mock('@/stores/taskStore');
@@ -15,6 +15,7 @@ vi.mock('@/api/tasks');
 
 const mockUseTaskStore = vi.mocked(useTaskStore);
 const mockTaskApi = vi.mocked(taskApi);
+const mockSubtaskApi = vi.mocked(subtaskApi);
 
 describe('useTaskActions - Issue #028対応', () => {
   // モック初期化
@@ -69,7 +70,7 @@ describe('useTaskActions - Issue #028対応', () => {
     mockTaskApi.deleteTask.mockResolvedValue({
       data: { success: true }
     });
-    mockTaskApi.updateSubtask.mockResolvedValue({
+    mockSubtaskApi.updateSubtask.mockResolvedValue({
       data: { success: true, subtask: {} }
     });
   });
@@ -375,6 +376,118 @@ describe('useTaskActions - Issue #028対応', () => {
         unmount();
         unmount(); // 2回目のアンマウント
       }).not.toThrow();
+    });
+  });
+
+  describe('楽観的更新とUI同期の強化 - Issue #061対応', () => {
+    it('moveTaskで楽観的更新後に強制再描画トリガーが実行される', async () => {
+      const mockTask = {
+        id: 'task-1',
+        title: 'Test Task',
+        status: 'todo' as const,
+        priority: 'medium' as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        subtasks: []
+      };
+
+      const mockSetTasks = vi.fn();
+      const mockTasks = [mockTask];
+      
+      mockGetTaskById.mockReturnValue(mockTask);
+      mockUpdateTask.mockResolvedValue(mockTask);
+      
+      // useTaskStore.getState()のモック設定
+      const mockGetState = vi.fn().mockReturnValue({
+        tasks: mockTasks,
+        setTasks: mockSetTasks
+      });
+      
+      // useTaskStore.getStateのモックを設定
+      vi.mocked(useTaskStore).getState = mockGetState;
+
+      const { result } = renderHook(() => useTaskActions());
+
+      await act(async () => {
+        await result.current.moveTask('task-1', 'in-progress');
+      });
+
+      // updateTaskが呼ばれることを確認
+      expect(mockUpdateTask).toHaveBeenCalledWith('task-1', { status: 'in-progress' });
+      
+      // getStateが呼ばれることを確認
+      expect(mockGetState).toHaveBeenCalled();
+      
+      // setTasksが強制再描画のために呼ばれることを確認
+      expect(mockSetTasks).toHaveBeenCalledWith([...mockTasks]);
+    });
+
+    it('updateTask失敗時にエラーハンドリングが適切に動作する', async () => {
+      const mockTask = {
+        id: 'task-1',
+        title: 'Test Task',
+        status: 'todo' as const,
+        priority: 'medium' as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        subtasks: []
+      };
+
+      mockGetTaskById.mockReturnValue(mockTask);
+      
+      // updateTaskでエラーをスローするようにモック
+      const updateError = new Error('Update failed');
+      mockUpdateTask.mockRejectedValue(updateError);
+
+      const { result } = renderHook(() => useTaskActions());
+
+      await act(async () => {
+        await result.current.moveTask('task-1', 'in-progress');
+      });
+
+      // エラー処理のためsetErrorが呼ばれることを確認
+      expect(mockSetError).toHaveBeenCalledWith('タスクの状態更新に失敗しました');
+    });
+
+    it('アンマウント後は強制再描画トリガーが実行されない', async () => {
+      const mockTask = {
+        id: 'task-1',
+        title: 'Test Task',
+        status: 'todo' as const,
+        priority: 'medium' as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        subtasks: []
+      };
+
+      const mockSetTasks = vi.fn();
+      
+      mockGetTaskById.mockReturnValue(mockTask);
+      mockUpdateTask.mockResolvedValue(mockTask);
+      
+      // useTaskStore.getState()のモック設定
+      const mockGetState = vi.fn().mockReturnValue({
+        tasks: [mockTask],
+        setTasks: mockSetTasks
+      });
+      
+      vi.mocked(useTaskStore).getState = mockGetState;
+
+      const { result, unmount } = renderHook(() => useTaskActions());
+
+      // moveTaskを開始してすぐにアンマウント
+      const movePromise = act(async () => {
+        return result.current.moveTask('task-1', 'in-progress');
+      });
+
+      unmount();
+
+      await act(async () => {
+        await movePromise;
+      });
+
+      // アンマウント後は強制再描画トリガーが呼ばれないことを確認
+      expect(mockSetTasks).not.toHaveBeenCalled();
     });
   });
 });

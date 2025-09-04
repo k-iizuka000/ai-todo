@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import AuthLayout from '@/components/auth/AuthLayout';
 import ProtectedRoute, { AuthenticatedRedirect } from '@/components/auth/ProtectedRoute';
@@ -20,6 +20,13 @@ import AISettings from '@/pages/settings/AISettings';
 import ThemeSettings from '@/pages/settings/ThemeSettings';
 import DataManagement from '@/pages/settings/DataManagement';
 import QualityDashboard from '@/components/QualityDashboard';
+
+// Debug components (development only)
+const KanbanDragDropTest = React.lazy(() => 
+  import('@/pages/debug/KanbanDragDropTest').then(module => ({
+    default: module.KanbanDragDropTest
+  }))
+);
 
 // Loading component
 const LoadingSpinner: React.FC = () => (
@@ -113,6 +120,13 @@ const AppRouter: React.FC = () => {
             <Route path="theme" element={<ThemeSettings />} />
             <Route path="data" element={<DataManagement />} />
           </Route>
+
+          {/* DEBUG: 開発環境専用ルート */}
+          {process.env.NODE_ENV === 'development' && (
+            <Route path="debug" element={<div className="h-full"><Outlet /></div>}>
+              <Route path="drag-drop-test" element={<KanbanDragDropTest />} />
+            </Route>
+          )}
         </Route>
         
         {/* 404 route - outside of protected routes */}

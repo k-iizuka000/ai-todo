@@ -65,6 +65,9 @@ interface TaskState {
   getUnscheduledSubtasks: (parentId: string) => UnscheduledTaskData[];
   updateTaskSchedule: (taskId: string, scheduleInfo: TaskScheduleInfo) => void;
   clearTaskSchedule: (taskId: string) => void;
+  
+  // Issue #061: 状態同期強化用メソッド
+  getLastUpdated: () => number | undefined;
 }
 
 // デフォルトのフィルター設定
@@ -1024,6 +1027,11 @@ export const useTaskStore = create<TaskState>()(
           );
           
           set({ tasks: updatedTasks }, false, 'clearTaskSchedule');
+        },
+
+        // Issue #061: 状態同期強化用メソッド実装
+        getLastUpdated: () => {
+          return get().lastUpdated;
         }
       }),
     {

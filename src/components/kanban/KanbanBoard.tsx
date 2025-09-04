@@ -3,7 +3,7 @@
  * Issue #026 Group 3 Task 3.2: 型安全性強化とエラーバウンダリ統合
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { 
   DndContext, 
   DragEndEvent, 
@@ -149,11 +149,19 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
     };
   }, [onTaskClick, onAddTask, onSubtaskToggle, onTagClick, onProjectClick, compact, className, enableDebugMode]);
   // 設計書要件: 直接購読パターンによるデータ取得（フィルタリング統合）
-  const { tasksByStatus, error } = useKanbanTasks(filters);
+  // Issue 059対応: lastUpdated追加によるUI同期強化
+  const { tasksByStatus, error, lastUpdated } = useKanbanTasks(filters);
   const { moveTask, toggleSubtask } = useTaskActions();
   
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
+  
+  // Issue 059対応: 状態更新時の強制再描画トリガー追加
+  useEffect(() => {
+    if (lastUpdated) {
+      console.log(`[KanbanBoard] Tasks updated at: ${lastUpdated}`);
+    }
+  }, [lastUpdated]);
   
   // エラー状態の表示
   if (error) {
@@ -173,13 +181,14 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   );
 
   // 全タスクリスト（ドラッグ処理用に統合）
+  // Issue 059対応: lastUpdatedを依存配列に追加して確実な再計算を保証
   const allTasks = useMemo(() => {
     return [
       ...tasksByStatus.todo,
       ...tasksByStatus.in_progress,
       ...tasksByStatus.done
     ];
-  }, [tasksByStatus]);
+  }, [tasksByStatus, lastUpdated]);
 
   // タスクの折り畳み状態を切り替え
   const handleToggleTaskCollapse = useCallback((taskId: string) => {

@@ -94,7 +94,13 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     return colorMap[priority as keyof typeof colorMap] || 'border-l-gray-400';
   };
 
-  const handleProjectSelect = (project: Project) => {
+  const handleProjectSelect = (project: Project, event?: React.MouseEvent) => {
+    // 修正: イベント伝播の明示的制御（Issue 036対応）
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
     onProjectSelect(project);
     if (onProjectIdSelect) {
       onProjectIdSelect(project.id);
@@ -102,7 +108,13 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     setIsOpen(false);
   };
 
-  const handleNoneSelect = () => {
+  const handleNoneSelect = (event?: React.MouseEvent) => {
+    // 修正: イベント伝播の明示的制御（Issue 036対応）
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
     if (onProjectIdSelect) {
       onProjectIdSelect(null);
     }
@@ -165,7 +177,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             {/* プロジェクトなしオプション */}
             {allowNone && (
               <button
-                onClick={handleNoneSelect}
+                onClick={(e) => handleNoneSelect(e)}
                 className={cn(
                   'w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors flex items-center space-x-2',
                   onCreateProject && 'border-b border-border',
@@ -184,7 +196,10 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             {onCreateProject && (
               <>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    // 修正: イベント伝播の明示的制御（Issue 036対応）
+                    e.preventDefault();
+                    e.stopPropagation();
                     onCreateProject();
                     setIsOpen(false);
                   }}
@@ -199,7 +214,10 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             {/* プロジェクトなしオプション */}
             {allowClear && selectedProject && (
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  // 修正: イベント伝播の明示的制御（Issue 036対応）
+                  e.preventDefault();
+                  e.stopPropagation();
                   onProjectSelect(null);
                   setIsOpen(false);
                 }}
@@ -221,7 +239,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
               projects.map((project) => (
                 <button
                   key={project.id}
-                  onClick={() => handleProjectSelect(project)}
+                  onClick={(e) => handleProjectSelect(project, e)}
                   className={cn(
                     'w-full px-3 py-3 text-left hover:bg-muted/50 transition-colors flex items-center justify-between border-l-4',
                     getPriorityColor(project.priority),

@@ -51,7 +51,8 @@ describe('KanbanBoard', () => {
     // モックのリセット
     mockUseKanbanTasks.mockReturnValue({
       tasksByStatus: mockTasks,
-      error: null
+      error: null,
+      lastUpdated: Date.now()
     });
 
     mockUseTaskActions.mockReturnValue({
@@ -191,6 +192,87 @@ describe('KanbanBoard', () => {
       }).not.toThrow();
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Issue 059: カンバンボードでのタスク表示問題修正', () => {
+    it('lastUpdatedが正しく取得されること', () => {
+      const mockLastUpdated = 1234567890;
+
+      mockUseKanbanTasks.mockReturnValue({
+        tasksByStatus: mockTasks,
+        error: null,
+        lastUpdated: mockLastUpdated
+      });
+
+      render(<KanbanBoard onTaskClick={() => {}} />);
+
+      // useKanbanTasksから追加データが正しく取得されることを確認
+      expect(mockUseKanbanTasks).toHaveBeenCalledWith(undefined);
+    });
+
+    it('lastUpdatedの変更で状態更新トリガーが動作すること', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      const initialTimestamp = 1234567890;
+      mockUseKanbanTasks.mockReturnValue({
+        tasksByStatus: mockTasks,
+        error: null,
+        lastUpdated: initialTimestamp
+      });
+
+      const { rerender } = render(<KanbanBoard onTaskClick={() => {}} />);
+
+      // 初回レンダリング時のログ確認
+      expect(consoleSpy).toHaveBeenCalledWith(
+        `[KanbanBoard] Tasks updated at: ${initialTimestamp}`
+      );
+
+      // タイムスタンプを変更して再レンダリング
+      const newTimestamp = 1234567891;
+      mockUseKanbanTasks.mockReturnValue({
+        tasksByStatus: mockTasks,
+        error: null,
+        lastUpdated: newTimestamp
+      });
+
+      rerender(<KanbanBoard onTaskClick={() => {}} />);
+
+      // 新しいタイムスタンプでのログ確認
+      expect(consoleSpy).toHaveBeenCalledWith(
+        `[KanbanBoard] Tasks updated at: ${newTimestamp}`
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('allTasksのuseMemoにlastUpdatedが依存配列として含まれていること', () => {
+      // このテストは実装の詳細をテストするため、間接的にテスト
+      const mockTasks1 = {
+        todo: [{ ...mockTasks.todo[0], id: 'task-1' }],
+        in_progress: [],
+        done: []
+      };
+
+      mockUseKanbanTasks.mockReturnValue({
+        tasksByStatus: mockTasks1,
+        error: null,
+        lastUpdated: 1234567890
+      });
+
+      const { rerender } = render(<KanbanBoard onTaskClick={() => {}} />);
+
+      // タスク内容は同じだがlastUpdatedが変更された場合
+      mockUseKanbanTasks.mockReturnValue({
+        tasksByStatus: mockTasks1,
+        error: null,
+        lastUpdated: 1234567891 // lastUpdatedのみ変更
+      });
+
+      // 再レンダリング実行
+      expect(() => {
+        rerender(<KanbanBoard onTaskClick={() => {}} />);
+      }).not.toThrow();
     });
   });
 

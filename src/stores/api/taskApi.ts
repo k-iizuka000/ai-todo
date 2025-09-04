@@ -6,7 +6,7 @@
 import { Task, CreateTaskInput, UpdateTaskInput } from '../../types/task';
 
 // API基盤設定
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3010';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // 基本APIクライアント
 class SimpleApiClient {
@@ -78,8 +78,8 @@ const taskApiClient = new SimpleApiClient(API_BASE_URL);
 
 // API エンドポイント定数
 const ENDPOINTS = {
-  TASKS: '/api/tasks',
-  TASK_BY_ID: (id: string) => `/api/tasks/${id}`,
+  TASKS: '/api/v1/tasks',
+  TASK_BY_ID: (id: string) => `/api/v1/tasks/${id}`,
 } as const;
 
 // TaskAPI 関数群
@@ -97,7 +97,19 @@ export const taskAPI = {
   // タスク作成
   createTask: async (taskInput: CreateTaskInput): Promise<Task> => {
     try {
-      return await taskApiClient.post<Task>(ENDPOINTS.TASKS, taskInput);
+      // サーバースキーマに合わせてデータを変換
+      const serverTaskInput = {
+        title: taskInput.title,
+        description: taskInput.description,
+        priority: taskInput.priority?.toUpperCase() || 'MEDIUM',
+        projectId: taskInput.projectId,
+        assigneeId: taskInput.assigneeId,
+        dueDate: taskInput.dueDate,
+        estimatedHours: taskInput.estimatedHours,
+        // tagsは除外（サーバーでサポートされていない）
+      };
+      
+      return await taskApiClient.post<Task>(ENDPOINTS.TASKS, serverTaskInput);
     } catch (error) {
       console.error('Failed to create task:', error);
       throw new Error('タスクの作成に失敗しました');

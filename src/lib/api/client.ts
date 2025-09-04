@@ -634,7 +634,7 @@ export class ApiClient {
  * デフォルトAPIクライアントインスタンス
  */
 export const apiClient = new ApiClient(
-  import.meta.env.VITE_API_URL || 'http://localhost:3010'
+  import.meta.env.VITE_API_URL || 'http://localhost:3001'
 );
 
 // 認証トークンインターセプター

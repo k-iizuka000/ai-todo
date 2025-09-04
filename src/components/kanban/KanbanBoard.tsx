@@ -296,27 +296,36 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
         return;
       }
 
-      // 移動処理（既存ロジック維持 + 安全化）
-      let finalStatus: TaskStatus = activeTask.status;
+      // 階層化ドロップ検出ロジック（Issue 037対応）
+      let targetStatus: TaskStatus | null = null;
+
+      // 第1優先：over.idがTaskStatusの場合（カラムに直接ドロップ）
       if (isTaskStatus(over.id) && COLUMN_ORDER.includes(over.id)) {
-        finalStatus = over.id;
+        targetStatus = over.id;
+        console.log(`[DragEnd] Direct column drop detected: ${over.id}`);
       } else {
+        // 第2優先：over.idがタスクIDの場合（タスク上にドロップ）
         const overTask = allTasks.find(task => task.id === over.id);
         if (overTask && isValidTask(overTask)) {
-          finalStatus = overTask.status;
+          targetStatus = overTask.status;
+          console.log(`[DragEnd] Task-over-task drop detected: task ${over.id} in column ${overTask.status}`);
         } else {
-          console.warn(`Target task with id ${over.id} not found or invalid during drag end`);
+          console.warn(`[DragEnd] Invalid drop target: ${over.id} not found or invalid`);
+          return; // 早期リターンで無効なドロップを防止
         }
       }
 
-      // 状態変更の安全実行
-      if (activeTask.status !== finalStatus && isOperationActive) {
-        moveTask(activeTask.id, finalStatus);
+      // ステータス変更の実行
+      if (targetStatus && activeTask.status !== targetStatus && isOperationActive) {
+        console.log(`[DragEnd] Moving task ${activeTask.id} from ${activeTask.status} to ${targetStatus}`);
+        moveTask(activeTask.id, targetStatus);
+      } else {
+        console.log(`[DragEnd] No status change needed or invalid target`);
       }
 
       // 同じカラム内でのリオーダリング（将来の実装用コメント）
       // TODO: リオーダリング機能は将来のフェーズで実装
-      if (activeTask.status === finalStatus && over.id !== active.id && finalStatus !== 'archived') {
+      if (targetStatus && activeTask.status === targetStatus && over.id !== active.id && targetStatus !== 'archived') {
         console.log('Task reordering - future implementation');
       }
 

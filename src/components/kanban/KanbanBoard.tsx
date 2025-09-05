@@ -273,7 +273,7 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   }, []);
 
   // ドラッグ終了
-  // Issue #028: ドラッグ終了時の安全化とクリーンアップ強化
+  // Issue #037: ドラッグ&ドロップ機能修正 - 同一カラム内ドロップ防止とバリデーション強化
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     let isOperationActive = true;
     
@@ -285,6 +285,7 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
         setDraggedTask(null);
       }
 
+      // ドロップターゲットのバリデーション強化
       if (!over || !isOperationActive) {
         console.warn('Drag ended without valid drop target');
         return;
@@ -296,32 +297,55 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
         return;
       }
 
-      // 移動処理（既存ロジック維持 + 安全化）
+      console.log('Drag operation:', {
+        activeId: active.id,
+        overId: over.id,
+        activeTaskStatus: activeTask.status
+      });
+
+      // Issue #037修正: ドロップターゲット判定の改善
       let finalStatus: TaskStatus = activeTask.status;
+      let isValidDrop = false;
+
+      // 1. カラム直接ドロップの場合（over.idがTaskStatusの場合）
       if (isTaskStatus(over.id) && COLUMN_ORDER.includes(over.id)) {
         finalStatus = over.id;
-      } else {
+        isValidDrop = true;
+        console.log(`Dropped on column: ${over.id}`);
+      } 
+      // 2. タスク上ドロップの場合（over.idがタスクIDの場合）
+      else {
         const overTask = allTasks.find(task => task.id === over.id);
         if (overTask && isValidTask(overTask)) {
           finalStatus = overTask.status;
+          isValidDrop = true;
+          console.log(`Dropped on task: ${over.id}, status: ${finalStatus}`);
         } else {
-          console.warn(`Target task with id ${over.id} not found or invalid during drag end`);
+          console.warn(`Target with id ${over.id} not found or invalid during drag end`);
         }
       }
 
-      // 状態変更の安全実行
-      if (activeTask.status !== finalStatus && isOperationActive) {
-        moveTask(activeTask.id, finalStatus);
+      // Issue #037修正: 同一カラム内ドロップの適切な処理
+      if (!isValidDrop) {
+        console.warn('Invalid drop target - operation cancelled');
+        return;
       }
 
-      // 同じカラム内でのリオーダリング（将来の実装用コメント）
-      // TODO: リオーダリング機能は将来のフェーズで実装
-      if (activeTask.status === finalStatus && over.id !== active.id && finalStatus !== 'archived') {
-        console.log('Task reordering - future implementation');
+      // 同じカラム内のドロップは無効化（Issue #037の根本原因）
+      if (activeTask.status === finalStatus) {
+        console.log(`Same column drop detected (${activeTask.status}), ignoring operation`);
+        return;
+      }
+
+      // Issue #037修正: 状態変更の実行（楽観的更新準備）
+      if (isOperationActive) {
+        console.log(`Moving task ${activeTask.id} from ${activeTask.status} to ${finalStatus}`);
+        moveTask(activeTask.id, finalStatus);
       }
 
     } catch (error) {
       console.error('Critical error during drag end:', error);
+      // エラー時は元の状態を維持（楽観的更新のロールバック用の準備）
     } finally {
       // 最終的なクリーンアップ
       isOperationActive = false;

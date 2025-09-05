@@ -2,182 +2,149 @@
 
 ## Overview
 
-This design addresses the critical drag-and-drop bug in the kanban board where tasks fail to move between columns despite UI interaction being recognized. The issue lies in improper droppable area matching and inconsistent state updates. The solution implements improved drag-drop validation, optimistic UI updates, and robust error handling while maintaining the existing dnd-kit architecture.
+This design addresses the drag-and-drop functionality bug in the Kanban task management system where tasks cannot be properly moved between status columns. The solution focuses on fixing event handling, state management, and backend synchronization to ensure reliable task movement operations.
 
 ## Steering Document Alignment
 
 ### Technical Standards (tech.md)
-Following the established React + TypeScript patterns with dnd-kit library integration. Maintaining the component architecture with single responsibility principle and proper error boundaries.
+- Follows React best practices with functional components and hooks
+- Uses TypeScript for type safety and compile-time error prevention
+- Implements proper error boundaries for graceful error handling
+- Adheres to single responsibility principle in component design
 
 ### Project Structure (structure.md)
-Working within the existing `/src/components/kanban/` structure with minimal impact on other components. Preserving the separation between presentation and business logic layers.
+- Components organized in `/src/components/kanban/` directory
+- Hooks placed in `/src/hooks/` for reusable logic
+- Type definitions in `/src/types/` for consistency
+- Tests colocated with components in `__tests__` directories
 
 ## Code Reuse Analysis
 
 ### Existing Components to Leverage
-- **KanbanBoard.tsx**: Main drag-drop logic container - requires bug fixes in handleDragEnd
-- **KanbanColumn.tsx**: Drop zone implementation - needs improved droppable area validation
-- **TaskCard.tsx**: Draggable items - maintain existing drag preview functionality
-- **useTaskActions hook**: State management - enhance moveTask function with better error handling
-- **useKanbanTasks hook**: Data fetching - maintain existing task retrieval patterns
+- **@dnd-kit/core**: Current drag-and-drop library - will fix integration issues
+- **KanbanBoard component**: Main board component - will enhance event handling
+- **KanbanColumn component**: Column component - will fix drop zone detection
+- **useKanbanTasks hook**: Task management hook - will ensure proper state updates
+- **useTaskActions hook**: Task actions hook - will fix status update logic
 
 ### Integration Points
-- **Zustand Task Store**: Existing state management will handle task status updates
-- **dnd-kit Library**: Continue using established drag-drop framework with improved event handling
-- **Task Type System**: Leverage existing TaskStatus enum and validation utilities
+- **TaskStore**: Zustand store for task state management - ensure proper sync
+- **Task type system**: Existing TypeScript types - maintain type safety
+- **Error boundaries**: Existing error handling - enhance for drag operations
 
 ## Architecture
 
-The fix maintains the existing component hierarchy while addressing the core issue: improper handling of drag-drop events and inconsistent state updates between UI and backend.
+The solution maintains the current architecture while fixing the event handling chain and state synchronization issues in the drag-and-drop system.
 
 ### Modular Design Principles
-- **Single File Responsibility**: Each component handles specific drag-drop concerns
-- **Component Isolation**: Bug fixes isolated to drag-drop specific logic without affecting other features  
-- **Service Layer Separation**: State updates through existing useTaskActions hook
-- **Utility Modularity**: Enhanced validation utilities for drag-drop operations
+- **Single File Responsibility**: Separate drag logic, drop logic, and state updates
+- **Component Isolation**: Keep drag-drop concerns isolated from display logic
+- **Service Layer Separation**: Separate UI events from backend operations
+- **Utility Modularity**: Create focused utilities for drag-drop validation
 
 ```mermaid
 graph TD
-    A[KanbanBoard] --> B[DndContext]
-    B --> C[KanbanColumn - Droppable]
-    C --> D[TaskCard - Draggable]
-    
-    A --> E[useTaskActions]
-    E --> F[Zustand Store]
-    
-    A --> G[useKanbanTasks]
-    G --> F
-    
-    H[handleDragEnd] --> I[validateDropTarget]
-    I --> J[moveTask]
-    J --> K[optimisticUpdate]
-    K --> L[errorRecovery]
-    
-    style H fill:#ff9999
-    style I fill:#ffcc99
-    style J fill:#99ff99
+    A[User Drags Task] --> B[DragStartEvent]
+    B --> C[Capture Task Data]
+    C --> D[Visual Feedback]
+    D --> E[DragOverEvent]
+    E --> F[Validate Drop Zone]
+    F --> G[DropEvent]
+    G --> H[Update Local State]
+    H --> I[Backend Sync]
+    I --> J[Confirm Update]
 ```
 
 ## Components and Interfaces
 
-### Enhanced KanbanBoard Component
-- **Purpose:** Fix drag-drop event handling and improve droppable area validation
-- **Key Changes:** 
-  - Improve handleDragEnd with proper target validation
-  - Add optimistic UI updates with rollback capability
-  - Enhanced error handling for failed drag operations
-- **Dependencies:** dnd-kit, useTaskActions, useKanbanTasks
-- **Reuses:** Existing DndContext configuration and sensor setup
+### KanbanBoard Component Enhancement
+- **Purpose:** Fix main drag-drop orchestration and event handling
+- **Interfaces:** 
+  - handleDragEnd: Process completed drag operations
+  - handleDragOver: Validate drop zones during drag
+  - handleDragStart: Initialize drag state
+- **Dependencies:** @dnd-kit/core, useKanbanTasks, useTaskActions
+- **Reuses:** Existing board layout and column rendering
 
-### Improved KanbanColumn Component  
-- **Purpose:** Ensure proper droppable area identification and visual feedback
-- **Key Changes:**
-  - Fix droppable ID mapping to prevent self-drops
-  - Add visual drop zone indicators
-  - Implement proper drop validation logic
-- **Dependencies:** dnd-kit/sortable
-- **Reuses:** Existing column layout and task rendering
+### KanbanColumn Component Enhancement
+- **Purpose:** Fix drop zone detection and visual feedback
+- **Interfaces:**
+  - useDroppable hook integration
+  - isOver state for visual feedback
+  - setNodeRef for proper DOM binding
+- **Dependencies:** @dnd-kit/core, Task components
+- **Reuses:** Existing column header and task list rendering
 
-### Enhanced useTaskActions Hook
-- **Purpose:** Improve moveTask function with optimistic updates and error recovery
-- **Key Changes:**
-  - Add optimistic UI updates for immediate feedback
-  - Implement rollback mechanism for failed operations
-  - Enhanced error handling and retry logic
-- **Dependencies:** Zustand store
-- **Reuses:** Existing task state management patterns
+### DragDropHandler Utility (New)
+- **Purpose:** Centralize drag-drop validation and state management
+- **Interfaces:**
+  - validateDrop(source, target): Validate if drop is allowed
+  - processTaskMove(taskId, newStatus): Handle task movement
+  - rollbackMove(taskId, originalStatus): Handle failed operations
+- **Dependencies:** Task types, validation utilities
+- **Reuses:** Type guards and validation functions
 
 ## Data Models
 
-### DragOperation Model
+### DragDropState
 ```typescript
-interface DragOperation {
+interface DragDropState {
+  activeTaskId: string | null;
+  activeTask: Task | null;
+  originalStatus: TaskStatus | null;
+  targetStatus: TaskStatus | null;
+  isDragging: boolean;
+}
+```
+
+### TaskMoveEvent
+```typescript
+interface TaskMoveEvent {
   taskId: string;
-  sourceStatus: TaskStatus;
-  targetStatus: TaskStatus;
+  fromStatus: TaskStatus;
+  toStatus: TaskStatus;
   timestamp: number;
-  optimisticUpdate: boolean;
-}
-```
-
-### DropValidation Model
-```typescript
-interface DropValidation {
-  isValid: boolean;
-  reason?: string;
-  targetStatus?: TaskStatus;
-  allowSameColumn: boolean;
-}
-```
-
-### TaskMoveResult Model
-```typescript
-interface TaskMoveResult {
   success: boolean;
-  task?: Task;
   error?: string;
-  rollbackRequired: boolean;
 }
 ```
 
 ## Error Handling
 
 ### Error Scenarios
-1. **Same Column Drop:** Detection and prevention
-   - **Handling:** Validate drop target vs source column, abort operation if identical
-   - **User Impact:** No visual change, no API call, no error message
 
-2. **Network Failure During Move:** Backend API failure
-   - **Handling:** Rollback optimistic UI update, show error message with retry option
-   - **User Impact:** Task returns to original position, error toast with retry button
+1. **Network Failure During Update**
+   - **Handling:** Rollback local state to original position
+   - **User Impact:** Error toast shown, task returns to original column
 
-3. **Invalid Drop Target:** Drop outside valid zones
-   - **Handling:** Return task to original position, log warning
-   - **User Impact:** Task snaps back to original column
+2. **Invalid Drop Target**
+   - **Handling:** Prevent drop operation, show visual feedback
+   - **User Impact:** Task springs back to original position
 
-4. **Concurrent Modifications:** Race condition with other users
-   - **Handling:** Refresh task data, retry operation or show conflict resolution
-   - **User Impact:** Brief loading state, updated task positions
+3. **Concurrent Modification**
+   - **Handling:** Refresh task data, retry with latest state
+   - **User Impact:** Brief loading indicator, then successful move
+
+4. **Permission Denied**
+   - **Handling:** Show permission error, rollback move
+   - **User Impact:** Error message explaining permission issue
 
 ## Testing Strategy
 
 ### Unit Testing
-- Test handleDragEnd function with various drop scenarios
-- Test drop validation logic with edge cases
-- Test optimistic updates and rollback mechanisms
-- Test error handling paths and recovery
+- Test drag event handlers in isolation
+- Validate state management logic
+- Test error handling and rollback mechanisms
+- Verify type guards and validation functions
 
 ### Integration Testing
-- Test complete drag-drop workflows between all column combinations
-- Test error scenarios with mocked API failures
-- Test concurrent drag operations
-- Test keyboard accessibility for drag-drop
+- Test full drag-drop flow with mock backend
+- Verify state synchronization between components
+- Test error recovery scenarios
+- Validate visual feedback timing
 
 ### End-to-End Testing
-- Test user drag-drop scenarios across different browsers
-- Test responsive drag-drop behavior on mobile devices
-- Test accessibility compliance with screen readers
-- Test performance with large numbers of tasks
-
-## Implementation Plan
-
-### Phase 1: Core Bug Fix
-1. Fix handleDragEnd drop target validation
-2. Implement same-column drop prevention  
-3. Add proper error logging and debugging
-
-### Phase 2: Enhanced UX
-1. Add optimistic UI updates
-2. Implement rollback mechanism
-3. Add visual feedback for drag states
-
-### Phase 3: Error Recovery
-1. Enhanced error handling with retry logic
-2. Network failure recovery mechanisms
-3. Concurrent modification handling
-
-### Phase 4: Testing & Polish
-1. Comprehensive unit and integration tests
-2. E2E test scenarios
-3. Performance optimization
-4. Accessibility compliance verification
+- Test drag-drop across all column combinations
+- Verify backend persistence of changes
+- Test concurrent user scenarios
+- Validate accessibility with keyboard navigation

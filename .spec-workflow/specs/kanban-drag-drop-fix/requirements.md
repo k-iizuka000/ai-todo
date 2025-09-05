@@ -2,70 +2,74 @@
 
 ## Introduction
 
-This specification addresses a critical bug in the kanban board drag-and-drop functionality where tasks fail to move between columns despite UI interaction being recognized. The fix will restore the core task management workflow that enables users to track project progress effectively.
+This document outlines requirements for fixing the drag-and-drop functionality in the Kanban task management system. Currently, tasks cannot be properly moved between columns using drag-and-drop operations, which significantly impacts the user experience and workflow efficiency.
 
 ## Alignment with Product Vision
 
-This bugfix directly supports the AI-Todo application's core mission of providing intuitive task management through visual kanban boards. Restoring reliable drag-and-drop functionality is essential for user productivity and trust in the system.
+This bug fix directly supports the core product functionality of providing an intuitive, efficient task management interface. The drag-and-drop capability is essential for quick task status updates and maintaining a smooth user workflow.
 
 ## Requirements
 
-### Requirement 1: Column-to-Column Task Movement
+### Requirement 1: Enable Cross-Column Task Movement
 
-**User Story:** As a user managing tasks on a kanban board, I want to drag and drop tasks between columns (To Do → In Progress → Done), so that I can easily update task status and visualize project progress.
-
-#### Acceptance Criteria
-
-1. WHEN a user drags a task from "To Do" column and drops it on "In Progress" column THEN the system SHALL update the task status from "To Do" to "In Progress"
-2. WHEN a task is successfully moved between columns THEN the system SHALL visually move the task from the source column to the target column within 1 second
-3. WHEN a task is moved between columns THEN the system SHALL update the task count display for both source and target columns
-4. WHEN a user drags a task from any column to any other valid column THEN the system SHALL update the task status accordingly
-
-### Requirement 2: Error Handling and Validation
-
-**User Story:** As a user interacting with the kanban board, I want reliable feedback when drag-and-drop operations fail, so that I understand the system state and can take appropriate action.
+**User Story:** As a user, I want to drag tasks from one status column to another, so that I can quickly update task progress without manual editing.
 
 #### Acceptance Criteria
 
-1. WHEN a drag-and-drop operation fails due to network error THEN the system SHALL revert the UI changes and display an error message with retry option
-2. WHEN a user drops a task outside valid drop zones THEN the system SHALL return the task to its original position
-3. WHEN a user drops a task in the same column THEN the system SHALL not perform any status update or API call
-4. WHEN multiple simultaneous drag operations occur THEN the system SHALL process them sequentially without data corruption
+1. WHEN a user drags a task from "To Do" column THEN the system SHALL visually indicate the task is being dragged
+2. WHEN a user drops a task on "In Progress" column THEN the system SHALL move the task to that column
+3. WHEN a task is successfully moved THEN the system SHALL update the task's status in the backend
+4. IF the drop operation fails THEN the system SHALL return the task to its original position
+5. WHEN a task is moved between columns THEN the system SHALL persist the change immediately
 
-### Requirement 3: Same-Column Drop Prevention
+### Requirement 2: Proper Drag Event Handling
 
-**User Story:** As a user dragging tasks within the same column, I want the system to ignore meaningless operations, so that unnecessary processing and API calls are avoided.
+**User Story:** As a user, I want drag-and-drop operations to be reliably detected and processed, so that my actions always result in the expected outcome.
 
 #### Acceptance Criteria
 
-1. WHEN a user drops a task within the same column THEN the system SHALL not change the task status
-2. WHEN a same-column drop occurs THEN the system SHALL not make any backend API calls
-3. WHEN the dragged task ID matches the drop zone ID THEN the system SHALL treat it as a no-op
+1. WHEN dragstart event occurs THEN the system SHALL capture the task ID and source column
+2. WHEN dragover event occurs on a valid drop zone THEN the system SHALL allow the drop operation
+3. WHEN drop event occurs THEN the system SHALL process the task movement logic
+4. IF drop occurs on the same column THEN the system SHALL not perform any status update
+5. WHEN drag operation is cancelled THEN the system SHALL reset the UI state properly
+
+### Requirement 3: Visual Feedback During Drag Operations
+
+**User Story:** As a user, I want clear visual feedback during drag-and-drop operations, so that I understand what actions are possible and their results.
+
+#### Acceptance Criteria
+
+1. WHEN dragging starts THEN the system SHALL apply visual styling to the dragged element
+2. WHEN hovering over a valid drop zone THEN the system SHALL highlight the target column
+3. WHEN hovering over an invalid drop zone THEN the system SHALL indicate the area is not droppable
+4. WHEN drop is successful THEN the system SHALL show a success indication
+5. IF drop fails THEN the system SHALL display an appropriate error message
 
 ## Non-Functional Requirements
 
 ### Code Architecture and Modularity
-- **Single Responsibility Principle**: Separate drag-and-drop handling, status update logic, and UI state management
-- **Modular Design**: Create reusable drag-drop components that can be extended to other parts of the application
-- **Dependency Management**: Minimize coupling between drag-drop logic and specific task data structures
-- **Clear Interfaces**: Define clear contracts between drag-drop handlers, state management, and backend API calls
+- **Single Responsibility Principle**: Drag-and-drop logic should be isolated in dedicated modules
+- **Modular Design**: Event handlers, state management, and UI updates should be separated
+- **Dependency Management**: Minimize coupling between drag-drop functionality and other features
+- **Clear Interfaces**: Define clean contracts between drag-drop components and task management system
 
 ### Performance
-- Task status updates must complete within 1 second of drop operation
-- UI state changes must be reflected immediately (optimistic updates)
-- Failed operations must revert UI state within 500ms
+- Drag operations must be responsive with no perceptible lag (< 100ms response time)
+- State updates should complete within 200ms of drop action
+- No memory leaks from event listener management
 
 ### Security
-- Validate all task status transitions on the backend
-- Prevent unauthorized task modifications through proper authentication checks
-- Sanitize task IDs and column identifiers to prevent injection attacks
+- Validate all task movements on the backend before persisting
+- Ensure users can only move tasks they have permission to modify
+- Prevent XSS attacks through proper event data sanitization
 
 ### Reliability
-- Implement retry logic for failed network requests
-- Ensure data consistency between frontend state and backend data
-- Handle race conditions when multiple users modify the same task
+- All drag-and-drop operations must work consistently across supported browsers
+- System must handle network failures gracefully during status updates
+- Implement proper error recovery mechanisms for failed operations
 
 ### Usability
-- Provide clear visual feedback during drag operations (drag preview, hover states)
-- Display appropriate loading states during status updates
-- Show meaningful error messages when operations fail
+- Drag-and-drop must work on both desktop and touch devices
+- Visual feedback must be clear and intuitive
+- Operations must be reversible (undo capability)

@@ -9,7 +9,6 @@ import { ColumnHeader } from './ColumnHeader';
 import { TaskCard } from './TaskCard';
 import { TaskCardCompact } from './TaskCardCompact';
 import { useDroppable } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useProjectHelper } from '@/stores/projectStore';
 
 /**
@@ -81,15 +80,23 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
 }) => {
   // プロジェクトストアからプロジェクト情報取得用ヘルパーを取得
   const { getProjectById } = useProjectHelper();
-  const { setNodeRef, isOver } = useDroppable({
-    id: status,
+  
+  // Issue #045: ドラッグ&ドロップ機能修正 - カラムステータスをIDとして明確に設定
+  const { setNodeRef, isOver, active } = useDroppable({
+    id: status, // カラムのステータスをドロップゾーンのIDとして使用
+    data: {
+      type: 'column',
+      status: status
+    }
   });
 
+  // Issue #045: ドラッグ&ドロップ機能修正 - 視覚的フィードバックの改善
   // ドロップインジケーター表示状態を決定
   const showDropIndicator = isOver || isDraggedOver;
-
-  // メモ化されたタスクIDリスト
-  const taskIds = useMemo(() => tasks.map(task => task.id), [tasks]);
+  
+  // 同一カラムへのドロップかチェック（視覚的フィードバック用）
+  const isSameColumn = active && tasks.some(task => task.id === active.id);
+  const isValidDropTarget = showDropIndicator && !isSameColumn;
 
   // 各カラムでのプロジェクト表示一貫性チェック
   const columnProjectConsistency = useMemo(() => {
@@ -144,9 +151,11 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
 
   return (
     <div 
-      className={`flex flex-col rounded-lg border h-full transition-colors duration-200 ${
-        showDropIndicator 
-          ? 'bg-blue-50 border-blue-300 shadow-lg' 
+      className={`flex flex-col rounded-lg border h-full transition-all duration-200 ${
+        isValidDropTarget 
+          ? 'bg-blue-50 border-blue-400 shadow-lg ring-2 ring-blue-300 ring-opacity-50' 
+          : isSameColumn && showDropIndicator
+          ? 'bg-gray-100 border-gray-400 opacity-60' // 同一カラムの場合は薄く表示
           : 'bg-gray-50 border-gray-200'
       } ${className}`}
       role="region"
@@ -163,12 +172,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
       />
 
       {/* ドロップゾーン（カラム全体をカバー） */}
+      {/* Issue #045: ドラッグ&ドロップ機能修正 - setNodeRefを適切に適用 */}
       <div
         ref={setNodeRef}
         className="flex-1 relative"
         role="region"
         aria-label={`${title || status} ドロップエリア`}
         data-testid={`column-${status}`}
+        data-droppable-status={status}
       >
         {/* 透明ドロップレイヤー（カラム全体をカバー） */}
         <div 
@@ -185,7 +196,6 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
           aria-live="polite"
           aria-atomic="false"
         >
-        <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {tasks.length === 0 ? (
             <div 
               className="flex items-center justify-center h-32 text-gray-500 text-sm"
@@ -222,14 +232,18 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
               </div>
             ))
           )}
-        </SortableContext>
         </div>
       </div>
       
       {/* ドロップエリアインジケーター */}
+      {/* Issue #045: ドラッグ&ドロップ機能修正 - 視覚的フィードバックの強化 */}
       <div 
-        className={`h-2 transition-all duration-200 bg-blue-200 rounded-b-lg ${
-          showDropIndicator ? 'opacity-100' : 'opacity-0'
+        className={`h-2 transition-all duration-200 rounded-b-lg ${
+          isValidDropTarget 
+            ? 'bg-blue-400 opacity-100' 
+            : isSameColumn && showDropIndicator
+            ? 'bg-gray-300 opacity-50' // 同一カラムは薄いグレー
+            : 'bg-blue-200 opacity-0'
         }`}
         aria-hidden="true"
       />

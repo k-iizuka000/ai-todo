@@ -9,13 +9,21 @@ import {
   DragEndEvent, 
   DragOverEvent, 
   DragStartEvent,
+  DragOverlay,
   PointerSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
-  closestCorners
+  closestCorners,
+  rectIntersection,
+  pointerWithin,
+  CollisionDetection
 } from '@dnd-kit/core';
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { 
+  sortableKeyboardCoordinates,
+  SortableContext,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable';
 import { Task, TaskStatus } from '@/types/task';
 import { KanbanColumn } from './KanbanColumn';
 import { isTaskStatus, isValidTask } from '@/utils/typeGuards';
@@ -83,6 +91,35 @@ const COLUMN_TITLES: Record<Exclude<TaskStatus, 'archived'>, string> = {
 // ドラッグ＆ドロップ設定
 const DRAG_ACTIVATION_DISTANCE = 8; // ピクセル単位でのドラッグ開始距離
 const DRAG_PREVIEW_OPACITY = 0.9; // ドラッグプレビューの透明度
+
+/**
+ * Issue #045: カスタム衝突検出アルゴリズム
+ * カラムへのドロップを優先し、タスク間のソートよりもカラム間移動を優先する
+ */
+const customCollisionDetection: CollisionDetection = (args) => {
+  // まずrectIntersectionで全ての衝突を検出
+  const collisions = rectIntersection(args);
+  
+  if (collisions.length === 0) {
+    return [];
+  }
+  
+  // カラムとの衝突を優先
+  const columnCollisions = collisions.filter((collision) => {
+    // カラムのIDは 'todo', 'in_progress', 'done' のいずれか
+    const id = collision.id;
+    return id === 'todo' || id === 'in_progress' || id === 'done';
+  });
+  
+  if (columnCollisions.length > 0) {
+    console.log(`Custom collision: Found column collision with ${columnCollisions[0].id}`);
+    // カラムとの衝突がある場合は、最初のカラムを返す
+    return [columnCollisions[0]];
+  }
+  
+  // カラムとの衝突がない場合は、通常の衝突検出結果を返す
+  return collisions;
+};
 
 /**
  * 内部KanbanBoardコンポーネント（エラーバウンダリで包まれる前）
@@ -153,8 +190,18 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   const { tasksByStatus, error, lastUpdated } = useKanbanTasks(filters);
   const { moveTask, toggleSubtask } = useTaskActions();
   
+  // ⭐ ベストプラクティス: ローカル状態 + 外部状態パターン
+  // @dnd-kitのドラッグ中再レンダリングブロック対応
+  const [localTasksByStatus, setLocalTasksByStatus] = useState(tasksByStatus);
+  
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
+  
+  // ⭐ ベストプラクティス: Zustand更新時にローカル状態を同期
+  // @dnd-kitドラッグ中の再レンダリングブロック対応
+  useEffect(() => {
+    setLocalTasksByStatus(tasksByStatus);
+  }, [tasksByStatus]);
   
   // Issue 059対応: 状態更新時の強制再描画トリガー追加
   useEffect(() => {
@@ -180,15 +227,20 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
     })
   );
 
-  // 全タスクリスト（ドラッグ処理用に統合）
-  // Issue 059対応: lastUpdatedを依存配列に追加して確実な再計算を保証
+  // ⭐ ベストプラクティス: ローカル状態ベースのタスクリスト計算
+  // ドラッグ中の即座UI更新に対応
   const allTasks = useMemo(() => {
     return [
-      ...tasksByStatus.todo,
-      ...tasksByStatus.in_progress,
-      ...tasksByStatus.done
+      ...localTasksByStatus.todo,
+      ...localTasksByStatus.in_progress,
+      ...localTasksByStatus.done
     ];
-  }, [tasksByStatus, lastUpdated]);
+  }, [localTasksByStatus]);
+  
+  // 全ローカルタスクID（パフォーマンス最適化用）
+  const allTaskIds = useMemo(() => {
+    return allTasks.map(task => task.id);
+  }, [allTasks]);
 
   // タスクの折り畳み状態を切り替え
   const handleToggleTaskCollapse = useCallback((taskId: string) => {
@@ -235,123 +287,132 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
 
   // ドラッグ開始
   // Issue #028: ドラッグ操作の中断可能化とクリーンアップ強化
+  // Issue #045: ドラッグ&ドロップ機能修正 - 正しいタスクデータと元のステータスをキャプチャ
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    // AbortController追加
-    const dragOperation = {
-      abortController: new AbortController(),
-      taskId: event.active.id
-    };
+    const taskId = String(event.active.id);
+    const draggedTask = allTasks.find(task => task.id === taskId);
     
-    const draggedTask = allTasks.find(task => task.id === event.active.id);
-    
-    if (!dragOperation.abortController.signal.aborted) {
-      setDraggedTask(draggedTask || null);
+    if (!draggedTask) {
+      console.error(`Task with id ${taskId} not found during drag start`);
+      return;
     }
     
-    // ドラッグ操作の追跡
-    const timeoutId = setTimeout(() => {
-      if (!dragOperation.abortController.signal.aborted) {
-        console.warn('Long drag operation detected:', event.active.id);
-      }
-    }, 5000); // 5秒でタイムアウト警告
+    // ドラッグ中のタスクを設定
+    setDraggedTask(draggedTask);
     
-    // クリーンアップ処理
-    const cleanup = () => {
-      clearTimeout(timeoutId);
-      dragOperation.abortController.abort();
-    };
+    // デバッグ情報を出力
+    console.log('Drag started:', {
+      taskId: draggedTask.id,
+      title: draggedTask.title,
+      originalStatus: draggedTask.status,
+      originalColumn: COLUMN_TITLES[draggedTask.status as Exclude<TaskStatus, 'archived'>]
+    });
     
-    // DragEndでクリーンアップされる想定
-    return cleanup;
+    // 元のステータスを記録（ロールバック用）
+    // Note: draggedTaskに元のステータスが既に含まれているため、追加の状態管理は不要
   }, [allTasks]);
 
-  // ドラッグ中（リアルタイム移動）
-  const handleDragOver = useCallback((_event: DragOverEvent) => {
-    // 設計書要件: 楽観的更新はhandleDragEndで処理
-    // ドラッグ中の視覚的フィードバックのみ実装
-    // リアルタイム更新は削除し、パフォーマンスを向上
-  }, []);
-
-  // ドラッグ終了
-  // Issue #037: ドラッグ&ドロップ機能修正 - 同一カラム内ドロップ防止とバリデーション強化
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    let isOperationActive = true;
+  // ⭐ ベストプラクティス: ドラッグ中はローカル状態のみ更新
+  // @dnd-kit再レンダリングブロック対応 - 即座のUI更新を実現
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const { active, over } = event;
     
-    try {
-      const { active, over } = event;
-      
-      // 即座にドラッグ状態をクリア
-      if (isOperationActive) {
-        setDraggedTask(null);
-      }
-
-      // ドロップターゲットのバリデーション強化
-      if (!over || !isOperationActive) {
-        console.warn('Drag ended without valid drop target');
-        return;
-      }
-
-      const activeTask = allTasks.find(task => task.id === active.id);
-      if (!activeTask) {
-        console.error(`Task with id ${active.id} not found during drag end`);
-        return;
-      }
-
-      console.log('Drag operation:', {
-        activeId: active.id,
-        overId: over.id,
-        activeTaskStatus: activeTask.status
-      });
-
-      // Issue #037修正: ドロップターゲット判定の改善
-      let finalStatus: TaskStatus = activeTask.status;
-      let isValidDrop = false;
-
-      // 1. カラム直接ドロップの場合（over.idがTaskStatusの場合）
-      if (isTaskStatus(over.id) && COLUMN_ORDER.includes(over.id)) {
-        finalStatus = over.id;
-        isValidDrop = true;
-        console.log(`Dropped on column: ${over.id}`);
-      } 
-      // 2. タスク上ドロップの場合（over.idがタスクIDの場合）
-      else {
-        const overTask = allTasks.find(task => task.id === over.id);
-        if (overTask && isValidTask(overTask)) {
-          finalStatus = overTask.status;
-          isValidDrop = true;
-          console.log(`Dropped on task: ${over.id}, status: ${finalStatus}`);
-        } else {
-          console.warn(`Target with id ${over.id} not found or invalid during drag end`);
-        }
-      }
-
-      // Issue #037修正: 同一カラム内ドロップの適切な処理
-      if (!isValidDrop) {
-        console.warn('Invalid drop target - operation cancelled');
-        return;
-      }
-
-      // 同じカラム内のドロップは無効化（Issue #037の根本原因）
-      if (activeTask.status === finalStatus) {
-        console.log(`Same column drop detected (${activeTask.status}), ignoring operation`);
-        return;
-      }
-
-      // Issue #037修正: 状態変更の実行（楽観的更新準備）
-      if (isOperationActive) {
-        console.log(`Moving task ${activeTask.id} from ${activeTask.status} to ${finalStatus}`);
-        moveTask(activeTask.id, finalStatus);
-      }
-
-    } catch (error) {
-      console.error('Critical error during drag end:', error);
-      // エラー時は元の状態を維持（楽観的更新のロールバック用の準備）
-    } finally {
-      // 最終的なクリーンアップ
-      isOperationActive = false;
-      setDraggedTask(null);
+    // ドロップターゲットが無効な場合は早期リターン
+    if (!over) {
+      return;
     }
-  }, [allTasks, moveTask]);
+    
+    // ドラッグ中のタスクを取得（ローカル状態から）
+    const activeTask = allTasks.find(task => task.id === active.id);
+    if (!activeTask) {
+      return;
+    }
+    
+    // ドロップターゲットのステータスを判定
+    let targetStatus: TaskStatus | null = null;
+    
+    // カラムに直接ドロップする場合
+    if (over.id === 'todo' || over.id === 'in_progress' || over.id === 'done') {
+      targetStatus = over.id as TaskStatus;
+    }
+    // タスク上にドロップする場合
+    else {
+      const overTask = allTasks.find(task => task.id === over.id);
+      if (overTask) {
+        targetStatus = overTask.status;
+      }
+    }
+    
+    // 有効なターゲットかつ異なるカラムの場合、ローカル状態を即座に更新
+    if (targetStatus && activeTask.status !== targetStatus) {
+      console.log(`[DragOver] Moving task locally from ${activeTask.status} to ${targetStatus}`);
+      
+      // ⭐ ローカル状態のみ更新（即座のUI反映）
+      setLocalTasksByStatus(prev => {
+        const newState = { ...prev };
+        
+        // 元のステータスから削除
+        newState[activeTask.status] = prev[activeTask.status]
+          .filter(t => t.id !== activeTask.id);
+        
+        // 新しいステータスに追加（ステータス更新付き）
+        newState[targetStatus] = [
+          ...prev[targetStatus],
+          { ...activeTask, status: targetStatus }
+        ];
+        
+        return newState;
+      });
+    }
+    
+    // デバッグ情報
+    if (targetStatus) {
+      console.log('[DragOver] Event:', {
+        activeTaskId: active.id,
+        overTargetId: over.id,
+        currentStatus: activeTask.status,
+        targetStatus: targetStatus,
+        isSameColumn: activeTask.status === targetStatus
+      });
+    }
+  }, [allTasks]);
+
+  // ⭐ ベストプラクティス: ドラッグ終了時にZustandストアと同期
+  // 永続化とAPI同期処理
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    // ドラッグ状態を即座にクリア
+    setDraggedTask(null);
+    
+    if (!over) {
+      console.warn('[DragEnd] Cancelled - resetting to Zustand state');
+      // キャンセルされた場合、Zustandからリセット
+      setLocalTasksByStatus(tasksByStatus);
+      return;
+    }
+    
+    // ローカル状態から最終的な移動タスクを取得
+    const movedTask = allTasks.find(t => t.id === active.id);
+    
+    if (movedTask) {
+      try {
+        console.log(`[DragEnd] Persisting task move: ${movedTask.id} -> ${movedTask.status}`);
+        
+        // ⭐ ZustandストアとAPIを更新（永続化）
+        await moveTask(movedTask.id, movedTask.status);
+        
+        console.log('[DragEnd] Task movement persisted successfully');
+      } catch (error) {
+        console.error('[DragEnd] Error persisting task movement:', error);
+        
+        // ⭐ エラー時はZustandからリセット（ロールバック）
+        setLocalTasksByStatus(tasksByStatus);
+      }
+    } else {
+      console.warn('[DragEnd] No moved task found');
+    }
+  }, [allTasks, tasksByStatus, moveTask]);
 
   return (
     <div className={`h-full ${className}`}>
@@ -362,44 +423,45 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        {/* カンバンボード */}
-        <div className={`
-          h-full grid gap-6 p-6
-          ${compact 
-            ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' 
-            : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-4'
-          }
-        `}>
-          {COLUMN_ORDER.map((status) => {
-            const handleAddTask = onAddTask ? () => onAddTask(status) : undefined;
-            
-            return (
-              <KanbanColumn
-                key={status}
-                status={status}
-                title={COLUMN_TITLES[status as Exclude<TaskStatus, 'archived'>]}
-                tasks={tasksByStatus[status as Exclude<TaskStatus, 'archived'>]}
-                onTaskClick={onTaskClick}
-                onAddTask={handleAddTask}
-                onToggleTaskCollapse={handleToggleTaskCollapse}
-                onSubtaskToggle={handleSubtaskToggle}
-                onTagClick={onTagClick}
-                onProjectClick={onProjectClick}
-                compact={compact}
-                collapsedTasks={collapsedTasks}
-                className="min-h-0" // グリッド内での高さ制限
-              />
-            );
-          })}
-        </div>
+        <SortableContext items={allTaskIds} strategy={verticalListSortingStrategy}>
+          {/* カンバンボード */}
+          <div className={`
+            h-full grid gap-6 p-6
+            ${compact 
+              ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' 
+              : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-4'
+            }
+          `}>
+            {COLUMN_ORDER.map((status) => {
+              const handleAddTask = onAddTask ? () => onAddTask(status) : undefined;
+              
+              return (
+                <KanbanColumn
+                  key={status}
+                  status={status}
+                  title={COLUMN_TITLES[status as Exclude<TaskStatus, 'archived'>]}
+                  tasks={localTasksByStatus[status as Exclude<TaskStatus, 'archived'>]}
+                  onTaskClick={onTaskClick}
+                  onAddTask={handleAddTask}
+                  onToggleTaskCollapse={handleToggleTaskCollapse}
+                  onSubtaskToggle={handleSubtaskToggle}
+                  onTagClick={onTagClick}
+                  onProjectClick={onProjectClick}
+                  compact={compact}
+                  collapsedTasks={collapsedTasks}
+                  className="min-h-0" // グリッド内での高さ制限
+                />
+              );
+            })}
+          </div>
 
-        {/* ドラッグプレビュー - グループ4: プロジェクト表示維持対応 */}
-        {draggedTask && (
-          <div 
-            className="fixed top-4 left-4 z-50 pointer-events-none"
-            style={{ opacity: DRAG_PREVIEW_OPACITY }}
-          >
-            <div className="bg-white border-2 border-blue-400 rounded-lg p-3 shadow-lg max-w-xs">
+        {/* ⭐ ベストプラクティス: DragOverlayによるフリッカー防止 */}
+        <DragOverlay>
+          {draggedTask ? (
+            <div 
+              className="bg-white border-2 border-blue-400 rounded-lg p-3 shadow-lg max-w-xs opacity-90"
+              style={{ cursor: 'grabbing' }}
+            >
               <div className="font-medium text-sm text-gray-900 mb-2">
                 {draggedTask.title}
               </div>
@@ -425,8 +487,9 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          ) : null}
+        </DragOverlay>
+        </SortableContext>
       </DndContext>
     </div>
   );

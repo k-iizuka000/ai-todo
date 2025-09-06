@@ -17,6 +17,7 @@ import { TagBadge } from '@/components/tag/TagBadge';
 import { useTagStore } from '@/stores/tagStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { useKanbanTasks } from '@/hooks/useKanbanTasks';
+import { useTaskActions } from '@/hooks/useTaskActions';
 import type { Task, TaskStatus, TaskDetail, CreateTaskInput } from '@/types/task';
 import { Tag } from '@/types/tag';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
@@ -43,6 +44,9 @@ const Dashboard: React.FC = () => {
   
   // タスクストア - 通常のパターンを使用（Archive用の基本データ取得）
   const { tasks: tasksFromStore, addTask, error, clearError, initializeStore, isInitialized } = useTaskStore();
+  
+  // タスク操作フック
+  const { removeTask } = useTaskActions();
   
   // URLからタスクページの種類を判定
   const pageType = location.pathname.includes('/today') ? 'today' : 
@@ -324,14 +328,33 @@ const Dashboard: React.FC = () => {
     }
   }, [selectedTask]);
 
-  const handleTaskDelete = useCallback((taskId: string) => {
-    // Mock環境では削除確認後にモーダルを閉じる
-    if (window.confirm('このタスクを削除しますか？')) {
+  const handleTaskDelete = useCallback(async (taskId: string) => {
+    console.log('[Dashboard] handleTaskDelete called with taskId:', taskId);
+    console.log('[Dashboard] removeTask function:', typeof removeTask);
+    
+    try {
+      console.log('[Dashboard] Starting removeTask execution for taskId:', taskId);
+      // API経由でタスクを削除
+      await removeTask(taskId);
+      console.log('[Dashboard] removeTask completed successfully for taskId:', taskId);
+      
+      // 削除成功後にモーダルを閉じてダッシュボードにリダイレクト
+      console.log('[Dashboard] Closing modal and clearing selected task');
       setShowTaskDetailModal(false);
       setSelectedTask(null);
-      // 実際の削除処理は将来のストア統合時に実装
+      
+      // 削除されたタスクのURLから /dashboard にリダイレクト
+      console.log('[Dashboard] Navigating to /dashboard to clear deleted task URL');
+      navigate('/dashboard', { replace: true });
+      console.log('[Dashboard] Task deletion process completed successfully');
+    } catch (error) {
+      console.error('[Dashboard] タスク削除に失敗:', error);
+      console.error('[Dashboard] Error details:', error);
+      // エラーが発生しても一旦モーダルは閉じる（useTaskActionsでエラーハンドリング済み）
+      setShowTaskDetailModal(false);
+      setSelectedTask(null);
     }
-  }, []);
+  }, [removeTask, navigate]);
 
   const handleCloseTaskDetail = useCallback(() => {
     // 状態を強制的にリセット

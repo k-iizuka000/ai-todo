@@ -15,6 +15,7 @@ import { useSwipeGesture } from '../../hooks/useSwipeGesture';
 import { usePageTransition } from '../../hooks/useAnimations';
 import { useTaskDetailKeyboard } from '../../hooks/useTaskDetailKeyboard';
 import { useTaskAnnouncements } from '../../hooks/useTaskAnnouncements';
+import { safeGetTime } from '../../utils/dateUtils';
 
 export interface TaskDetailViewProps {
   /** 表示するタスク */
@@ -273,13 +274,22 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   }, [task]);
 
   const handleDelete = useCallback(() => {
-    if (window.confirm('このタスクを削除しますか？この操作は取り消せません。')) {
+    console.log('[TaskDetailView] handleDelete called for task:', validatedTask.id);
+    const confirmResult = window.confirm('このタスクを削除しますか？この操作は取り消せません。');
+    console.log('[TaskDetailView] window.confirm result:', confirmResult);
+    
+    if (confirmResult) {
+      console.log('[TaskDetailView] Proceeding with deletion for task:', validatedTask.id);
+      console.log('[TaskDetailView] onTaskDelete function:', typeof onTaskDelete);
       onTaskDelete?.(validatedTask.id);
+      console.log('[TaskDetailView] onTaskDelete called successfully');
       
       // アクセシビリティ: 削除完了をアナウンス
       if (enableA11y) {
         announceTaskDeleted(validatedTask.title);
       }
+    } else {
+      console.log('[TaskDetailView] Deletion cancelled by user');
     }
   }, [onTaskDelete, validatedTask.id, validatedTask.title, enableA11y]);
 
@@ -761,10 +771,13 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
     </div>
   );
 }, (prevProps, nextProps) => {
-  // カスタム比較関数で詳細な比較を実装
+  // カスタム比較関数で詳細な比較を実装（型安全な日付比較）
+  const prevUpdatedTime = safeGetTime(prevProps.task.updatedAt);
+  const nextUpdatedTime = safeGetTime(nextProps.task.updatedAt);
+  
   return (
     prevProps.task.id === nextProps.task.id &&
-    prevProps.task.updatedAt.getTime() === nextProps.task.updatedAt.getTime() &&
+    prevUpdatedTime === nextUpdatedTime &&
     prevProps.editable === nextProps.editable &&
     prevProps.availableTags?.length === nextProps.availableTags?.length
   );
@@ -774,15 +787,73 @@ TaskDetailView.displayName = 'TaskDetailView';
 
 export default TaskDetailView;
 
+/**
+ * TaskDetailViewProps用のカスタム比較関数
+ * TaskDetail型の日付フィールドの型安全な比較を行い、React.memoでの比較エラーを防ぐ
+ */
+const areTaskDetailViewPropsEqual = (prevProps: TaskDetailViewProps, nextProps: TaskDetailViewProps): boolean => {
+  // 基本プロパティの比較
+  if (prevProps.editable !== nextProps.editable ||
+      prevProps.onTaskUpdate !== nextProps.onTaskUpdate ||
+      prevProps.onTaskDelete !== nextProps.onTaskDelete ||
+      prevProps.onClose !== nextProps.onClose) {
+    return false;
+  }
+
+  // availableTags配列の比較
+  const prevTags = prevProps.availableTags || [];
+  const nextTags = nextProps.availableTags || [];
+  if (prevTags.length !== nextTags.length) {
+    return false;
+  }
+
+  const prevTask = prevProps.task;
+  const nextTask = nextProps.task;
+
+  // タスクの基本フィールド比較
+  if (prevTask.id !== nextTask.id ||
+      prevTask.title !== nextTask.title ||
+      prevTask.description !== nextTask.description ||
+      prevTask.status !== nextTask.status ||
+      prevTask.priority !== nextTask.priority ||
+      prevTask.projectId !== nextTask.projectId ||
+      prevTask.assigneeId !== nextTask.assigneeId ||
+      prevTask.estimatedHours !== nextTask.estimatedHours ||
+      prevTask.actualHours !== nextTask.actualHours ||
+      prevTask.createdBy !== nextTask.createdBy ||
+      prevTask.updatedBy !== nextTask.updatedBy) {
+    return false;
+  }
+
+  // 日付フィールドの型安全な比較
+  const prevDueTime = safeGetTime(prevTask.dueDate);
+  const nextDueTime = safeGetTime(nextTask.dueDate);
+  const prevCreatedTime = safeGetTime(prevTask.createdAt);
+  const nextCreatedTime = safeGetTime(nextTask.createdAt);
+  const prevUpdatedTime = safeGetTime(prevTask.updatedAt);
+  const nextUpdatedTime = safeGetTime(nextTask.updatedAt);
+  const prevArchivedTime = safeGetTime(prevTask.archivedAt);
+  const nextArchivedTime = safeGetTime(nextTask.archivedAt);
+
+  if (prevDueTime !== nextDueTime ||
+      prevCreatedTime !== nextCreatedTime ||
+      prevUpdatedTime !== nextUpdatedTime ||
+      prevArchivedTime !== nextArchivedTime) {
+    return false;
+  }
+
+  return true;
+};
+
 // レスポンシブ対応のためのサブコンポーネント（将来の拡張用）
 export const MobileTaskDetailView = React.memo((props: TaskDetailViewProps) => {
   return <TaskDetailView {...props} />;
-});
+}, areTaskDetailViewPropsEqual);
 
 export const TabletTaskDetailView = React.memo((props: TaskDetailViewProps) => {
   return <TaskDetailView {...props} />;
-});
+}, areTaskDetailViewPropsEqual);
 
 export const DesktopTaskDetailView = React.memo((props: TaskDetailViewProps) => {
   return <TaskDetailView {...props} />;
-});
+}, areTaskDetailViewPropsEqual);

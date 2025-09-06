@@ -665,12 +665,12 @@ export const useTaskStore = create<TaskState>()(
                 bValue = b.dueDate ? b.dueDate.getTime() : 0;
                 break;
               case 'createdAt':
-                aValue = a.createdAt.getTime();
-                bValue = b.createdAt.getTime();
+                aValue = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+                bValue = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
                 break;
               case 'updatedAt':
-                aValue = a.updatedAt.getTime();
-                bValue = b.updatedAt.getTime();
+                aValue = a.updatedAt instanceof Date ? a.updatedAt.getTime() : new Date(a.updatedAt).getTime();
+                bValue = b.updatedAt instanceof Date ? b.updatedAt.getTime() : new Date(b.updatedAt).getTime();
                 break;
               default:
                 aValue = 0;
@@ -790,12 +790,12 @@ export const useTaskStore = create<TaskState>()(
                 bValue = b.dueDate ? b.dueDate.getTime() : 0;
                 break;
               case 'createdAt':
-                aValue = a.createdAt.getTime();
-                bValue = b.createdAt.getTime();
+                aValue = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+                bValue = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
                 break;
               case 'updatedAt':
-                aValue = a.updatedAt.getTime();
-                bValue = b.updatedAt.getTime();
+                aValue = a.updatedAt instanceof Date ? a.updatedAt.getTime() : new Date(a.updatedAt).getTime();
+                bValue = b.updatedAt instanceof Date ? b.updatedAt.getTime() : new Date(b.updatedAt).getTime();
                 break;
               default:
                 aValue = 0;

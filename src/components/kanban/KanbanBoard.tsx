@@ -15,6 +15,7 @@ import {
   useSensor,
   useSensors,
   closestCorners,
+  closestCenter,
   rectIntersection,
   pointerWithin,
   CollisionDetection
@@ -93,8 +94,8 @@ const DRAG_ACTIVATION_DISTANCE = 8; // ピクセル単位でのドラッグ開�
 const DRAG_PREVIEW_OPACITY = 0.9; // ドラッグプレビューの透明度
 
 /**
- * Issue #045: カスタム衝突検出アルゴリズム
- * カラムへのドロップを優先し、タスク間のソートよりもカラム間移動を優先する
+ * Issue #045: カスタム衝突検出アルゴリズム（修正版）
+ * カラムへのドロップを優先し、確実にターゲットカラムを検出
  */
 const customCollisionDetection: CollisionDetection = (args) => {
   // まずrectIntersectionで全ての衝突を検出
@@ -104,21 +105,33 @@ const customCollisionDetection: CollisionDetection = (args) => {
     return [];
   }
   
-  // カラムとの衝突を優先
+  // カラムIDのリスト
+  const columnIds = ['todo', 'in_progress', 'done'];
+  
+  // カラムとの衝突を優先的に検出
   const columnCollisions = collisions.filter((collision) => {
-    // カラムのIDは 'todo', 'in_progress', 'done' のいずれか
-    const id = collision.id;
-    return id === 'todo' || id === 'in_progress' || id === 'done';
+    return columnIds.includes(collision.id as string);
   });
   
   if (columnCollisions.length > 0) {
-    console.log(`Custom collision: Found column collision with ${columnCollisions[0].id}`);
     // カラムとの衝突がある場合は、最初のカラムを返す
-    return [columnCollisions[0]];
+    const targetColumn = columnCollisions[0];
+    console.log(`Custom collision: Target column ${targetColumn.id}`);
+    return [targetColumn];
   }
   
-  // カラムとの衝突がない場合は、通常の衝突検出結果を返す
-  return collisions;
+  // カラムとの衝突がない場合は、タスク間の衝突として処理
+  const taskCollisions = collisions.filter((collision) => {
+    return !columnIds.includes(collision.id as string);
+  });
+  
+  if (taskCollisions.length > 0) {
+    console.log(`Custom collision: Task collision for sorting`);
+    return [taskCollisions[0]];
+  }
+  
+  // デフォルトで最初の衝突を返す
+  return collisions.slice(0, 1);
 };
 
 /**
@@ -402,31 +415,54 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
     setDraggedTask(null);
     
     if (!over) {
-      console.warn('[DragEnd] Cancelled - resetting to Zustand state');
+      console.warn('[DragEnd] Cancelled - no drop target');
       // キャンセルされた場合、Zustandからリセット
       setLocalTasksByStatus(tasksByStatus);
       return;
     }
     
-    // ローカル状態から最終的な移動タスクを取得
-    const movedTask = allTasks.find(t => t.id === active.id);
+    // ドラッグ中のタスクを取得
+    const activeTask = allTasks.find(t => t.id === active.id);
     
-    if (movedTask) {
-      try {
-        console.log(`[DragEnd] Persisting task move: ${movedTask.id} -> ${movedTask.status}`);
-        
-        // ⭐ ZustandストアとAPIを更新（永続化）
-        await moveTask(movedTask.id, movedTask.status);
-        
-        console.log('[DragEnd] Task movement persisted successfully');
-      } catch (error) {
-        console.error('[DragEnd] Error persisting task movement:', error);
-        
-        // ⭐ エラー時はZustandからリセット（ロールバック）
-        setLocalTasksByStatus(tasksByStatus);
+    if (!activeTask) {
+      console.warn('[DragEnd] Cancelled - active task not found');
+      setLocalTasksByStatus(tasksByStatus);
+      return;
+    }
+    
+    // ドロップターゲットのステータスを正しく判定
+    let targetStatus: TaskStatus | null = null;
+    
+    // カラムに直接ドロップする場合
+    if (over.id === 'todo' || over.id === 'in_progress' || over.id === 'done') {
+      targetStatus = over.id as TaskStatus;
+    }
+    // タスク上にドロップする場合
+    else {
+      const overTask = allTasks.find(task => task.id === over.id);
+      if (overTask) {
+        targetStatus = overTask.status;
       }
-    } else {
-      console.warn('[DragEnd] No moved task found');
+    }
+    
+    // 移動が発生しない場合（同一カラム）は何もしない
+    if (!targetStatus || activeTask.status === targetStatus) {
+      console.log(`[DragEnd] No movement needed: ${activeTask.status} -> ${targetStatus}`);
+      return;
+    }
+    
+    try {
+      console.log(`[DragEnd] Moving task: ${activeTask.id} from ${activeTask.status} to ${targetStatus}`);
+      
+      // ⭐ ZustandストアとAPIを更新（永続化）
+      await moveTask(activeTask.id, targetStatus);
+      
+      console.log('[DragEnd] Task movement persisted successfully');
+    } catch (error) {
+      console.error('[DragEnd] Error persisting task movement:', error);
+      
+      // ⭐ エラー時はZustandからリセット（ロールバック）
+      setLocalTasksByStatus(tasksByStatus);
     }
   }, [allTasks, tasksByStatus, moveTask]);
 
@@ -434,7 +470,7 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
     <div className={`h-full ${className}`}>
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={rectIntersection}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}

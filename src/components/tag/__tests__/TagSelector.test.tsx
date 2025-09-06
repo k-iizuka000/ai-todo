@@ -5,6 +5,7 @@
 
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 import { TagSelector } from '../TagSelector';
 import { Tag } from '../../../types/tag';
 
@@ -37,7 +38,7 @@ const mockTags: Tag[] = [
 ];
 
 // TagBadgeコンポーネントのモック
-jest.mock('../TagBadge', () => ({
+vi.mock('../TagBadge', () => ({
   TagBadge: ({ tag, showRemove, onRemove, size }: any) => (
     <span data-testid={`tag-badge-${tag.id}`} className={size}>
       #{tag.name}
@@ -51,9 +52,9 @@ jest.mock('../TagBadge', () => ({
 }));
 
 // TagInputコンポーネントのモック
-jest.mock('./TagInput', () => ({
-  TagInput: ({ value, onChange, placeholder, maxTags, allowCreate, disabled, error }: any) => (
-    <div data-testid="tag-input">
+vi.mock('../TagInput', () => ({
+  TagInput: ({ value, onChange, placeholder, maxTags, allowCreate, disabled, error, displaySelected }: any) => (
+    <div data-testid="tag-input" data-display-selected={displaySelected}>
       <input
         placeholder={placeholder}
         disabled={disabled}
@@ -69,12 +70,21 @@ jest.mock('./TagInput', () => ({
         }}
       />
       <div data-testid="selected-tags-count">{value.length}</div>
+      {displaySelected && value.length > 0 && (
+        <div data-testid="tag-input-display-tags">
+          {value.map((tag: any) => (
+            <span key={tag.id} data-testid={`tag-input-tag-${tag.id}`}>
+              {tag.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }));
 
 // タグストアのモック
-jest.mock('@/stores/tagStore', () => ({
+vi.mock('@/stores/tagStore', () => ({
   useTagStore: () => ({
     tags: mockTags
   })
@@ -83,11 +93,11 @@ jest.mock('@/stores/tagStore', () => ({
 describe('TagSelector', () => {
   const defaultProps = {
     selectedTags: [],
-    onTagsChange: jest.fn()
+    onTagsChange: vi.fn()
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('閲覧モード', () => {
@@ -157,9 +167,8 @@ describe('TagSelector', () => {
       expect(screen.queryByText('選択中のタグ')).not.toBeInTheDocument();
     });
 
-    it('選択されたタグの削除ボタンが機能する', async () => {
-      const user = userEvent.setup();
-      const onTagsChange = jest.fn();
+    it('選択されたタグの削除ボタンが機能する', () => {
+      const onTagsChange = vi.fn();
       
       render(
         <TagSelector 
@@ -171,14 +180,13 @@ describe('TagSelector', () => {
       );
       
       const removeButton = screen.getByLabelText('重要を削除');
-      await user.click(removeButton);
+      fireEvent.click(removeButton);
       
       expect(onTagsChange).toHaveBeenCalledWith([mockTags[1]]);
     });
 
-    it('「すべて削除」ボタンが機能する', async () => {
-      const user = userEvent.setup();
-      const onTagsChange = jest.fn();
+    it('「すべて削除」ボタンが機能する', () => {
+      const onTagsChange = vi.fn();
       
       render(
         <TagSelector 
@@ -190,7 +198,7 @@ describe('TagSelector', () => {
       );
       
       const clearAllButton = screen.getByText('すべて削除');
-      await user.click(clearAllButton);
+      fireEvent.click(clearAllButton);
       
       expect(onTagsChange).toHaveBeenCalledWith([]);
     });
@@ -264,6 +272,163 @@ describe('TagSelector', () => {
       );
       
       expect(screen.getByText('合計使用回数: 5回')).toBeInTheDocument();
+    });
+  });
+
+  describe('displayMode機能（二重表示問題の修正）', () => {
+    it('inlineモードで選択済みタグがTagInputに表示される', () => {
+      render(
+        <TagSelector 
+          {...defaultProps} 
+          selectedTags={[mockTags[0], mockTags[1]]}
+          editing={true} 
+          variant="full"
+          displayMode="inline"
+        />
+      );
+      
+      // TagInputが選択済みタグを表示する設定
+      const tagInput = screen.getByTestId('tag-input');
+      expect(tagInput).toHaveAttribute('data-display-selected', 'true');
+      
+      // 分離表示エリアは表示されない
+      expect(screen.queryByText('選択中のタグ')).not.toBeInTheDocument();
+    });
+
+    it('separateモードで選択済みタグが分離表示される', () => {
+      render(
+        <TagSelector 
+          {...defaultProps} 
+          selectedTags={[mockTags[0], mockTags[1]]}
+          editing={true} 
+          variant="full"
+          displayMode="separate"
+        />
+      );
+      
+      // TagInputは選択済みタグを表示しない
+      const tagInput = screen.getByTestId('tag-input');
+      expect(tagInput).toHaveAttribute('data-display-selected', 'false');
+      
+      // 分離表示エリアが表示される
+      expect(screen.getByText('選択中のタグ (2/10)')).toBeInTheDocument();
+      expect(screen.getByTestId('tag-badge-tag-1')).toBeInTheDocument();
+      expect(screen.getByTestId('tag-badge-tag-2')).toBeInTheDocument();
+    });
+
+    it('autoモードで少ないタグの場合はinline表示', () => {
+      render(
+        <TagSelector 
+          {...defaultProps} 
+          selectedTags={[mockTags[0], mockTags[1]]} // 2タグ（5以下）
+          editing={true} 
+          variant="full"
+          displayMode="auto"
+        />
+      );
+      
+      // TagInputが選択済みタグを表示（inline）
+      const tagInput = screen.getByTestId('tag-input');
+      expect(tagInput).toHaveAttribute('data-display-selected', 'true');
+      
+      // 分離表示エリアは表示されない
+      expect(screen.queryByText('選択中のタグ')).not.toBeInTheDocument();
+    });
+
+    it('autoモードで多いタグの場合はseparate表示', () => {
+      const manyTags = new Array(6).fill(0).map((_, i) => ({
+        ...mockTags[0],
+        id: `tag-${i}`,
+        name: `タグ${i}`
+      })); // 6タグ（5超過）
+      
+      render(
+        <TagSelector 
+          {...defaultProps} 
+          selectedTags={manyTags}
+          editing={true} 
+          variant="full"
+          displayMode="auto"
+        />
+      );
+      
+      // TagInputは選択済みタグを表示しない（separate）
+      const tagInput = screen.getByTestId('tag-input');
+      expect(tagInput).toHaveAttribute('data-display-selected', 'false');
+      
+      // 分離表示エリアが表示される
+      expect(screen.getByText('選択中のタグ (6/10)')).toBeInTheDocument();
+    });
+
+    it('displayModeが未指定の場合はautoモードになる', () => {
+      render(
+        <TagSelector 
+          {...defaultProps} 
+          selectedTags={[mockTags[0]]} // 1タグ（5以下）
+          editing={true} 
+          variant="full"
+        />
+      );
+      
+      // デフォルトのautoモードでinline表示
+      const tagInput = screen.getByTestId('tag-input');
+      expect(tagInput).toHaveAttribute('data-display-selected', 'true');
+    });
+
+    it('separateモードで削除ボタンが機能する', () => {
+      const onTagsChange = vi.fn();
+      
+      render(
+        <TagSelector 
+          selectedTags={[mockTags[0], mockTags[1]]} 
+          onTagsChange={onTagsChange}
+          editing={true} 
+          variant="full"
+          displayMode="separate"
+        />
+      );
+      
+      // 分離表示エリアの削除ボタンをクリック
+      const removeButton = screen.getByLabelText('重要を削除');
+      fireEvent.click(removeButton);
+      
+      expect(onTagsChange).toHaveBeenCalledWith([mockTags[1]]);
+    });
+
+    it('separateモードで「すべて削除」ボタンが機能する', () => {
+      const onTagsChange = vi.fn();
+      
+      render(
+        <TagSelector 
+          selectedTags={[mockTags[0], mockTags[1]]} 
+          onTagsChange={onTagsChange}
+          editing={true} 
+          variant="full"
+          displayMode="separate"
+        />
+      );
+      
+      const clearAllButton = screen.getByText('すべて削除');
+      fireEvent.click(clearAllButton);
+      
+      expect(onTagsChange).toHaveBeenCalledWith([]);
+    });
+
+    it('disabledの場合、分離表示の削除ボタンが無効化される', () => {
+      render(
+        <TagSelector 
+          {...defaultProps} 
+          selectedTags={[mockTags[0], mockTags[1]]}
+          editing={true} 
+          variant="full"
+          displayMode="separate"
+          disabled={true}
+        />
+      );
+      
+      // すべて削除ボタンが無効化される
+      const clearAllButton = screen.getByText('すべて削除');
+      expect(clearAllButton).toBeDisabled();
     });
   });
 

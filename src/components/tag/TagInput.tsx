@@ -35,6 +35,8 @@ interface TagInputProps {
   disabled?: boolean;
   /** エラー状態 */
   error?: boolean;
+  /** 選択済みタグを表示するかどうか */
+  displaySelected?: boolean;
   /** CSSクラス名 */
   className?: string;
 }
@@ -47,15 +49,18 @@ export const TagInput = React.memo<TagInputProps>(({
   allowCreate = true,
   disabled = false,
   error = false,
+  displaySelected = true,
   className = ""
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState<Tag[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isDropdownFocused, setIsDropdownFocused] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   
   // タグストアから利用可能なタグを取得
   const { tags, getFilteredTags, getTopUsedTags, addTag } = useTagStore();
@@ -162,6 +167,31 @@ export const TagInput = React.memo<TagInputProps>(({
     setSuggestions(filteredSuggestions);
     setSelectedIndex(-1);
   }, [filteredSuggestions]);
+
+  // ドロップダウン表示状態の改善されたロジック
+  const shouldShowDropdown = useMemo(() => {
+    return showSuggestions && (inputValue.trim() || suggestions.length > 0) && !disabled;
+  }, [showSuggestions, inputValue, suggestions.length, disabled]);
+
+  // クリックアウトサイドでドロップダウンを閉じる
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current && 
+        !dropdownRef.current.contains(event.target as Node) &&
+        inputRef.current && 
+        !inputRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false);
+        setIsDropdownFocused(false);
+      }
+    };
+
+    if (showSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSuggestions]);
   
   // 入力値変更時にエラーをクリア
   useEffect(() => {
@@ -266,8 +296,8 @@ export const TagInput = React.memo<TagInputProps>(({
   
   return (
     <div className="relative">
-      {/* 選択済みタグ */}
-      {displayTags.length > 0 && (
+      {/* 選択済みタグ（displaySelectedがtrueの場合のみ表示） */}
+      {displaySelected && displayTags.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3">
           {displayTags.map((tag) => (
             <TagBadge
@@ -294,10 +324,29 @@ export const TagInput = React.memo<TagInputProps>(({
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          onFocus={() => setShowSuggestions(true)}
-          onBlur={() => {
+          onFocus={() => {
+            setShowSuggestions(true);
+            setIsDropdownFocused(false);
+            // フォーカス時に候補がなければトップ使用タグを表示
+            if (suggestions.length === 0 && !inputValue.trim()) {
+              const topTags = getTopUsedTags(10).filter(tag => 
+                !value.some(selected => selected.id === tag.id)
+              );
+              setSuggestions(topTags);
+            }
+          }}
+          onBlur={(e) => {
+            // ドロップダウン内をクリックした場合は閉じない
+            const relatedTarget = e.relatedTarget as HTMLElement;
+            if (dropdownRef.current?.contains(relatedTarget) || isDropdownFocused) {
+              return;
+            }
             // 少し遅延させてクリックイベントを処理
-            setTimeout(() => setShowSuggestions(false), 200);
+            setTimeout(() => {
+              if (!isDropdownFocused) {
+                setShowSuggestions(false);
+              }
+            }, 150);
           }}
           onKeyDown={handleKeyDown}
           placeholder={effectivePlaceholder}
@@ -314,18 +363,29 @@ export const TagInput = React.memo<TagInputProps>(({
         />
 
         {/* 候補ドロップダウン */}
-        {showSuggestions && (inputValue || suggestions.length > 0) && (
+        {shouldShowDropdown && (
           <div 
+            ref={dropdownRef}
             id="tag-suggestions"
-            className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto"
+            className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto"
             role="listbox"
+            onMouseEnter={() => setIsDropdownFocused(true)}
+            onMouseLeave={() => setIsDropdownFocused(false)}
           >
             {/* 既存タグの候補 */}
             {suggestions.map((tag, index) => (
               <button
                 key={tag.id}
                 ref={(el) => (suggestionRefs.current[index] = el)}
-                onClick={() => handleAddTag(tag)}
+                onMouseDown={(e) => {
+                  // マウスダウンでもクリックイベントを確実に処理
+                  e.preventDefault();
+                  handleAddTag(tag);
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleAddTag(tag);
+                }}
                 className={`
                   w-full px-3 py-2 text-left flex items-center gap-2 transition-colors
                   ${selectedIndex === index 
@@ -350,7 +410,14 @@ export const TagInput = React.memo<TagInputProps>(({
             {shouldShowCreateOption && (
               <button
                 ref={(el) => (suggestionRefs.current[suggestions.length] = el)}
-                onClick={handleCreateNewTag}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleCreateNewTag();
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleCreateNewTag();
+                }}
                 className={`
                   w-full px-3 py-2 text-left transition-colors
                   ${selectedIndex === suggestions.length 

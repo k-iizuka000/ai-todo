@@ -10,29 +10,11 @@ import { ProjectSelector } from '@/components/project/ProjectSelector'
 import { useProjectStore } from '@/stores/projectStore'
 import { Project } from '@/types/project'
 import { Calendar, Clock } from 'lucide-react'
+import { createDateFromFormInput } from '../../utils/dateUtils'
+import { validateTaskForm, isValidationClean, type ValidationErrors, type TaskFormData } from '../../utils/validationUtils'
+import { validateSelectorInput } from '../../utils/selectorUtils'
 
-// フォーム用のバリデーションエラー型
-export interface ValidationErrors {
-  title?: string[]
-  description?: string[]
-  priority?: string[]
-  dueDate?: string[]
-  estimatedHours?: string[]
-  tags?: string[]
-  projectId?: string[]
-  [key: string]: string[] | undefined
-}
-
-// フォームデータの型
-export interface TaskFormData {
-  title: string
-  description: string
-  priority: Priority
-  dueDate: string
-  estimatedHours: string
-  tags: Tag[]
-  projectId?: string
-}
+// 型定義はutils/validationUtils.tsからインポートされます
 
 export interface TaskFormProps {
   initialData?: CreateTaskInput | UpdateTaskInput
@@ -102,47 +84,38 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     setIsFormValid(isValid)
   }, [formData, errors])
 
-  // バリデーション関数
+  // バリデーション関数（セレクター検証を含む）
   const validateForm = useCallback((): boolean => {
-    const newErrors: ValidationErrors = {}
-
-    // タイトルのバリデーション
-    if (!formData.title.trim()) {
-      newErrors.title = ['タイトルは必須です']
-    } else if (formData.title.length > 100) {
-      newErrors.title = ['タイトルは100文字以内で入力してください']
+    const newErrors = validateTaskForm(formData)
+    
+    // プロジェクトセレクターの検証
+    const projectValidation = validateSelectorInput({
+      required: false,
+      selectedItems: formData.projectId ? 1 : 0,
+      type: 'project'
+    });
+    
+    if (!projectValidation.isValid) {
+      newErrors.projectId = projectValidation.errors;
     }
-
-    // 説明のバリデーション
-    if (formData.description.length > 1000) {
-      newErrors.description = ['説明は1000文字以内で入力してください']
+    
+    // タグセレクターの検証
+    const tagValidation = validateSelectorInput({
+      required: false,
+      maxItems: 10,
+      selectedItems: formData.tags.length,
+      type: 'tag'
+    });
+    
+    if (!tagValidation.isValid) {
+      newErrors.tags = tagValidation.errors;
     }
-
-    // 期日のバリデーション
-    if (formData.dueDate && new Date(formData.dueDate) < new Date()) {
-      newErrors.dueDate = ['期日は今日以降の日付を指定してください']
-    }
-
-    // 見積時間のバリデーション
-    if (formData.estimatedHours) {
-      const hours = parseFloat(formData.estimatedHours)
-      if (isNaN(hours) || hours < 0) {
-        newErrors.estimatedHours = ['正の数値を入力してください']
-      } else if (hours > 1000) {
-        newErrors.estimatedHours = ['見積時間は1000時間以内で入力してください']
-      }
-    }
-
-    // タグ数のバリデーション
-    if (formData.tags.length > 10) {
-      newErrors.tags = ['タグは10個以内で設定してください']
-    }
-
+    
     setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    return isValidationClean(newErrors)
   }, [formData])
 
-  // フォーム送信処理
+  // フォーム送信処理（安全な日付処理を使用）
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -154,7 +127,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       title: formData.title.trim(),
       description: formData.description.trim() || undefined,
       priority: formData.priority,
-      dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
+      dueDate: createDateFromFormInput(formData.dueDate),
       estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : undefined,
       tags: formData.tags,
       projectId: formData.projectId,
@@ -257,12 +230,20 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       >
         <ProjectSelector
           selectedProject={formData.projectId ? getProjectById(formData.projectId) : undefined}
+          selectedProjectId={formData.projectId}
           onProjectSelect={(project: Project | null) => 
             handleFieldChange('projectId', project ? project.id : undefined)
           }
+          onProjectIdSelect={(projectId: string | null) =>
+            handleFieldChange('projectId', projectId || undefined)
+          }
           allowClear={true}
+          allowNone={true}
+          noneLabel="プロジェクトなし"
           className="w-full"
           disabled={loading}
+          isLoading={loading}
+          error={errors.projectId?.[0]}
         />
       </FormField>
 
@@ -320,6 +301,10 @@ export const TaskForm: React.FC<TaskFormProps> = ({
           onTagsChange={handleTagsChange}
           editing={true}
           placeholder="タグを追加..."
+          displayMode="auto"
+          disabled={loading}
+          error={!!errors.tags}
+          className="w-full"
         />
       </FormField>
 

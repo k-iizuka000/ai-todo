@@ -38,6 +38,46 @@ export interface TaskScheduleInfo {
 
 // タグの型定義は tag.ts から import する
 
+// === 日付処理とバリデーション関連の型定義 ===
+
+// 日付処理結果の型定義
+export interface DateProcessingResult {
+  isValid: boolean;
+  date?: Date;
+  error?: string;
+  originalInput: string | Date | undefined;
+}
+
+// バリデーション結果の型定義
+export interface ValidationResult {
+  isValid: boolean;
+  error?: string;
+}
+
+// フォームバリデーションエラーの型定義
+export interface ValidationErrors {
+  title?: string[];
+  description?: string[];
+  priority?: string[];
+  dueDate?: string[];
+  estimatedHours?: string[];
+  tags?: string[];
+  projectId?: string[];
+  general?: string[]; // クロスフィールドバリデーションエラー用
+  [key: string]: string[] | undefined;
+}
+
+// フォームデータの型定義（TaskFormコンポーネント用）
+export interface TaskFormData {
+  title: string;
+  description: string;
+  priority: Priority;
+  dueDate: string; // フォーム入力では文字列として管理
+  estimatedHours: string; // フォーム入力では文字列として管理
+  tags: Tag[];
+  projectId?: string;
+}
+
 // メインのTask型定義
 export interface Task {
   id: string;

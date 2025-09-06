@@ -18,6 +18,7 @@ import { Archive } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Task } from "@/types/task"
 import { useLocalStorage } from "@/hooks/useLocalStorage"
+import { safeGetTime } from "@/utils/dateUtils"
 import {
   Accordion,
   AccordionContent,
@@ -57,9 +58,207 @@ export interface ArchivedTasksSectionProps {
   maxHeight?: number
 }
 
+/**
+ * ArchivedTasksSection用のカスタム比較関数
+ * Task配列の深い比較と日付フィールドの型安全な比較を行い、React.memoでの比較エラーを防ぐ
+ */
+const areArchivedTasksSectionPropsEqual = (prevProps: ArchivedTasksSectionProps, nextProps: ArchivedTasksSectionProps): boolean => {
+  // 基本プロパティの比較
+  if (prevProps.storageKey !== nextProps.storageKey ||
+      prevProps.className !== nextProps.className ||
+      prevProps.title !== nextProps.title ||
+      prevProps.emptyMessage !== nextProps.emptyMessage ||
+      prevProps.disabled !== nextProps.disabled ||
+      prevProps.virtualScrollingThreshold !== nextProps.virtualScrollingThreshold ||
+      prevProps.maxHeight !== nextProps.maxHeight ||
+      prevProps.onTaskClick !== nextProps.onTaskClick ||
+      prevProps.onTagSelect !== nextProps.onTagSelect ||
+      prevProps.onProjectClick !== nextProps.onProjectClick ||
+      prevProps.renderTask !== nextProps.renderTask) {
+    return false;
+  }
+
+  // tasks配列の比較
+  const prevTasks = prevProps.tasks || [];
+  const nextTasks = nextProps.tasks || [];
+  if (prevTasks.length !== nextTasks.length) {
+    return false;
+  }
+
+  // 各タスクの深い比較
+  for (let i = 0; i < prevTasks.length; i++) {
+    const prevTask = prevTasks[i];
+    const nextTask = nextTasks[i];
+    
+    if (!prevTask || !nextTask) {
+      return false;
+    }
+
+    // タスクの基本フィールド比較
+    if (prevTask.id !== nextTask.id ||
+        prevTask.title !== nextTask.title ||
+        prevTask.description !== nextTask.description ||
+        prevTask.status !== nextTask.status ||
+        prevTask.priority !== nextTask.priority ||
+        prevTask.projectId !== nextTask.projectId ||
+        prevTask.assigneeId !== nextTask.assigneeId ||
+        prevTask.estimatedHours !== nextTask.estimatedHours ||
+        prevTask.actualHours !== nextTask.actualHours ||
+        prevTask.createdBy !== nextTask.createdBy ||
+        prevTask.updatedBy !== nextTask.updatedBy) {
+      return false;
+    }
+
+    // 日付フィールドの型安全な比較
+    const prevDueTime = safeGetTime(prevTask.dueDate);
+    const nextDueTime = safeGetTime(nextTask.dueDate);
+    const prevCreatedTime = safeGetTime(prevTask.createdAt);
+    const nextCreatedTime = safeGetTime(nextTask.createdAt);
+    const prevUpdatedTime = safeGetTime(prevTask.updatedAt);
+    const nextUpdatedTime = safeGetTime(nextTask.updatedAt);
+    const prevArchivedTime = safeGetTime(prevTask.archivedAt);
+    const nextArchivedTime = safeGetTime(nextTask.archivedAt);
+
+    if (prevDueTime !== nextDueTime ||
+        prevCreatedTime !== nextCreatedTime ||
+        prevUpdatedTime !== nextUpdatedTime ||
+        prevArchivedTime !== nextArchivedTime) {
+      return false;
+    }
+
+    // タグ配列の比較
+    const prevTags = prevTask.tags || [];
+    const nextTags = nextTask.tags || [];
+    if (prevTags.length !== nextTags.length) {
+      return false;
+    }
+    for (let j = 0; j < prevTags.length; j++) {
+      const prevTag = prevTags[j];
+      const nextTag = nextTags[j];
+      if (!prevTag || !nextTag ||
+          prevTag.id !== nextTag.id ||
+          prevTag.name !== nextTag.name ||
+          prevTag.color !== nextTag.color) {
+        return false;
+      }
+    }
+
+    // サブタスク配列の比較
+    const prevSubtasks = prevTask.subtasks || [];
+    const nextSubtasks = nextTask.subtasks || [];
+    if (prevSubtasks.length !== nextSubtasks.length) {
+      return false;
+    }
+    for (let j = 0; j < prevSubtasks.length; j++) {
+      const prevSubtask = prevSubtasks[j];
+      const nextSubtask = nextSubtasks[j];
+      if (!prevSubtask || !nextSubtask ||
+          prevSubtask.id !== nextSubtask.id ||
+          prevSubtask.title !== nextSubtask.title ||
+          prevSubtask.completed !== nextSubtask.completed) {
+        return false;
+      }
+    }
+
+    // scheduleInfo の比較
+    const prevSchedule = prevTask.scheduleInfo;
+    const nextSchedule = nextTask.scheduleInfo;
+    if (prevSchedule && nextSchedule) {
+      if (prevSchedule.startDate !== nextSchedule.startDate ||
+          prevSchedule.endDate !== nextSchedule.endDate) {
+        return false;
+      }
+    } else if (prevSchedule || nextSchedule) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
 // ========================================
 // Virtual Scrolling Implementation
 // ========================================
+
+/**
+ * VirtualScrollContainer用のカスタム比較関数
+ * Task配列の深い比較と日付フィールドの型安全な比較を行い、React.memoでの比較エラーを防ぐ
+ */
+const areVirtualScrollPropsEqual = (
+  prevProps: {
+    items: Task[];
+    itemHeight: number;
+    maxHeight: number;
+    renderItem: (task: Task, index: number) => React.ReactNode;
+    onItemClick?: (task: Task) => void;
+  },
+  nextProps: {
+    items: Task[];
+    itemHeight: number;
+    maxHeight: number;
+    renderItem: (task: Task, index: number) => React.ReactNode;
+    onItemClick?: (task: Task) => void;
+  }
+): boolean => {
+  // 基本プロパティの比較
+  if (prevProps.itemHeight !== nextProps.itemHeight ||
+      prevProps.maxHeight !== nextProps.maxHeight ||
+      prevProps.renderItem !== nextProps.renderItem ||
+      prevProps.onItemClick !== nextProps.onItemClick) {
+    return false;
+  }
+
+  // items配列の比較（ArchivedTasksSectionと同じロジック）
+  const prevItems = prevProps.items || [];
+  const nextItems = nextProps.items || [];
+  if (prevItems.length !== nextItems.length) {
+    return false;
+  }
+
+  // 各タスクの深い比較
+  for (let i = 0; i < prevItems.length; i++) {
+    const prevTask = prevItems[i];
+    const nextTask = nextItems[i];
+    
+    if (!prevTask || !nextTask) {
+      return false;
+    }
+
+    // タスクの基本フィールド比較
+    if (prevTask.id !== nextTask.id ||
+        prevTask.title !== nextTask.title ||
+        prevTask.description !== nextTask.description ||
+        prevTask.status !== nextTask.status ||
+        prevTask.priority !== nextTask.priority ||
+        prevTask.projectId !== nextTask.projectId ||
+        prevTask.assigneeId !== nextTask.assigneeId ||
+        prevTask.estimatedHours !== nextTask.estimatedHours ||
+        prevTask.actualHours !== nextTask.actualHours ||
+        prevTask.createdBy !== nextTask.createdBy ||
+        prevTask.updatedBy !== nextTask.updatedBy) {
+      return false;
+    }
+
+    // 日付フィールドの型安全な比較
+    const prevDueTime = safeGetTime(prevTask.dueDate);
+    const nextDueTime = safeGetTime(nextTask.dueDate);
+    const prevCreatedTime = safeGetTime(prevTask.createdAt);
+    const nextCreatedTime = safeGetTime(nextTask.createdAt);
+    const prevUpdatedTime = safeGetTime(prevTask.updatedAt);
+    const nextUpdatedTime = safeGetTime(nextTask.updatedAt);
+    const prevArchivedTime = safeGetTime(prevTask.archivedAt);
+    const nextArchivedTime = safeGetTime(nextTask.archivedAt);
+
+    if (prevDueTime !== nextDueTime ||
+        prevCreatedTime !== nextCreatedTime ||
+        prevUpdatedTime !== nextUpdatedTime ||
+        prevArchivedTime !== nextArchivedTime) {
+      return false;
+    }
+  }
+
+  return true;
+};
 
 /**
  * Virtual scrollingコンポーネント - キーボードナビゲーション対応
@@ -183,12 +382,72 @@ const VirtualScrollContainer: React.FC<{
       </div>
     </div>
   )
-})
+}, areVirtualScrollPropsEqual)
 VirtualScrollContainer.displayName = "VirtualScrollContainer"
 
 // ========================================
 // Default Task Renderer
 // ========================================
+
+/**
+ * DefaultTaskRenderer用のカスタム比較関数
+ * Task型の日付フィールドの型安全な比較を行い、React.memoでの比較エラーを防ぐ
+ */
+const areDefaultTaskRendererPropsEqual = (
+  prevProps: {
+    task: Task;
+    onClick?: () => void;
+    isFocused?: boolean;
+  },
+  nextProps: {
+    task: Task;
+    onClick?: () => void;
+    isFocused?: boolean;
+  }
+): boolean => {
+  // 基本プロパティの比較
+  if (prevProps.onClick !== nextProps.onClick ||
+      prevProps.isFocused !== nextProps.isFocused) {
+    return false;
+  }
+
+  const prevTask = prevProps.task;
+  const nextTask = nextProps.task;
+
+  // タスクの基本フィールド比較
+  if (prevTask.id !== nextTask.id ||
+      prevTask.title !== nextTask.title ||
+      prevTask.description !== nextTask.description ||
+      prevTask.status !== nextTask.status ||
+      prevTask.priority !== nextTask.priority ||
+      prevTask.projectId !== nextTask.projectId ||
+      prevTask.assigneeId !== nextTask.assigneeId ||
+      prevTask.estimatedHours !== nextTask.estimatedHours ||
+      prevTask.actualHours !== nextTask.actualHours ||
+      prevTask.createdBy !== nextTask.createdBy ||
+      prevTask.updatedBy !== nextTask.updatedBy) {
+    return false;
+  }
+
+  // 日付フィールドの型安全な比較
+  const prevDueTime = safeGetTime(prevTask.dueDate);
+  const nextDueTime = safeGetTime(nextTask.dueDate);
+  const prevCreatedTime = safeGetTime(prevTask.createdAt);
+  const nextCreatedTime = safeGetTime(nextTask.createdAt);
+  const prevUpdatedTime = safeGetTime(prevTask.updatedAt);
+  const nextUpdatedTime = safeGetTime(nextTask.updatedAt);
+  const prevArchivedTime = safeGetTime(prevTask.archivedAt);
+  const nextArchivedTime = safeGetTime(nextTask.archivedAt);
+
+  if (prevDueTime !== nextDueTime ||
+      prevCreatedTime !== nextCreatedTime ||
+      prevUpdatedTime !== nextUpdatedTime ||
+      prevArchivedTime !== nextArchivedTime) {
+    return false;
+  }
+
+  return true;
+};
 
 /**
  * デフォルトのタスク表示コンポーネント
@@ -265,7 +524,7 @@ const DefaultTaskRenderer: React.FC<{
       <Archive className="h-4 w-4 text-gray-400 ml-2 flex-shrink-0" aria-hidden="true" />
     </div>
   )
-})
+}, areDefaultTaskRendererPropsEqual)
 DefaultTaskRenderer.displayName = "DefaultTaskRenderer"
 
 // ========================================
@@ -434,7 +693,7 @@ export const ArchivedTasksSection = React.memo<ArchivedTasksSectionProps>(({
       </div>
     </PerformanceMonitor>
   )
-})
+}, areArchivedTasksSectionPropsEqual)
 ArchivedTasksSection.displayName = "ArchivedTasksSection"
 
 // ========================================

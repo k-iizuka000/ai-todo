@@ -11,6 +11,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { TagBadge } from '@/components/tag/TagBadge';
 import { ProjectBadge } from '@/components/project/ProjectBadge';
+import { safeGetTime, safeParseDate } from '@/utils/dateUtils';
 
 /**
  * TaskCardコンポーネントのProps
@@ -79,15 +80,19 @@ const DUE_DATE_WARNING_DAYS = 2; // 期限警告日数
 const MS_PER_DAY = 1000 * 60 * 60 * 24; // 1日のミリ秒数
 
 /**
- * 期限の状態を判定する
- * @param dueDate タスクの期限日
+ * 期限の状態を判定する（型安全な日付処理）
+ * @param dueDate タスクの期限日（Date、文字列、またはundefined）
  * @returns 期限状態（期限切れ、期限間近、通常）
  */
-const getDueDateStatus = (dueDate?: Date): 'overdue' | 'due-soon' | 'normal' => {
+const getDueDateStatus = (dueDate?: Date | string): 'overdue' | 'due-soon' | 'normal' => {
   if (!dueDate) return 'normal';
   
+  // 安全な日付取得
+  const dueDateTime = safeGetTime(dueDate);
+  if (dueDateTime === null) return 'normal';
+  
   const now = new Date();
-  const diffDays = Math.ceil((dueDate.getTime() - now.getTime()) / MS_PER_DAY);
+  const diffDays = Math.ceil((dueDateTime - now.getTime()) / MS_PER_DAY);
   
   if (diffDays < 0) return 'overdue';
   if (diffDays <= DUE_DATE_WARNING_DAYS) return 'due-soon';
@@ -111,16 +116,21 @@ const getDueDateColor = (status: 'overdue' | 'due-soon' | 'normal'): string => {
 };
 
 /**
- * 日付を日本語形式でフォーマットする
- * @param date フォーマット対象の日付
- * @returns 日本語形式の日付文字列（例：12/25 火）
+ * 日付を日本語形式でフォーマットする（型安全な日付処理）
+ * @param date フォーマット対象の日付（Date、文字列、またはundefined）
+ * @returns 日本語形式の日付文字列（例：12/25 火）、無効な場合は空文字列
  */
-const formatDate = (date: Date): string => {
+const formatDate = (date?: Date | string): string => {
+  if (!date) return '';
+  
+  const parseResult = safeParseDate(date);
+  if (!parseResult.isValid || !parseResult.date) return '';
+  
   return new Intl.DateTimeFormat('ja-JP', {
     month: 'numeric',
     day: 'numeric',
     weekday: 'short'
-  }).format(date);
+  }).format(parseResult.date);
 };
 
 // ドラッグ状態のスタイル設定
@@ -129,6 +139,108 @@ const DRAG_SHADOW = 'shadow-lg';
 
 // 表示設定
 const MAX_VISIBLE_TAGS = 2; // 表示する最大タグ数
+
+/**
+ * TaskCard用のカスタム比較関数
+ * 日付フィールドの型安全な比較を行い、React.memoでの比較エラーを防ぐ
+ */
+const areTaskCardPropsEqual = (prevProps: TaskCardProps, nextProps: TaskCardProps): boolean => {
+  // 基本プロパティの比較
+  if (prevProps.isCollapsed !== nextProps.isCollapsed ||
+      prevProps.compact !== nextProps.compact ||
+      prevProps.onToggleCollapse !== nextProps.onToggleCollapse ||
+      prevProps.onSubtaskToggle !== nextProps.onSubtaskToggle ||
+      prevProps.onClick !== nextProps.onClick ||
+      prevProps.onTagClick !== nextProps.onTagClick ||
+      prevProps.onProjectClick !== nextProps.onProjectClick) {
+    return false;
+  }
+
+  const prevTask = prevProps.task;
+  const nextTask = nextProps.task;
+
+  // タスクの基本フィールド比較
+  if (prevTask.id !== nextTask.id ||
+      prevTask.title !== nextTask.title ||
+      prevTask.description !== nextTask.description ||
+      prevTask.status !== nextTask.status ||
+      prevTask.priority !== nextTask.priority ||
+      prevTask.projectId !== nextTask.projectId ||
+      prevTask.assigneeId !== nextTask.assigneeId ||
+      prevTask.estimatedHours !== nextTask.estimatedHours ||
+      prevTask.actualHours !== nextTask.actualHours ||
+      prevTask.createdBy !== nextTask.createdBy ||
+      prevTask.updatedBy !== nextTask.updatedBy) {
+    return false;
+  }
+
+  // 日付フィールドの型安全な比較
+  const prevDueTime = safeGetTime(prevTask.dueDate);
+  const nextDueTime = safeGetTime(nextTask.dueDate);
+  const prevCreatedTime = safeGetTime(prevTask.createdAt);
+  const nextCreatedTime = safeGetTime(nextTask.createdAt);
+  const prevUpdatedTime = safeGetTime(prevTask.updatedAt);
+  const nextUpdatedTime = safeGetTime(nextTask.updatedAt);
+  const prevArchivedTime = safeGetTime(prevTask.archivedAt);
+  const nextArchivedTime = safeGetTime(nextTask.archivedAt);
+
+  if (prevDueTime !== nextDueTime ||
+      prevCreatedTime !== nextCreatedTime ||
+      prevUpdatedTime !== nextUpdatedTime ||
+      prevArchivedTime !== nextArchivedTime) {
+    return false;
+  }
+
+  // タグ配列の比較（安全なアクセス）
+  const prevTags = prevTask.tags || [];
+  const nextTags = nextTask.tags || [];
+  if (prevTags.length !== nextTags.length) {
+    return false;
+  }
+  for (let i = 0; i < prevTags.length; i++) {
+    const prevTag = prevTags[i];
+    const nextTag = nextTags[i];
+    if (!prevTag || !nextTag ||
+        prevTag.id !== nextTag.id ||
+        prevTag.name !== nextTag.name ||
+        prevTag.color !== nextTag.color) {
+      return false;
+    }
+  }
+
+  // サブタスク配列の比較（安全なアクセス）
+  const prevSubtasks = prevTask.subtasks || [];
+  const nextSubtasks = nextTask.subtasks || [];
+  if (prevSubtasks.length !== nextSubtasks.length) {
+    return false;
+  }
+  for (let i = 0; i < prevSubtasks.length; i++) {
+    const prevSubtask = prevSubtasks[i];
+    const nextSubtask = nextSubtasks[i];
+    if (!prevSubtask || !nextSubtask ||
+        prevSubtask.id !== nextSubtask.id ||
+        prevSubtask.title !== nextSubtask.title ||
+        prevSubtask.completed !== nextSubtask.completed) {
+      return false;
+    }
+  }
+
+  // scheduleInfo の比較（安全なアクセス）
+  const prevSchedule = prevTask.scheduleInfo;
+  const nextSchedule = nextTask.scheduleInfo;
+  if (prevSchedule && nextSchedule) {
+    // 両方存在する場合の比較（現在はstartDateとendDateのみ比較）
+    if (prevSchedule.startDate !== nextSchedule.startDate ||
+        prevSchedule.endDate !== nextSchedule.endDate) {
+      return false;
+    }
+  } else if (prevSchedule || nextSchedule) {
+    // 片方のみ存在する場合は異なる
+    return false;
+  }
+
+  return true;
+};
 
 /**
  * タスクカードコンポーネント
@@ -174,7 +286,14 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id });
+  } = useSortable({ 
+    id: task.id,
+    data: {
+      type: 'task',
+      task: task,
+      status: task.status
+    }
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -385,6 +504,6 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
       </div>
     </Card>
   );
-});
+}, areTaskCardPropsEqual);
 
 TaskCard.displayName = 'TaskCard';

@@ -10,6 +10,7 @@ import { TaskCard } from './TaskCard';
 import { TaskCardCompact } from './TaskCardCompact';
 import { useDroppable } from '@dnd-kit/core';
 import { useProjectHelper } from '@/stores/projectStore';
+import { safeGetTime } from '@/utils/dateUtils';
 
 /**
  * KanbanColumnコンポーネントのProps
@@ -44,6 +45,137 @@ interface KanbanColumnProps {
   /** ドラッグオーバー状態（外部制御用） */
   isDraggedOver?: boolean;
 }
+
+/**
+ * KanbanColumn用のカスタム比較関数
+ * Task配列の深い比較と日付フィールドの型安全な比較を行い、React.memoでの比較エラーを防ぐ
+ */
+const areKanbanColumnPropsEqual = (prevProps: KanbanColumnProps, nextProps: KanbanColumnProps): boolean => {
+  // 基本プロパティの比較
+  if (prevProps.status !== nextProps.status ||
+      prevProps.title !== nextProps.title ||
+      prevProps.compact !== nextProps.compact ||
+      prevProps.className !== nextProps.className ||
+      prevProps.isDraggedOver !== nextProps.isDraggedOver ||
+      prevProps.onTaskClick !== nextProps.onTaskClick ||
+      prevProps.onAddTask !== nextProps.onAddTask ||
+      prevProps.onSettings !== nextProps.onSettings ||
+      prevProps.onToggleTaskCollapse !== nextProps.onToggleTaskCollapse ||
+      prevProps.onSubtaskToggle !== nextProps.onSubtaskToggle ||
+      prevProps.onTagClick !== nextProps.onTagClick ||
+      prevProps.onProjectClick !== nextProps.onProjectClick) {
+    return false;
+  }
+
+  // collapsedTasks Set の比較
+  const prevCollapsed = prevProps.collapsedTasks || new Set();
+  const nextCollapsed = nextProps.collapsedTasks || new Set();
+  if (prevCollapsed.size !== nextCollapsed.size) {
+    return false;
+  }
+  for (const taskId of prevCollapsed) {
+    if (!nextCollapsed.has(taskId)) {
+      return false;
+    }
+  }
+
+  // tasks配列の比較
+  const prevTasks = prevProps.tasks || [];
+  const nextTasks = nextProps.tasks || [];
+  if (prevTasks.length !== nextTasks.length) {
+    return false;
+  }
+
+  // 各タスクの深い比較
+  for (let i = 0; i < prevTasks.length; i++) {
+    const prevTask = prevTasks[i];
+    const nextTask = nextTasks[i];
+    
+    if (!prevTask || !nextTask) {
+      return false;
+    }
+
+    // タスクの基本フィールド比較
+    if (prevTask.id !== nextTask.id ||
+        prevTask.title !== nextTask.title ||
+        prevTask.description !== nextTask.description ||
+        prevTask.status !== nextTask.status ||
+        prevTask.priority !== nextTask.priority ||
+        prevTask.projectId !== nextTask.projectId ||
+        prevTask.assigneeId !== nextTask.assigneeId ||
+        prevTask.estimatedHours !== nextTask.estimatedHours ||
+        prevTask.actualHours !== nextTask.actualHours ||
+        prevTask.createdBy !== nextTask.createdBy ||
+        prevTask.updatedBy !== nextTask.updatedBy) {
+      return false;
+    }
+
+    // 日付フィールドの型安全な比較
+    const prevDueTime = safeGetTime(prevTask.dueDate);
+    const nextDueTime = safeGetTime(nextTask.dueDate);
+    const prevCreatedTime = safeGetTime(prevTask.createdAt);
+    const nextCreatedTime = safeGetTime(nextTask.createdAt);
+    const prevUpdatedTime = safeGetTime(prevTask.updatedAt);
+    const nextUpdatedTime = safeGetTime(nextTask.updatedAt);
+    const prevArchivedTime = safeGetTime(prevTask.archivedAt);
+    const nextArchivedTime = safeGetTime(nextTask.archivedAt);
+
+    if (prevDueTime !== nextDueTime ||
+        prevCreatedTime !== nextCreatedTime ||
+        prevUpdatedTime !== nextUpdatedTime ||
+        prevArchivedTime !== nextArchivedTime) {
+      return false;
+    }
+
+    // タグ配列の比較
+    const prevTags = prevTask.tags || [];
+    const nextTags = nextTask.tags || [];
+    if (prevTags.length !== nextTags.length) {
+      return false;
+    }
+    for (let j = 0; j < prevTags.length; j++) {
+      const prevTag = prevTags[j];
+      const nextTag = nextTags[j];
+      if (!prevTag || !nextTag ||
+          prevTag.id !== nextTag.id ||
+          prevTag.name !== nextTag.name ||
+          prevTag.color !== nextTag.color) {
+        return false;
+      }
+    }
+
+    // サブタスク配列の比較
+    const prevSubtasks = prevTask.subtasks || [];
+    const nextSubtasks = nextTask.subtasks || [];
+    if (prevSubtasks.length !== nextSubtasks.length) {
+      return false;
+    }
+    for (let j = 0; j < prevSubtasks.length; j++) {
+      const prevSubtask = prevSubtasks[j];
+      const nextSubtask = nextSubtasks[j];
+      if (!prevSubtask || !nextSubtask ||
+          prevSubtask.id !== nextSubtask.id ||
+          prevSubtask.title !== nextSubtask.title ||
+          prevSubtask.completed !== nextSubtask.completed) {
+        return false;
+      }
+    }
+
+    // scheduleInfo の比較
+    const prevSchedule = prevTask.scheduleInfo;
+    const nextSchedule = nextTask.scheduleInfo;
+    if (prevSchedule && nextSchedule) {
+      if (prevSchedule.startDate !== nextSchedule.startDate ||
+          prevSchedule.endDate !== nextSchedule.endDate) {
+        return false;
+      }
+    } else if (prevSchedule || nextSchedule) {
+      return false;
+    }
+  }
+
+  return true;
+};
 
 /**
  * カンバン列コンポーネント
@@ -249,4 +381,4 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(({
       />
     </div>
   );
-});
+}, areKanbanColumnPropsEqual);

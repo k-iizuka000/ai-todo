@@ -457,15 +457,34 @@ export const useTaskActions = () => {
    * Issue #028対応: アンマウント後の状態更新防止
    */
   const removeTask = useCallback(async (taskId: string) => {
+    console.log('[removeTask] ===== FUNCTION ENTRY POINT =====');
+    console.log('[removeTask] Function called with taskId:', taskId);
+    console.log('[removeTask] Current mount status:', isMountedRef.current);
+    
     const operationId = `delete-${taskId}-${Date.now()}`;
     const abortController = new AbortController();
     let isOperationActive = true;
     
+    console.log('[removeTask] Operation setup completed:', {
+      operationId,
+      isOperationActive,
+      abortSignal: abortController.signal.aborted
+    });
+    
     try {
-      // 早期中断確認
-      if (abortController.signal.aborted || !isMountedRef.current) {
+      // 早期中断確認（削除操作は実行を継続、abortSignalのみチェック）
+      console.log('[removeTask] Checking early abort conditions:', {
+        abortSignal: abortController.signal.aborted,
+        isMounted: isMountedRef.current,
+        willReturn: abortController.signal.aborted
+      });
+      
+      if (abortController.signal.aborted) {
+        console.log('[removeTask] Early return triggered - operation aborted');
         return;
       }
+      
+      console.log('[removeTask] Early abort check passed, continuing...');
       
       // AbortControllerを記録
       abortControllersRef.current.set(operationId, abortController);
@@ -474,25 +493,71 @@ export const useTaskActions = () => {
         clearError();
       }
       
-      // 楽観的更新 - 生存確認付き
-      if (isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
+      // 楽観的更新 - 削除操作は常に実行
+      console.log('[removeTask] About to perform optimistic update - Conditions check:', {
+        isOperationActive,
+        aborted: abortController.signal.aborted,
+        mounted: isMountedRef.current,
+        taskId
+      });
+      
+      if (isOperationActive && !abortController.signal.aborted) {
+        console.log('[removeTask] Performing optimistic update: deleteTask(', taskId, ')');
         deleteTask(taskId);
+        console.log('[removeTask] Optimistic update completed');
+      } else {
+        console.log('[removeTask] Optimistic update skipped due to conditions');
       }
       
       // 実際のAPI呼び出し（設計書対応：API統合完全実装）
-      if (isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
+      console.log('[removeTask] About to make API call - Conditions check:', {
+        isOperationActive,
+        aborted: abortController.signal.aborted,
+        mounted: isMountedRef.current,
+        taskId
+      });
+      
+      if (isOperationActive && !abortController.signal.aborted) {
+        console.log('[removeTask] Making API call to taskApi.deleteTask:', taskId);
         const response = await taskApi.deleteTask(taskId);
+        console.log('[removeTask] API call completed, response:', response);
         
-        // 成功時の処理 - 生存確認付き
-        if (response.data && response.data.success && isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
-          console.log('Task deleted successfully:', response.data);
+        // 成功時の処理 - 削除操作は常に確認
+        if (response.data && response.data.success && isOperationActive && !abortController.signal.aborted) {
+          console.log('[removeTask] Task deleted successfully:', response.data);
+        } else {
+          console.log('[removeTask] Success condition not met:', {
+            hasResponseData: !!response.data,
+            success: response.data?.success,
+            isOperationActive,
+            aborted: abortController.signal.aborted,
+            mounted: isMountedRef.current
+          });
         }
+      } else {
+        console.log('[removeTask] API call skipped due to conditions:', {
+          isOperationActive,
+          aborted: abortController.signal.aborted,
+          mounted: isMountedRef.current
+        });
       }
       
     } catch (error) {
-      if (isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
-        console.error('Failed to delete task:', error);
-        setError('タスクの削除に失敗しました');
+      console.log('[removeTask] Caught error:', error);
+      console.log('[removeTask] Error handling conditions:', {
+        isOperationActive,
+        aborted: abortController.signal.aborted,
+        mounted: isMountedRef.current
+      });
+      
+      if (isOperationActive && !abortController.signal.aborted) {
+        console.error('[removeTask] Processing error - Failed to delete task:', error);
+        // エラー状態の更新はマウント状態の場合のみ
+        if (isMountedRef.current) {
+          setError('タスクの削除に失敗しました');
+        }
+      } else {
+        console.log('[removeTask] Error ignored due to conditions');
       }
     } finally {
       isOperationActive = false;

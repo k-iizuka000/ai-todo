@@ -3,6 +3,11 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
+import { 
+  isClickOutsideExcluding, 
+  DEFAULT_MODAL_EXCLUDE_SELECTORS,
+  elementMatchesAnySelector 
+} from "@/utils/eventUtils"
 
 const Dialog = DialogPrimitive.Root
 
@@ -53,7 +58,7 @@ export interface DialogContentProps
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, size, children, ...props }, ref) => (
+>(({ className, size, children, onPointerDownOutside, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -62,7 +67,7 @@ const DialogContent = React.forwardRef<
         dialogContentVariants({ size, className }),
         "overflow-y-auto overflow-x-hidden"
       )}
-      onPointerDownOutside={(event) => {
+      onPointerDownOutside={onPointerDownOutside || ((event) => {
         const originalEvent = event.detail.originalEvent;
         const target = originalEvent.target as HTMLElement;
         // スクロールバーのクリックは無視
@@ -70,7 +75,7 @@ const DialogContent = React.forwardRef<
             originalEvent.offsetY > target.clientHeight) {
           event.preventDefault();
         }
-      }}
+      })}
       {...props}
     >
       {children}
@@ -148,6 +153,10 @@ export interface ModalProps {
   children: React.ReactNode
   footer?: React.ReactNode
   className?: string
+  /** Additional CSS selectors to exclude from click-outside detection */
+  excludeSelectors?: string[]
+  /** Whether to use default exclude selectors for common form elements */
+  useDefaultExcludeSelectors?: boolean
 }
 
 const Modal: React.FC<ModalProps> = ({
@@ -159,10 +168,51 @@ const Modal: React.FC<ModalProps> = ({
   children,
   footer,
   className,
+  excludeSelectors = [],
+  useDefaultExcludeSelectors = true,
 }) => {
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  
+  // Combine default and custom exclude selectors
+  const allExcludeSelectors = React.useMemo(() => {
+    const selectors = [...excludeSelectors];
+    if (useDefaultExcludeSelectors) {
+      selectors.unshift(...DEFAULT_MODAL_EXCLUDE_SELECTORS);
+    }
+    return selectors;
+  }, [excludeSelectors, useDefaultExcludeSelectors]);
+  
+  // Enhanced click outside handler
+  const handlePointerDownOutside = React.useCallback((event: CustomEvent) => {
+    const originalEvent = event.detail.originalEvent as PointerEvent;
+    const target = originalEvent.target as HTMLElement;
+    
+    // Skip if no content ref
+    if (!contentRef.current) {
+      return;
+    }
+    
+    // Handle scrollbar clicks (existing logic)
+    if (originalEvent.offsetX > target.clientWidth || 
+        originalEvent.offsetY > target.clientHeight) {
+      event.preventDefault();
+      return;
+    }
+    
+    // Check if click should be excluded using our enhanced logic
+    if (!isClickOutsideExcluding(originalEvent, contentRef.current, allExcludeSelectors)) {
+      event.preventDefault();
+    }
+  }, [allExcludeSelectors]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size={size} className={cn("flex flex-col", className)}>
+      <DialogContent 
+        ref={contentRef}
+        size={size} 
+        className={cn("flex flex-col", className)}
+        onPointerDownOutside={handlePointerDownOutside}
+      >
         {/* 固定ヘッダー */}
         {(title || description) && (
           <DialogHeader className="flex-shrink-0">

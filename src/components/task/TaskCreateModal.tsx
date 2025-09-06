@@ -122,6 +122,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
       className={className}
       title="新しいタスクを作成"
       description="タスクの詳細情報を入力してください"
+      useDefaultExcludeSelectors={true}
     >
       <div className="space-y-4">
         {/* エラー表示 */}

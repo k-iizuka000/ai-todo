@@ -35,6 +35,8 @@ interface TagSelectorProps {
   placeholder?: string;
   /** 表示モード: 'compact' | 'full' */
   variant?: 'compact' | 'full';
+  /** タグ表示モード: 'inline' | 'separate' | 'auto' */
+  displayMode?: 'inline' | 'separate' | 'auto';
   /** 無効化状態 */
   disabled?: boolean;
   /** エラー状態 */
@@ -52,6 +54,7 @@ export const TagSelector: React.FC<TagSelectorProps> = React.memo(({
   editing = false, // eslint-disable-line @typescript-eslint/no-unused-vars
   placeholder = "タグを追加...", // eslint-disable-line @typescript-eslint/no-unused-vars
   variant = 'full', // eslint-disable-line @typescript-eslint/no-unused-vars
+  displayMode = 'auto', // eslint-disable-line @typescript-eslint/no-unused-vars
   disabled = false, // eslint-disable-line @typescript-eslint/no-unused-vars
   error = false, // eslint-disable-line @typescript-eslint/no-unused-vars
   className = ""
@@ -123,11 +126,18 @@ export const TagSelector: React.FC<TagSelectorProps> = React.memo(({
     );
   }
 
-  // フルモード: 従来の表示方式
+  // フルモード: displayModeに応じて表示方式を変更
+  const shouldShowSeparateDisplay = useMemo(() => {
+    if (displayMode === 'inline') return false;
+    if (displayMode === 'separate') return true;
+    // autoモードの場合は、タグが多い場合に分離表示
+    return selectedTags.length > 5;
+  }, [displayMode, selectedTags.length]);
+
   return (
     <div className={`tag-selector-full ${className}`}>
-      {/* 選択済みタグの表示 */}
-      {selectedTags.length > 0 && (
+      {/* 選択済みタグの表示（separateモード時のみ） */}
+      {shouldShowSeparateDisplay && selectedTags.length > 0 && (
         <div className="mb-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -160,13 +170,14 @@ export const TagSelector: React.FC<TagSelectorProps> = React.memo(({
       {/* タグ入力 */}
       <div>
         <TagInput
-          value={selectedTags}
+          value={shouldShowSeparateDisplay ? [] : selectedTags}
           onChange={onTagsChange}
           placeholder={placeholder}
           maxTags={maxTags}
           allowCreate={allowCreate}
           disabled={disabled}
           error={error}
+          displaySelected={!shouldShowSeparateDisplay}
         />
       </div>
 

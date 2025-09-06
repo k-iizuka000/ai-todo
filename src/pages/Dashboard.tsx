@@ -163,14 +163,16 @@ const Dashboard: React.FC = () => {
     const pathParts = location.pathname.split('/');
     const taskId = pathParts[pathParts.length - 1];
     
-    // taskIdがUUID形式の場合、タスク詳細を表示
-    if (taskId && taskId.startsWith('task-')) {
+    // taskIdが有効な場合（UUID形式、または数値）、タスク詳細を表示
+    const isValidTaskId = taskId && (taskId.startsWith('task-') || /^\d+$/.test(taskId));
+    
+    if (isValidTaskId) {
       const taskDetail = getTaskDetail(taskId);
       if (taskDetail && !showTaskDetailModal && isMounted) {
         setSelectedTask(taskDetail);
         setShowTaskDetailModal(true);
       }
-    } else if (showTaskDetailModal && !taskId.startsWith('task-') && isMounted) {
+    } else if (showTaskDetailModal && !isValidTaskId && isMounted) {
       // URLにタスクIDがない場合はモーダルを閉じる
       setShowTaskDetailModal(false);
       setSelectedTask(null);
@@ -338,7 +340,10 @@ const Dashboard: React.FC = () => {
     
     // URLからタスクIDを削除して元のページに戻る
     const pathParts = location.pathname.split('/');
-    if (pathParts[pathParts.length - 1].startsWith('task-')) {
+    const lastPathPart = pathParts[pathParts.length - 1];
+    const isTaskIdInUrl = lastPathPart && (lastPathPart.startsWith('task-') || /^\d+$/.test(lastPathPart));
+    
+    if (isTaskIdInUrl) {
       const newPath = pathParts.slice(0, -1).join('/');
       navigate(newPath, { replace: true });
     }

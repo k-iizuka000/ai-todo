@@ -82,16 +82,23 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         {/* オーバーレイ */}
-        <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 animate-in fade-in duration-200" />
+        <Dialog.Overlay 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 animate-in fade-in duration-200" 
+          onClick={() => {
+            console.log('Overlay clicked directly');
+            onClose();
+          }}
+        />
         
         {/* モーダルコンテンツ */}
         <Dialog.Content 
           className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-6xl h-[90vh] z-50 animate-in fade-in zoom-in-95 duration-200"
           aria-labelledby="task-detail-title"
           aria-describedby="task-detail-description"
-          onInteractOutside={(e) => {
-            // クリックアウトサイドでは閉じない（アクセシビリティ向上）
-            e.preventDefault();
+          onInteractOutside={(event) => {
+            // クリックアウトサイドでモーダルを閉じる
+            console.log('onInteractOutside triggered', event);
+            onClose();
           }}
           onEscapeKeyDown={() => {
             // Escapeキーでのみ閉じる

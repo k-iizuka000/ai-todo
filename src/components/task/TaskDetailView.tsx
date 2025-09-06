@@ -362,8 +362,6 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
         height: isMobile ? '100vh' : containerHeight,
         ...getTransitionStyles('in'),
       }}
-      role="dialog"
-      aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descId}
     >

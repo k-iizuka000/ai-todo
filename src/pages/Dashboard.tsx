@@ -42,7 +42,7 @@ const Dashboard: React.FC = () => {
   const { tags: availableTags } = useTagStore();
   
   // タスクストア - 通常のパターンを使用（Archive用の基本データ取得）
-  const { tasks: tasksFromStore, addTask, error, clearError } = useTaskStore();
+  const { tasks: tasksFromStore, addTask, error, clearError, initializeStore, isInitialized } = useTaskStore();
   
   // URLからタスクページの種類を判定
   const pageType = location.pathname.includes('/today') ? 'today' : 
@@ -98,6 +98,34 @@ const Dashboard: React.FC = () => {
       isMounted = false;
     };
   }, [location.search]);
+
+  // タスクストアの初期化処理
+  useEffect(() => {
+    let isMounted = true;
+
+    // まだ初期化されていない場合のみ実行
+    if (!isInitialized) {
+      const initializeTasks = async () => {
+        try {
+          console.log('[Dashboard] Initializing task store...');
+          await initializeStore();
+          if (isMounted) {
+            console.log('[Dashboard] Task store initialized successfully');
+          }
+        } catch (error) {
+          if (isMounted) {
+            console.error('[Dashboard] Failed to initialize task store:', error);
+          }
+        }
+      };
+
+      initializeTasks();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isInitialized, initializeStore]);
   
   
   // リストビュー用のフィルタリング済みタスク（KanbanBoardと同じロジック）

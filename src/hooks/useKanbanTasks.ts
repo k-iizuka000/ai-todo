@@ -15,9 +15,14 @@ import { Task, TaskStatus } from '../types/task';
 /**
  * KanbanBoard用のタスクセレクター
  * アーカイブを除いた有効なタスクのみを取得
+ * statusフィールドの欠落にも対応
  */
 const selectKanbanTasks = (state: { tasks: Task[]; isLoading: boolean; error: string | null }) => {
-  return state.tasks.filter((task: Task) => task.status !== 'archived');
+  return state.tasks.filter((task: Task) => {
+    // statusが存在しない場合はデフォルトでtodoとして扱う
+    const taskStatus = task.status || 'todo';
+    return taskStatus !== 'archived';
+  });
 };
 
 /**
@@ -40,6 +45,7 @@ interface TaskFilters {
 
 /**
  * ステータス別タスク分類
+ * statusフィールドの欠落にも対応
  */
 const selectTasksByStatus = (tasks: Task[]) => {
   const grouped = {
@@ -49,11 +55,14 @@ const selectTasksByStatus = (tasks: Task[]) => {
   };
   
   tasks.forEach(task => {
-    if (task.status === 'todo') {
+    // statusが存在しない場合はデフォルトでtodoとして扱う
+    const taskStatus = task.status || 'todo';
+    
+    if (taskStatus === 'todo') {
       grouped.todo.push(task);
-    } else if (task.status === 'in_progress') {
+    } else if (taskStatus === 'in_progress') {
       grouped.in_progress.push(task);
-    } else if (task.status === 'done') {
+    } else if (taskStatus === 'done') {
       grouped.done.push(task);
     }
   });
@@ -92,10 +101,15 @@ const applyFilters = (tasks: Task[], filters?: TaskFilters) => {
     }
   }
   
-  // タグフィルタリング
-  if (selectedTags.length > 0) {
+  // タグフィルタリング（修正: タグフィルターが適用された場合のみ動作）
+  if (selectedTags && selectedTags.length > 0) {
     result = result.filter(task => {
-      const taskTagIds = task.tags.map(tag => tag.id);
+      // タグフィルターが適用されている場合のみ、タグなしタスクを除外
+      if (!task.tags || task.tags.length === 0) {
+        return false; // タグフィルターがアクティブなのでタグなしタスクは非表示
+      }
+      
+      const taskTagIds = task.tags.map(tag => tag?.id).filter(Boolean);
       const taskTagIdSet = new Set(taskTagIds);
       
       if (tagFilterMode === 'AND') {
@@ -152,7 +166,26 @@ export const useKanbanTasks = (filters?: TaskFilters): UseKanbanTasksReturn => {
   const lastUpdated = useTaskStore(state => state.getLastUpdated()); // Issue #061対応
 
   const filteredTasks = useMemo(() => {
-    return applyFilters(tasks, filters);
+    const result = applyFilters(tasks, filters);
+    
+    // デバッグ: タスクフィルタリングの結果をログ出力
+    console.log('[useKanbanTasks] Filtering results:', {
+      originalTasksCount: tasks.length,
+      filteredTasksCount: result.length,
+      filters: {
+        searchQuery: filters?.searchQuery || '',
+        selectedTags: filters?.selectedTags || [],
+        tagFilterMode: filters?.tagFilterMode || 'OR',
+        pageType: filters?.pageType || 'all'
+      },
+      selectedTagsLength: filters?.selectedTags?.length || 0,
+      hasSelectedTags: !!(filters?.selectedTags && filters.selectedTags.length > 0),
+      lastUpdated,
+      taskIds: result.map(t => ({ id: t.id, title: t.title, status: t.status })),
+      timestamp: Date.now()
+    });
+    
+    return result;
   }, [tasks, filters, lastUpdated]); // lastUpdatedを依存配列に追加
 
   const tasksByStatus = useMemo(() => {

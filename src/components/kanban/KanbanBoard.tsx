@@ -203,12 +203,28 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
     setLocalTasksByStatus(tasksByStatus);
   }, [tasksByStatus]);
   
+  
   // Issue 059対応: 状態更新時の強制再描画トリガー追加
   useEffect(() => {
     if (lastUpdated) {
       console.log(`[KanbanBoard] Tasks updated at: ${lastUpdated}`);
+      // デバッグ: タスク更新後の状態確認
+      console.log('[KanbanBoard] Debug - Tasks after update:', {
+        totalTasks: localTasksByStatus.todo.length + localTasksByStatus.in_progress.length + localTasksByStatus.done.length,
+        tasksByStatus: {
+          todo: localTasksByStatus.todo.length,
+          in_progress: localTasksByStatus.in_progress.length,
+          done: localTasksByStatus.done.length
+        },
+        taskIds: {
+          todo: localTasksByStatus.todo.map(t => ({ id: t.id, title: t.title })),
+          in_progress: localTasksByStatus.in_progress.map(t => ({ id: t.id, title: t.title })),
+          done: localTasksByStatus.done.map(t => ({ id: t.id, title: t.title }))
+        },
+        lastUpdated
+      });
     }
-  }, [lastUpdated]);
+  }, [lastUpdated, localTasksByStatus]);
   
   // エラー状態の表示
   if (error) {

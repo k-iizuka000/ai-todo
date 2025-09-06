@@ -15,8 +15,8 @@ COPY package*.json ./
 # 開発環境用の設定
 FROM base AS development
 
-# 開発用依存関係のインストール
-RUN npm ci --include=dev
+# 依存関係のインストール（package-lock.json問題回避）
+RUN npm install
 
 # ソースコードをコピー
 COPY . .
@@ -24,24 +24,28 @@ COPY . .
 # TypeScript のコンパイル
 RUN npm run build
 
-# ポート3010を公開
-EXPOSE 3010
+# ポート3003を公開（統一API）
+EXPOSE 3003
 
 # dumb-init を使用してプロセス管理
 ENTRYPOINT ["dumb-init", "--"]
 
-# 開発モードで起動
-CMD ["npm", "run", "dev"]
+# シンプル起動（Node.jsで直接実行）
+CMD ["npx", "tsx", "src/server.ts"]
 
 # 本番環境用の設定
 FROM base AS production
 
-# 本番用依存関係のみインストール
-RUN npm ci --only=production && npm cache clean --force
+# 開発依存関係も含めてインストール（ビルドに必要）
+RUN npm install && npm cache clean --force
 
-# ソースコードをコピーしてビルド
-COPY . .
+# ソースコードをコピー（必要なファイルのみ）
+COPY src/server.ts src/
+COPY tsconfig.json ./
 RUN npm run build
+
+# 本番用依存関係のみに整理
+RUN npm prune --production
 
 # 非rootユーザーの作成
 RUN addgroup -g 1001 -S nodejs && \
@@ -51,12 +55,12 @@ RUN addgroup -g 1001 -S nodejs && \
 RUN chown -R api:nodejs /app
 USER api
 
-# ポート3010を公開
-EXPOSE 3010
+# ポート3003を公開（統一API）
+EXPOSE 3003
 
 # Health check endpoint のためのcurl確認
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:3010/health || exit 1
+  CMD curl -f http://localhost:3003/health || exit 1
 
 # dumb-init を使用してプロセス管理
 ENTRYPOINT ["dumb-init", "--"]

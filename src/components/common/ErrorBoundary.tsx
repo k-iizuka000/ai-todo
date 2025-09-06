@@ -5,16 +5,18 @@
  */
 
 import React from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { logger, logError, logSecurityEvent } from '@/lib/logger';
 import { getSecureErrorLog } from '@/lib/api/errors';
+import { useConnectionStore, useConnectionStatus, useConnectionError } from '@/stores/connectionStore';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
   fallback?: React.ComponentType<ErrorFallbackProps>;
   onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
+  useApiConnectionFallback?: boolean; // API接続エラー用フォールバックを使用するかどうか
 }
 
 export interface ErrorFallbackProps {
@@ -26,6 +28,113 @@ interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
 }
+
+/**
+ * API接続エラー専用のフォールバックコンポーネント
+ */
+const ApiConnectionErrorFallback: React.FC<ErrorFallbackProps> = ({ error, resetError }) => {
+  const connectionStatus = useConnectionStatus();
+  const connectionError = useConnectionError();
+  const { setReconnecting, setConnected } = useConnectionStore();
+
+  const isConnectionError = (error: Error) => {
+    const message = error.message?.toLowerCase() || '';
+    return message.includes('connection') || 
+           message.includes('network') || 
+           message.includes('failed to fetch') ||
+           message.includes('refused') ||
+           message.includes('timeout');
+  };
+
+  const handleRetryConnection = async () => {
+    try {
+      setReconnecting(1);
+      
+      // APIヘルスチェックを試行
+      const response = await fetch('/api/health', { 
+        method: 'GET',
+        timeout: 5000 
+      } as any);
+      
+      if (response.ok) {
+        setConnected();
+        resetError();
+      } else {
+        throw new Error('API health check failed');
+      }
+    } catch (retryError) {
+      console.error('Connection retry failed:', retryError);
+      // エラー状態を維持
+    }
+  };
+
+  if (!isConnectionError(error)) {
+    return <DefaultErrorFallback error={error} resetError={resetError} />;
+  }
+
+  return (
+    <Card className="p-8 max-w-lg mx-auto mt-8 border-red-200">
+      <div className="text-center space-y-4">
+        <div className="flex justify-center">
+          {connectionStatus === 'offline' ? (
+            <WifiOff className="h-12 w-12 text-red-500" />
+          ) : connectionStatus === 'reconnecting' ? (
+            <RefreshCw className="h-12 w-12 text-yellow-500 animate-spin" />
+          ) : (
+            <Wifi className="h-12 w-12 text-green-500" />
+          )}
+        </div>
+        
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold text-gray-900">
+            API接続エラー
+          </h2>
+          <p className="text-sm text-gray-600">
+            {connectionStatus === 'reconnecting' 
+              ? 'サーバーへの接続を試行中です...'
+              : 'サーバーとの接続に問題が発生しました。ネットワーク接続を確認してから再試行してください。'
+            }
+          </p>
+        </div>
+
+        <div className="bg-red-50 p-3 rounded-lg border border-red-200">
+          <p className="text-sm font-medium text-red-800">接続状態: {connectionStatus}</p>
+          {connectionError && (
+            <p className="text-xs text-red-600 mt-1">{connectionError.message}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          <Button
+            onClick={handleRetryConnection}
+            disabled={connectionStatus === 'reconnecting'}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+          >
+            {connectionStatus === 'reconnecting' ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Wifi className="h-4 w-4" />
+            )}
+            接続を再試行
+          </Button>
+          
+          <Button
+            onClick={() => window.location.reload()}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            ページを再読み込み
+          </Button>
+        </div>
+
+        <div className="text-xs text-gray-500">
+          問題が継続する場合は、管理者にお問い合わせください。
+        </div>
+      </div>
+    </Card>
+  );
+};
 
 /**
  * デフォルトのエラーフォールバックコンポーネント
@@ -148,7 +257,12 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   render() {
     if (this.state.hasError && this.state.error) {
-      const FallbackComponent = this.props.fallback || DefaultErrorFallback;
+      // API接続エラー用フォールバックが有効でカスタムフォールバックが指定されていない場合
+      const FallbackComponent = 
+        this.props.useApiConnectionFallback && !this.props.fallback 
+          ? ApiConnectionErrorFallback 
+          : this.props.fallback || DefaultErrorFallback;
+      
       return <FallbackComponent error={this.state.error} resetError={this.resetError} />;
     }
 

@@ -9,6 +9,7 @@ import { devtools } from 'zustand/middleware';
 import { Task, TaskFilter, TaskSort, CreateTaskInput, UpdateTaskInput, TaskScheduleInfo } from '../types/task';
 import { UnscheduledTaskData } from '../types/schedule';
 import { taskAPI } from './api/taskApi';
+import { useConnectionStore } from './connectionStore';
 
 // タスクストアの状態型定義 - API統合版（Issue #038対応）
 interface TaskState {
@@ -21,6 +22,8 @@ interface TaskState {
   error: string | null;
   isInitialized: boolean;
   lastUpdated?: number; // Issue #038: 最終更新時刻の追跡（タイムスタンプ）
+  isMockMode: boolean; // モックモード状態（API接続失敗時）
+  pendingSyncCount: number; // 同期待ちのタスク数
   
   // アクション（非同期API統合版）
   setTasks: (tasks: Task[]) => void;
@@ -68,6 +71,14 @@ interface TaskState {
   
   // Issue #061: 状態同期強化用メソッド
   getLastUpdated: () => number | undefined;
+  
+  // API接続エラー対応メソッド
+  setMockMode: (isMockMode: boolean) => void;
+  setPendingSyncCount: (count: number) => void;
+  incrementPendingSyncCount: () => void;
+  decrementPendingSyncCount: () => void;
+  attemptAutoSync: () => Promise<void>;
+  handleConnectionRestore: () => Promise<void>;
 }
 
 // デフォルトのフィルター設定
@@ -116,6 +127,8 @@ export const useTaskStore = create<TaskState>()(
       error: null,
       isInitialized: false,
       lastUpdated: undefined, // Issue #038: 最終更新時刻の初期化
+      isMockMode: false, // 初期はAPI接続を試行
+      pendingSyncCount: 0, // 同期待ちタスクなし
 
         // 基本的なCRUD操作（API統合版）
         setTasks: (tasks) => {
@@ -142,8 +155,8 @@ export const useTaskStore = create<TaskState>()(
             description: taskInput.description,
             status: 'todo',
             priority: taskInput.priority || 'medium',
-            projectId: taskInput.projectId,
-            assigneeId: taskInput.assigneeId,
+            projectId: taskInput.projectId || null, // undefinedをnullに正規化
+            assigneeId: taskInput.assigneeId || null, // undefinedをnullに正規化
             tags: taskInput.tags || [],
             subtasks: [],
             dueDate: taskInput.dueDate,
@@ -232,13 +245,17 @@ export const useTaskStore = create<TaskState>()(
               return optimisticTask;
             }
             
+            // 接続状態を更新
+            const connectionStore = useConnectionStore.getState();
+            connectionStore.setOffline(apiError instanceof Error ? apiError : new Error('API connection failed'));
+            
             // API失敗時：モックモードでタスクを保持（状態更新通知強化）
             logError('[Issue #028] API failed, keeping task in mock mode', { taskInput }, apiError);
             
             // 一時的IDを永続的IDに変更してタスクを保持
             const mockTask: Task = {
               ...optimisticTask,
-              id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+              id: `mock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
             };
             
             const updatedTasks = get().tasks.map(task => 
@@ -252,7 +269,9 @@ export const useTaskStore = create<TaskState>()(
               set({
                 tasks: updatedTasks,
                 isLoading: false,
-                error: null, // エラーをnullに設定（モックモードとして成功扱い）
+                error: 'API接続エラーのため、オフラインモードで動作中です', // ユーザー向けの分かりやすいメッセージ
+                isMockMode: true,
+                pendingSyncCount: get().pendingSyncCount + 1, // 同期待ちカウントを増加
                 lastUpdated: mockTimestamp // 状態変更を明示的に通知するためのタイムスタンプ
               }, false, 'addTask:mock-success-enhanced');
             }
@@ -263,7 +282,8 @@ export const useTaskStore = create<TaskState>()(
               totalTasks: updatedTasks.length,
               timestamp: mockTimestamp,
               stateUpdateTrigger: 'enhanced',
-              duration: Date.now() - startTime
+              duration: Date.now() - startTime,
+              pendingSyncCount: get().pendingSyncCount
             });
             
             return mockTask;
@@ -955,7 +975,9 @@ export const useTaskStore = create<TaskState>()(
             isLoading: false,
             error: null,
             isInitialized: false,
-            lastUpdated: undefined // Issue #038: リセット時のlastUpdated初期化
+            lastUpdated: undefined, // Issue #038: リセット時のlastUpdated初期化
+            isMockMode: false,
+            pendingSyncCount: 0
           }, false, 'resetStore');
         },
 
@@ -1032,6 +1054,107 @@ export const useTaskStore = create<TaskState>()(
         // Issue #061: 状態同期強化用メソッド実装
         getLastUpdated: () => {
           return get().lastUpdated;
+        },
+
+        // API接続エラー対応メソッドの実装
+        setMockMode: (isMockMode: boolean) => {
+          set({ isMockMode }, false, 'setMockMode');
+        },
+
+        setPendingSyncCount: (count: number) => {
+          set({ pendingSyncCount: count }, false, 'setPendingSyncCount');
+        },
+
+        incrementPendingSyncCount: () => {
+          set((state) => ({ pendingSyncCount: state.pendingSyncCount + 1 }), false, 'incrementPendingSyncCount');
+        },
+
+        decrementPendingSyncCount: () => {
+          set((state) => ({ pendingSyncCount: Math.max(0, state.pendingSyncCount - 1) }), false, 'decrementPendingSyncCount');
+        },
+
+        attemptAutoSync: async () => {
+          const { isMockMode, pendingSyncCount, tasks } = get();
+          
+          if (!isMockMode || pendingSyncCount === 0) {
+            return; // 同期の必要がない
+          }
+
+          logInfo('[AutoSync] Attempting auto-sync', { pendingSyncCount });
+          
+          try {
+            // ヘルスチェックで接続確認
+            const healthResponse = await fetch('/api/health');
+            if (!healthResponse.ok) {
+              throw new Error('API health check failed');
+            }
+
+            // 接続が復旧していることを通知
+            const connectionStore = useConnectionStore.getState();
+            connectionStore.setConnected();
+
+            // モックタスクの同期処理
+            const mockTasks = tasks.filter(task => task.id.startsWith('mock-'));
+            let syncedCount = 0;
+
+            for (const mockTask of mockTasks) {
+              try {
+                // モックタスクを実際のAPIに送信
+                const realTask = await taskAPI.createTask({
+                  title: mockTask.title,
+                  description: mockTask.description,
+                  priority: mockTask.priority,
+                  projectId: mockTask.projectId,
+                  assigneeId: mockTask.assigneeId,
+                  tags: mockTask.tags,
+                  dueDate: mockTask.dueDate,
+                  estimatedHours: mockTask.estimatedHours
+                });
+
+                // モックタスクを実際のタスクで置換
+                const updatedTasks = get().tasks.map(task => 
+                  task.id === mockTask.id ? realTask : task
+                );
+
+                set({ tasks: updatedTasks }, false, 'autoSync:taskReplaced');
+                syncedCount++;
+
+              } catch (syncError) {
+                logError('[AutoSync] Failed to sync individual task', { taskId: mockTask.id }, syncError);
+                // 個別のタスク同期失敗は続行
+              }
+            }
+
+            // 同期完了後の状態更新
+            set({
+              isMockMode: false,
+              pendingSyncCount: Math.max(0, get().pendingSyncCount - syncedCount),
+              error: null
+            }, false, 'autoSync:complete');
+
+            logInfo('[AutoSync] Auto-sync completed', { syncedCount, remainingPending: get().pendingSyncCount });
+
+          } catch (error) {
+            logError('[AutoSync] Auto-sync failed', {}, error);
+            // 接続がまだ復旧していない場合は状態を維持
+          }
+        },
+
+        handleConnectionRestore: async () => {
+          logInfo('[ConnectionRestore] Handling connection restore event');
+          
+          try {
+            // 自動同期を実行
+            await get().attemptAutoSync();
+            
+            // 最新データの再読み込み
+            await get().loadTasks();
+            
+            logInfo('[ConnectionRestore] Connection restore handling completed');
+
+          } catch (error) {
+            logError('[ConnectionRestore] Failed to handle connection restore', {}, error);
+          }
         }
       }),
     {

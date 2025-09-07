@@ -43,7 +43,7 @@ const Dashboard: React.FC = () => {
   const { tags: availableTags } = useTagStore();
   
   // タスクストア - 通常のパターンを使用（Archive用の基本データ取得）
-  const { tasks: tasksFromStore, addTask, error, clearError, initializeStore, isInitialized } = useTaskStore();
+  const { tasks: tasksFromStore, addTask, updateTask, error, clearError, initializeStore, isInitialized } = useTaskStore();
   
   // タスク操作フック
   const { removeTask } = useTaskActions();
@@ -287,13 +287,24 @@ const Dashboard: React.FC = () => {
     setShowCreateModal(true);
   }, []);
 
-  // TaskDetailModalで使用されるハンドラー群 - 現在はMock環境のため最小限の実装
-  const handleTaskUpdate = useCallback((taskId: string, updates: Partial<Task>) => {
-    // Mock環境では実際の更新は行わず、モーダルの状態更新のみ
-    if (selectedTask && selectedTask.id === taskId) {
-      setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
+  // TaskDetailModalで使用されるハンドラー群 - タスクストア更新でカンバンボードにも反映
+  const handleTaskUpdate = useCallback(async (taskId: string, updates: Partial<Task>) => {
+    try {
+      // タスクストアを更新（カンバンボードにも反映される）
+      await updateTask(taskId, updates);
+      
+      // モーダルの状態も更新
+      if (selectedTask && selectedTask.id === taskId) {
+        setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
+      }
+    } catch (error) {
+      console.error('Task update failed:', error);
+      // エラー時でもモーダルは更新して一貫性を保つ
+      if (selectedTask && selectedTask.id === taskId) {
+        setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
+      }
     }
-  }, [selectedTask]);
+  }, [selectedTask, updateTask]);
 
   const handleSubtaskToggle = useCallback((subtaskId: string, completed: boolean) => {
     // Mock環境では状態表示のみ

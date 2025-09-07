@@ -5,9 +5,13 @@
 import React, { useState, useCallback, useMemo, useRef, useId, useEffect } from 'react';
 import { TaskDetail, Priority, TaskStatus } from '../../types/task';
 import { Tag } from '../../types/tag';
+import { Project } from '../../types/project';
 import { TaskDetailTabs } from './TaskDetailTabs';
 import { TagBadge, TagSelector } from '../tag';
 import { ProjectBadge } from '../project/ProjectBadge';
+import { ProjectSelector } from '../project/ProjectSelector';
+import { useProjectStore } from '../../stores/projectStore';
+import { useTagStore } from '../../stores/tagStore';
 import { DataValidationService } from '../../utils/dataValidation';
 import { useTaskDetail, useTaskDetailActions, useTaskDetailLoading } from '../../stores/taskDetailStore';
 import { useResponsiveLayout, useResponsiveRender, useResponsiveValue } from '../../hooks/useResponsiveLayout';
@@ -110,6 +114,34 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   const [editedTask, setEditedTask] = useState<Partial<TaskDetail>>(validatedTask);
   const [activeTab, setActiveTab] = useState<'subtasks' | 'comments' | 'history'>('subtasks');
   const [isEditingTags, setIsEditingTags] = useState(false);
+  const [isEditingProject, setIsEditingProject] = useState(false);
+  
+  // タグ編集用のローカル状態（TaskFormパターンと同じ）
+  const [editingTags, setEditingTags] = useState<Tag[]>(validatedTask.tags);
+  
+  // タスクが変更された場合にeditingTagsを同期
+  useEffect(() => {
+    if (!isEditingTags) {
+      setEditingTags(validatedTask.tags);
+    }
+  }, [validatedTask.tags, isEditingTags]);
+  
+  // タグ編集開始時に現在のタグで初期化
+  const handleStartTagEditing = useCallback(() => {
+    setEditingTags(validatedTask.tags);
+    setIsEditingTags(true);
+  }, [validatedTask.tags]);
+  
+  // プロジェクトストアからデータを取得
+  const { projects, getProjectById } = useProjectStore();
+  
+  // タグストアから利用可能なタグを取得（TaskFormと同じパターン）
+  const { tags: allTags } = useTagStore();
+  
+  // availableTagsのフォールバック実装
+  const effectiveAvailableTags = useMemo(() => {
+    return availableTags.length > 0 ? availableTags : allTags;
+  }, [availableTags, allTags]);
   
   // プルツーリフレッシュ状態管理
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -340,15 +372,26 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
     containerRef
   });
 
-  // タグ更新時のアナウンス
+  // タグ編集のローカル状態更新（TaskFormパターン）
   const handleTagsChange = useCallback((tags: Tag[]) => {
+    // 即座にローカル状態を更新
+    setEditingTags(tags);
+  }, []);
+
+  // タグ編集完了時の処理
+  const handleTagsEditComplete = useCallback(() => {
     const oldTags = validatedTask.tags;
-    onTaskUpdate?.(validatedTask.id, { tags });
+    
+    // タスク更新を実行
+    onTaskUpdate?.(validatedTask.id, { tags: editingTags });
+    
+    // 編集モードを終了
+    setIsEditingTags(false);
     
     if (enableA11y) {
       // 追加・削除されたタグを特定してアナウンス
-      const addedTags = tags.filter(tag => !oldTags.find(oldTag => oldTag.id === tag.id));
-      const removedTags = oldTags.filter(oldTag => !tags.find(tag => tag.id === oldTag.id));
+      const addedTags = editingTags.filter(tag => !oldTags.find(oldTag => oldTag.id === tag.id));
+      const removedTags = oldTags.filter(oldTag => !editingTags.find(tag => tag.id === oldTag.id));
       
       addedTags.forEach(tag => {
         announceTagUpdate(validatedTask.title, 'added', tag.name);
@@ -358,7 +401,32 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
         announceTagUpdate(validatedTask.title, 'removed', tag.name);
       });
     }
-  }, [validatedTask.tags, validatedTask.id, validatedTask.title, onTaskUpdate, enableA11y]);
+  }, [editingTags, validatedTask.tags, validatedTask.id, validatedTask.title, onTaskUpdate, enableA11y]);
+
+  // タグ編集キャンセル時の処理
+  const handleTagsEditCancel = useCallback(() => {
+    // 元の状態に戻す
+    setEditingTags(validatedTask.tags);
+    setIsEditingTags(false);
+  }, [validatedTask.tags]);
+
+  // プロジェクト変更ハンドラー
+  const handleProjectChange = useCallback((project: Project | null) => {
+    const newProjectId = project ? project.id : undefined;
+    onTaskUpdate?.(validatedTask.id, { projectId: newProjectId });
+    
+    if (enableA11y) {
+      const oldProject = validatedTask.projectId ? getProjectById(validatedTask.projectId) : null;
+      const announcement = newProjectId 
+        ? `プロジェクト「${project?.name}」に変更されました`
+        : oldProject 
+        ? `プロジェクト「${oldProject.name}」から削除されました`
+        : 'プロジェクトが設定されませんでした';
+      
+      // アナウンスの実装（必要に応じて）
+      console.log(announcement);
+    }
+  }, [validatedTask.id, validatedTask.projectId, onTaskUpdate, enableA11y, getProjectById]);
 
   return (
     <div 
@@ -595,6 +663,81 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
               )}
             </div>
 
+            {/* プロジェクト */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  プロジェクト
+                </label>
+                {editable && !isEditingProject && (
+                  <button
+                    onClick={() => setIsEditingProject(true)}
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline transition-all duration-200 ease-out"
+                  >
+                    編集
+                  </button>
+                )}
+              </div>
+              
+              {isEditingProject ? (
+                <div>
+                  <ProjectSelector
+                    selectedProject={validatedTask.projectId ? getProjectById(validatedTask.projectId) : undefined}
+                    selectedProjectId={validatedTask.projectId}
+                    onProjectSelect={handleProjectChange}
+                    onProjectIdSelect={(projectId: string | null) => {
+                      const project = projectId ? getProjectById(projectId) : null;
+                      handleProjectChange(project);
+                    }}
+                    projects={projects}
+                    placeholder="プロジェクトを選択..."
+                    noneLabel="プロジェクトなし"
+                    showNone={true}
+                    className="w-full"
+                    disabled={false}
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => setIsEditingProject(false)}
+                      className="touch-manipulation px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all duration-200 ease-out"
+                    >
+                      完了
+                    </button>
+                    <button
+                      onClick={() => {
+                        // プロジェクト編集をキャンセルして元の状態に戻す
+                        setIsEditingProject(false);
+                      }}
+                      className="touch-manipulation px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all duration-200 ease-out"
+                    >
+                      キャンセル
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {validatedTask.projectId ? (
+                    <div>
+                      <ProjectBadge
+                        projectId={validatedTask.projectId}
+                        size="sm"
+                        onClick={validatedTask.projectId ? () => {
+                          const projectId = validatedTask.projectId;
+                          if (projectId) {
+                            onProjectClick?.(projectId);
+                          }
+                        } : undefined}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 dark:text-gray-400 text-sm italic">
+                      プロジェクトなし
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* タグ */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -603,7 +746,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                 </label>
                 {editable && !isEditingTags && (
                   <button
-                    onClick={() => setIsEditingTags(true)}
+                    onClick={handleStartTagEditing}
                     className="text-sm text-blue-600 dark:text-blue-400 hover:underline transition-all duration-200 ease-out"
                   >
                     編集
@@ -614,8 +757,8 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
               {isEditingTags ? (
                 <div>
                   <TagSelector
-                    selectedTags={task.tags}
-                    availableTags={availableTags}
+                    selectedTags={editingTags}
+                    availableTags={effectiveAvailableTags}
                     onTagsChange={handleTagsChange}
                     editing={true}
                     maxTags={10}
@@ -623,17 +766,13 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                   />
                   <div className="flex gap-2 mt-2">
                     <button
-                      onClick={() => setIsEditingTags(false)}
+                      onClick={handleTagsEditComplete}
                       className="touch-manipulation px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all duration-200 ease-out"
                     >
                       完了
                     </button>
                     <button
-                      onClick={() => {
-                        // タグ編集をキャンセルして元の状態に戻す
-                        setIsEditingTags(false);
-                        // ここでタグを元の状態に戻すロジックが必要であれば追加
-                      }}
+                      onClick={handleTagsEditCancel}
                       className="touch-manipulation px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all duration-200 ease-out"
                     >
                       キャンセル
@@ -661,7 +800,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                       {editable && (
                         <span
                           className="ml-2 text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                          onClick={() => setIsEditingTags(true)}
+                          onClick={handleStartTagEditing}
                         >
                           追加
                         </span>

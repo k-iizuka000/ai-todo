@@ -18,15 +18,15 @@ import type {
  * プロジェクトAPI のエンドポイント定義
  */
 const ENDPOINTS = {
-  PROJECTS: '/api/projects',
-  PROJECT_BY_ID: (id: string) => `/api/projects/${id}`,
-  PROJECT_STATS: (id: string) => `/api/projects/${id}/stats`,
-  PROJECT_MEMBERS: (id: string) => `/api/projects/${id}/members`,
-  PROJECT_TAGS: (id: string) => `/api/projects/${id}/tags`,
-  BULK_UPDATE: '/api/projects/bulk-update',
-  BULK_DELETE: '/api/projects/bulk-delete',
-  ARCHIVE: '/api/projects/archive',
-  UNARCHIVE: '/api/projects/unarchive'
+  PROJECTS: '/projects',
+  PROJECT_BY_ID: (id: string) => `/projects/${id}`,
+  PROJECT_STATS: (id: string) => `/projects/${id}/stats`,
+  PROJECT_MEMBERS: (id: string) => `/projects/${id}/members`,
+  PROJECT_TAGS: (id: string) => `/projects/${id}/tags`,
+  BULK_UPDATE: '/projects/bulk-update',
+  BULK_DELETE: '/projects/bulk-delete',
+  ARCHIVE: '/projects/archive',
+  UNARCHIVE: '/projects/unarchive'
 } as const;
 
 /**

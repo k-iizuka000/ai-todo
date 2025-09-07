@@ -282,7 +282,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
               <Users className="h-4 w-4" />
               <span>メンバー</span>
             </div>
-            <span className="font-medium">{project.members.length}名</span>
+            <span className="font-medium">{project.members?.length || 0}名</span>
           </div>
 
           {project.budget && (
@@ -322,16 +322,17 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         </div>
 
         {/* タグ */}
-        {project.tags.length > 0 && (
+        {project.tags && project.tags.length > 0 && (
           <div className="mt-4 pt-3 border-t border-border">
             <div className="flex flex-wrap gap-1">
               {project.tags.slice(0, 3).map((tag) => (
                 <Badge
-                  key={tag}
+                  key={typeof tag === 'string' ? tag : tag.id}
                   variant="secondary"
                   className="text-xs px-2 py-0.5"
+                  style={typeof tag === 'object' && tag.color ? { backgroundColor: tag.color + '20', borderColor: tag.color } : {}}
                 >
-                  {tag}
+                  {typeof tag === 'string' ? tag : tag.name}
                 </Badge>
               ))}
               {project.tags.length > 3 && (

@@ -54,6 +54,15 @@ export default defineConfig(async ({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
     },
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://api-layer:3003',
+          changeOrigin: true,
+          secure: false,
+        }
+      }
+    },
     test: {
       globals: true,
       environment: 'jsdom',

@@ -17,6 +17,7 @@ import { tagRoutes } from './routes/tags.js';
 import { scheduleRoutes } from './routes/scheduleRoutes.js';
 import { notificationRoutes } from './routes/notificationRoutes.js';
 import { notificationSSERoutes } from './routes/notificationSSERoutes.js';
+import projectRoutes from './routes/projectRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/logger.js';
 import { rateLimiter } from './middleware/rateLimiter.js';
@@ -63,6 +64,7 @@ app.use('/api/v1/tags', tagRoutes);
 app.use('/api/v1/schedules', scheduleRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/notifications', notificationSSERoutes);
+app.use('/api/v1/projects', projectRoutes);
 
 // Error handling
 app.use(errorHandler);

@@ -103,12 +103,14 @@ services:
       - NODE_ENV=${NODE_ENV:-development}
       - VITE_HOST=0.0.0.0
       - VITE_PORT=5173
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://api-layer:3003/api/v1}
       - CHOKIDAR_USEPOLLING=true  # ファイル変更監視（Macで必要な場合）
       # Docker環境判定用（npm実行制御）
       - IS_DOCKER_CONTAINER=1
       # データベース接続設定（コンテナ内部通信用）
       - DATABASE_URL=postgresql://${DB_USER:-ai_todo_user}:${DB_PASSWORD:-dev_password_2024}@database:5432/${DB_NAME:-ai_todo_dev}
     env_file:
+      - .env  # メインの環境変数ファイル
       - .env.local  # 環境変数ファイル（存在する場合のみ読み込み）
     networks:
       - ai-todo-network

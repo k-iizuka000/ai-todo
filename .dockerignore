@@ -35,15 +35,15 @@ vite.config.js.timestamp-*
 # 環境設定・機密情報
 # ===========================================
 
-# 環境変数ファイル
-.env
+# 環境変数ファイル（ビルド時は除外、実行時に設定）
 .env.local
 .env.development
 .env.test
 .env.production
 .env.*.local
 
-# ただし、例ファイルは除外しない
+# ただし、メインの.envと例ファイルは含める
+!.env
 !.env.example
 
 # API Keys / Secrets

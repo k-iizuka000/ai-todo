@@ -405,10 +405,12 @@ export class ApiClient {
   ): Promise<ApiResponse<T>> {
     const startTime = Date.now();
     this.stats.totalRequests++;
+    
+    // processedConfigを関数スコープで定義
+    let processedConfig = { ...config, method };
 
     try {
       // インターセプターを実行
-      let processedConfig = { ...config, method };
       for (const interceptor of this.interceptors.request) {
         processedConfig = await interceptor(processedConfig);
       }
@@ -471,7 +473,7 @@ export class ApiClient {
       // エラーインターセプターを実行（統合強化版）
       let processedError = error;
       for (const interceptor of this.interceptors.error) {
-        processedError = await interceptor(processedError, processedConfig.requestId);
+        processedError = await interceptor(processedError, processedConfig?.requestId || 'unknown');
       }
 
       throw processedError;
@@ -634,7 +636,7 @@ export class ApiClient {
  * デフォルトAPIクライアントインスタンス
  */
 export const apiClient = new ApiClient(
-  import.meta.env.VITE_API_URL || 'http://localhost:3001'
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5173/api/v1'
 );
 
 // 認証トークンインターセプター

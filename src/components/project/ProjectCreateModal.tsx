@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tag, Save, AlertCircle } from 'lucide-react';
+import { Tag, Save, AlertCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,14 +10,14 @@ import { cn } from '@/lib/utils';
 interface ProjectCreateModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreateProject: (projectData: CreateProjectInput) => void;
+  onCreateProject: (projectData: CreateProjectInput) => Promise<void>;
 }
 
 const priorityOptions: { value: ProjectPriority; label: string; color: string }[] = [
-  { value: 'low', label: '低', color: 'bg-blue-500' },
-  { value: 'medium', label: '中', color: 'bg-yellow-500' },
-  { value: 'high', label: '高', color: 'bg-orange-500' },
-  { value: 'critical', label: '緊急', color: 'bg-red-500' },
+  { value: 'LOW' as ProjectPriority, label: '低', color: 'bg-blue-500' },
+  { value: 'MEDIUM' as ProjectPriority, label: '中', color: 'bg-yellow-500' },
+  { value: 'HIGH' as ProjectPriority, label: '高', color: 'bg-orange-500' },
+  { value: 'CRITICAL' as ProjectPriority, label: '緊急', color: 'bg-red-500' },
 ];
 
 const colorOptions = [
@@ -41,13 +41,16 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
   const [formData, setFormData] = useState<CreateProjectInput>({
     name: '',
     description: '',
-    priority: 'medium',
+    priority: 'MEDIUM' as ProjectPriority,
     color: colorOptions[0],
     icon: iconOptions[0],
     tags: [],
   });
   const [currentTag, setCurrentTag] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [networkError, setNetworkError] = useState(false);
 
   const handleInputChange = (field: keyof CreateProjectInput, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -96,30 +99,84 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
-    if (!validateForm()) return;
+  const handleSubmit = async () => {
+    if (!validateForm() || isSubmitting) return;
 
-    const projectData: CreateProjectInput = {
-      ...formData,
-      name: formData.name.trim(),
-      description: formData.description?.trim() || undefined,
-    };
+    setIsSubmitting(true);
+    setServerError(null);
+    setNetworkError(false);
+    
+    try {
+      const projectData: CreateProjectInput = {
+        ...formData,
+        name: formData.name.trim(),
+        description: formData.description?.trim() || undefined,
+      };
 
-    onCreateProject(projectData);
-    handleClose();
+      await onCreateProject(projectData);
+      handleClose();
+    } catch (error: any) {
+      console.error('Project creation failed:', error);
+      
+      // ネットワークエラーの判定
+      if (error?.name === 'NetworkError' || error?.code === 'NETWORK_ERROR' || !navigator.onLine) {
+        setNetworkError(true);
+        return;
+      }
+      
+      // サーバーバリデーションエラー (400 Bad Request)
+      if (error?.status === 400 && error?.data?.errors) {
+        const validationErrors: Record<string, string> = {};
+        for (const [field, messages] of Object.entries(error.data.errors)) {
+          if (Array.isArray(messages) && messages.length > 0) {
+            validationErrors[field] = messages[0];
+          }
+        }
+        setErrors(validationErrors);
+        return;
+      }
+      
+      // 認証エラー (401 Unauthorized)
+      if (error?.status === 401) {
+        setServerError('認証が必要です。ログインしてください。');
+        return;
+      }
+      
+      // その他のサーバーエラー
+      if (error?.status >= 500) {
+        setServerError('サーバーエラーが発生しました。しばらく後に再試行してください。');
+        return;
+      }
+      
+      // 一般的なエラー
+      setServerError(error?.message || 'プロジェクトの作成に失敗しました。');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  const handleRetrySubmit = () => {
+    setNetworkError(false);
+    setServerError(null);
+    handleSubmit();
   };
 
   const handleClose = () => {
+    if (isSubmitting) return; // 送信中は閉じられない
+    
     setFormData({
       name: '',
       description: '',
-      priority: 'medium',
+      priority: 'MEDIUM' as ProjectPriority,
       color: colorOptions[0],
       icon: iconOptions[0],
       tags: [],
     });
     setCurrentTag('');
     setErrors({});
+    setServerError(null);
+    setNetworkError(false);
+    setIsSubmitting(false);
     onOpenChange(false);
   };
 
@@ -142,17 +199,71 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
       size="lg"
       footer={
         <div className="flex justify-end space-x-2">
-          <Button variant="outline" onClick={handleClose}>
+          <Button 
+            variant="outline" 
+            onClick={handleClose}
+            disabled={isSubmitting}
+          >
             キャンセル
           </Button>
-          <Button onClick={handleSubmit} className="flex items-center space-x-2">
-            <Save className="h-4 w-4" />
-            <span>作成</span>
+          <Button 
+            onClick={handleSubmit} 
+            disabled={isSubmitting}
+            className="flex items-center space-x-2"
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            <span>{isSubmitting ? '作成中...' : '作成'}</span>
           </Button>
         </div>
       }
     >
       <div className="space-y-6">
+        {/* サーバーエラー表示 */}
+        {serverError && (
+          <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <p className="text-sm text-red-800 dark:text-red-200">{serverError}</p>
+            </div>
+            <button 
+              onClick={() => setServerError(null)}
+              className="mt-2 text-xs text-red-600 dark:text-red-400 underline hover:no-underline"
+            >
+              閉じる
+            </button>
+          </div>
+        )}
+        
+        {/* ネットワークエラー表示 */}
+        {networkError && (
+          <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <WifiOff className="h-4 w-4 text-orange-500" />
+              <p className="text-sm text-orange-800 dark:text-orange-200">
+                ネットワーク接続に問題があります。接続を確認して再試行してください。
+              </p>
+            </div>
+            <div className="mt-2 flex space-x-2">
+              <button 
+                onClick={handleRetrySubmit}
+                className="text-xs bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 px-2 py-1 rounded border border-orange-300 dark:border-orange-700 hover:bg-orange-200 dark:hover:bg-orange-900/30"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? '再試行中...' : '再試行'}
+              </button>
+              <button 
+                onClick={() => setNetworkError(false)}
+                className="text-xs text-orange-600 dark:text-orange-400 underline hover:no-underline"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        )}
         {/* 基本情報 */}
         <div className="space-y-4">
           <div>
@@ -164,6 +275,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               onChange={(e) => handleInputChange('name', e.target.value)}
               placeholder="プロジェクト名を入力"
               className={cn(errors.name && 'border-red-500')}
+              disabled={isSubmitting}
             />
             {errors.name && (
               <p className="text-red-500 text-xs mt-1 flex items-center">
@@ -182,9 +294,11 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               className={cn(
                 'w-full px-3 py-2 border border-border rounded-md resize-none',
                 'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
-                errors.description && 'border-red-500'
+                errors.description && 'border-red-500',
+                isSubmitting && 'opacity-50 cursor-not-allowed'
               )}
               rows={3}
+              disabled={isSubmitting}
             />
             {errors.description && (
               <p className="text-red-500 text-xs mt-1 flex items-center">
@@ -204,11 +318,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                 <button
                   key={option.value}
                   onClick={() => handleInputChange('priority', option.value)}
+                  disabled={isSubmitting}
                   className={cn(
                     'px-3 py-2 rounded-md text-sm border transition-colors flex items-center space-x-2',
                     formData.priority === option.value
                       ? 'bg-primary text-primary-foreground border-primary'
-                      : 'border-border hover:bg-muted'
+                      : 'border-border hover:bg-muted',
+                    isSubmitting && 'opacity-50 cursor-not-allowed'
                   )}
                 >
                   <div className={cn('w-2 h-2 rounded-full', option.color)} />
@@ -305,10 +421,16 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               value={currentTag}
               onChange={(e) => setCurrentTag(e.target.value)}
               placeholder="タグを入力"
-              onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
+              onKeyPress={(e) => e.key === 'Enter' && !isSubmitting && handleAddTag()}
               className="flex-1"
+              disabled={isSubmitting}
             />
-            <Button onClick={handleAddTag} variant="outline" size="sm">
+            <Button 
+              onClick={handleAddTag} 
+              variant="outline" 
+              size="sm"
+              disabled={isSubmitting || !currentTag.trim()}
+            >
               <Tag className="h-4 w-4" />
             </Button>
           </div>

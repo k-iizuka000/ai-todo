@@ -28,6 +28,9 @@ COPY package*.json ./
 # preinstallスクリプトに必要なscriptsディレクトリをコピー
 COPY scripts/ ./scripts/
 
+# 環境変数設定ファイルをコピー（バリデーション用）
+COPY .env* ./
+
 # 依存関係インストール
 RUN npm ci --prefer-offline --no-audit
 

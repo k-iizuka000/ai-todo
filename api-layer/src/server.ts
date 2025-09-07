@@ -132,6 +132,180 @@ app.delete('/api/v1/tasks/:id', (req, res) => {
   return res.status(204).send();
 });
 
+// モックプロジェクトデータ
+let mockProjects: any[] = [
+  {
+    id: '1',
+    name: 'Sample Project',
+    description: 'This is a sample project for testing',
+    status: 'ACTIVE',
+    priority: 'MEDIUM',
+    startDate: '2025-01-01',
+    endDate: '2025-12-31',
+    budget: 100000,
+    ownerId: 'mock-user',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: 'mock-user',
+    updatedBy: 'mock-user'
+  }
+];
+
+// プロジェクトAPIエンドポイント
+app.get('/api/v1/projects', (req, res) => {
+  console.log('GET /api/v1/projects - Query params:', req.query);
+  
+  // クエリパラメータを処理（フロントエンドとの互換性のため）
+  const {
+    includeStats = false,
+    includeMembers = false,
+    includeTags = false,
+    page = 1,
+    limit = 10
+  } = req.query;
+
+  // 統計情報を含めたプロジェクトデータを作成
+  const enhancedProjects = mockProjects.map(project => ({
+    ...project,
+    ...(includeStats === 'true' && {
+      stats: {
+        totalTasks: 5,
+        completedTasks: 2,
+        inProgressTasks: 2,
+        todoTasks: 1,
+        completionRate: 40
+      }
+    }),
+    ...(includeMembers === 'true' && {
+      members: [
+        { id: 'mock-user', name: 'Mock User', role: 'owner' }
+      ]
+    }),
+    ...(includeTags === 'true' && {
+      tags: [
+        { id: '1', name: 'Important', color: '#ff0000' },
+        { id: '2', name: 'Development', color: '#00ff00' }
+      ]
+    })
+  }));
+
+  res.json({
+    success: true,
+    message: 'Projects retrieved successfully',
+    data: enhancedProjects,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total: mockProjects.length,
+      totalPages: Math.ceil(mockProjects.length / parseInt(limit))
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/v1/projects/:id', (req, res) => {
+  const { id } = req.params;
+  const project = mockProjects.find(p => p.id === id);
+  
+  if (!project) {
+    return res.status(404).json({
+      success: false,
+      message: 'Project not found',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'Project retrieved successfully',
+    data: project,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.post('/api/v1/projects', (req, res) => {
+  if (!req.body.name) {
+    return res.status(400).json({ 
+      success: false,
+      message: 'Project name is required',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  const project = {
+    id: Date.now().toString(),
+    name: req.body.name,
+    description: req.body.description || '',
+    status: req.body.status || 'ACTIVE',
+    priority: req.body.priority || 'MEDIUM',
+    startDate: req.body.startDate || null,
+    endDate: req.body.endDate || null,
+    budget: req.body.budget || null,
+    ownerId: 'mock-user',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: 'mock-user',
+    updatedBy: 'mock-user'
+  };
+
+  mockProjects.push(project);
+  
+  res.status(201).json({
+    success: true,
+    message: 'Project created successfully',
+    data: project,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.put('/api/v1/projects/:id', (req, res) => {
+  const { id } = req.params;
+  const projectIndex = mockProjects.findIndex(p => p.id === id);
+  
+  if (projectIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'Project not found',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  mockProjects[projectIndex] = {
+    ...mockProjects[projectIndex],
+    ...req.body,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'mock-user'
+  };
+
+  res.json({
+    success: true,
+    message: 'Project updated successfully',
+    data: mockProjects[projectIndex],
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.delete('/api/v1/projects/:id', (req, res) => {
+  const { id } = req.params;
+  const projectIndex = mockProjects.findIndex(p => p.id === id);
+  
+  if (projectIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'Project not found or cannot be deleted',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  mockProjects.splice(projectIndex, 1);
+  
+  res.json({
+    success: true,
+    message: 'Project deleted successfully',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // 404エラーハンドラー
 app.use('*', (_req, res) => {
   res.status(404).json({

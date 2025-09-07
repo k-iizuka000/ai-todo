@@ -12,13 +12,19 @@ interface TaskDetailTabsProps {
   activeTab: 'subtasks' | 'comments' | 'history';
   onTabChange: (tab: 'subtasks' | 'comments' | 'history') => void;
   onUpdate?: (updates: Partial<TaskDetail>) => void;
+  onSubtaskAdd?: (title: string) => void;
+  onSubtaskToggle?: (subtaskId: string, completed: boolean) => void;
+  onSubtaskDelete?: (subtaskId: string) => void;
 }
 
 export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
   task,
   activeTab,
   onTabChange,
-  onUpdate
+  onUpdate,
+  onSubtaskAdd,
+  onSubtaskToggle,
+  onSubtaskDelete
 }) => {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newComment, setNewComment] = useState('');
@@ -27,44 +33,66 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
     
-    const newSubtask = {
-      id: `subtask-${Date.now()}`,
-      title: newSubtaskTitle,
-      description: '',
-      status: 'todo' as const,
-      priority: 'medium' as const,
-      projectId: task.projectId,
-      assigneeId: task.assigneeId,
-      tags: [],
-      subtasks: [],
-      dueDate: undefined,
-      estimatedHours: undefined,
-      actualHours: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      createdBy: 'current-user',
-      updatedBy: 'current-user'
-    };
+    // Use individual handler if available, otherwise fall back to generic onUpdate
+    if (onSubtaskAdd) {
+      onSubtaskAdd(newSubtaskTitle);
+    } else {
+      // Fallback to original generic update logic
+      const newSubtask = {
+        id: `subtask-${Date.now()}`,
+        title: newSubtaskTitle,
+        description: '',
+        status: 'todo' as const,
+        priority: 'medium' as const,
+        projectId: task.projectId,
+        assigneeId: task.assigneeId,
+        tags: [],
+        subtasks: [],
+        dueDate: undefined,
+        estimatedHours: undefined,
+        actualHours: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createdBy: 'current-user',
+        updatedBy: 'current-user'
+      };
 
-    const updatedChildTasks = [...task.childTasks, newSubtask];
-    onUpdate?.({ childTasks: updatedChildTasks });
+      const updatedChildTasks = [...task.childTasks, newSubtask];
+      onUpdate?.({ childTasks: updatedChildTasks });
+    }
     
     setNewSubtaskTitle('');
     setIsAddingSubtask(false);
   };
 
   const handleSubtaskStatusToggle = (subtaskId: string) => {
-    const updatedChildTasks = task.childTasks.map(subtask =>
-      subtask.id === subtaskId
-        ? { ...subtask, status: subtask.status === 'done' ? 'todo' : 'done' as const }
-        : subtask
-    );
-    onUpdate?.({ childTasks: updatedChildTasks });
+    // Use individual handler if available, otherwise fall back to generic onUpdate
+    if (onSubtaskToggle) {
+      const subtask = task.childTasks.find(s => s.id === subtaskId);
+      if (subtask) {
+        const newCompleted = subtask.status !== 'done';
+        onSubtaskToggle(subtaskId, newCompleted);
+      }
+    } else {
+      // Fallback to original generic update logic
+      const updatedChildTasks = task.childTasks.map(subtask =>
+        subtask.id === subtaskId
+          ? { ...subtask, status: subtask.status === 'done' ? 'todo' : 'done' as const }
+          : subtask
+      );
+      onUpdate?.({ childTasks: updatedChildTasks });
+    }
   };
 
   const handleDeleteSubtask = (subtaskId: string) => {
-    const updatedChildTasks = task.childTasks.filter(subtask => subtask.id !== subtaskId);
-    onUpdate?.({ childTasks: updatedChildTasks });
+    // Use individual handler if available, otherwise fall back to generic onUpdate
+    if (onSubtaskDelete) {
+      onSubtaskDelete(subtaskId);
+    } else {
+      // Fallback to original generic update logic
+      const updatedChildTasks = task.childTasks.filter(subtask => subtask.id !== subtaskId);
+      onUpdate?.({ childTasks: updatedChildTasks });
+    }
   };
 
   const handleAddComment = () => {
@@ -124,7 +152,7 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
   const totalSubtasks = task.childTasks.length;
 
   return (
-    <div className="w-96 flex flex-col border-l bg-gray-50 dark:bg-gray-800">
+    <div className="w-full min-w-0 flex flex-col border-l bg-gray-50 dark:bg-gray-800">
       {/* タブヘッダー */}
       <div className="flex border-b bg-white dark:bg-gray-900">
         <button
@@ -183,8 +211,8 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
               </div>
             )}
 
-            {/* サブタスク一覧 */}
-            <div className="space-y-2">
+            {/* サブタスク一覧 - スクロール対応 */}
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
               {task.childTasks.map((subtask) => (
                 <div key={subtask.id} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border">
                   <input

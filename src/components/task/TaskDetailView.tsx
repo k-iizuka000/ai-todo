@@ -45,6 +45,12 @@ export interface TaskDetailViewProps {
   onRefresh?: () => void | Promise<void>;
   /** アクセシビリティモードの有効化 */
   enableA11y?: boolean;
+  /** サブタスク追加時のコールバック */
+  onSubtaskAdd?: (title: string) => void;
+  /** サブタスクステータス変更時のコールバック */
+  onSubtaskToggle?: (subtaskId: string, completed: boolean) => void;
+  /** サブタスク削除時のコールバック */
+  onSubtaskDelete?: (subtaskId: string) => void;
 }
 
 const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
@@ -59,7 +65,10 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   onNavigatePrevious,
   onNavigateNext,
   onRefresh,
-  enableA11y = true
+  enableA11y = true,
+  onSubtaskAdd,
+  onSubtaskToggle,
+  onSubtaskDelete
 }) => {
   // ヘルパー関数を先に定義
   const getPriorityColor = useCallback((priority: Priority) => {
@@ -855,12 +864,15 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
         {/* タブセクション - 設計書準拠のレスポンシブ実装 */}
         {isDesktop ? (
           // デスクトップ（1024px+）: 右サイドパネル表示
-          <div className={`w-96 ${contentPadding} border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900`}>
+          <div className={`w-full max-w-96 ${contentPadding} border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900`}>
             <TaskDetailTabs
               task={task}
               activeTab={activeTab}
               onTabChange={setActiveTab}
               onUpdate={handleTaskDetailUpdate}
+              onSubtaskAdd={onSubtaskAdd}
+              onSubtaskToggle={onSubtaskToggle}
+              onSubtaskDelete={onSubtaskDelete}
             />
           </div>
         ) : isTablet ? (
@@ -871,20 +883,24 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
               activeTab={activeTab}
               onTabChange={setActiveTab}
               onUpdate={handleTaskDetailUpdate}
+              onSubtaskAdd={onSubtaskAdd}
+              onSubtaskToggle={onSubtaskToggle}
+              onSubtaskDelete={onSubtaskDelete}
             />
           </div>
         ) : (
           // モバイル（< 768px）: フルスクリーンタブ、スワイプナビゲーション対応
-          responsiveRender.mobile(
-            <div className="border-t border-gray-200 dark:border-gray-700 flex-1 bg-white dark:bg-gray-800">
-              <TaskDetailTabs
-                task={task}
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-                onUpdate={handleTaskDetailUpdate}
-              />
-            </div>
-          )
+          <div className="border-t border-gray-200 dark:border-gray-700 flex-1 bg-white dark:bg-gray-800">
+            <TaskDetailTabs
+              task={task}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              onUpdate={handleTaskDetailUpdate}
+              onSubtaskAdd={onSubtaskAdd}
+              onSubtaskToggle={onSubtaskToggle}
+              onSubtaskDelete={onSubtaskDelete}
+            />
+          </div>
         )}
         
         {/* モバイル用ナビゲーションヒント */}
@@ -910,13 +926,30 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
     </div>
   );
 }, (prevProps, nextProps) => {
-  // カスタム比較関数で詳細な比較を実装（型安全な日付比較）
+  // カスタム比較関数でchildTasksの変更も検出
   const prevUpdatedTime = safeGetTime(prevProps.task.updatedAt);
   const nextUpdatedTime = safeGetTime(nextProps.task.updatedAt);
+  
+  // childTasksの変更を検出
+  const prevChildTasksLength = prevProps.task.childTasks?.length || 0;
+  const nextChildTasksLength = nextProps.task.childTasks?.length || 0;
+  
+  // childTasksの各サブタスクのupdatedAtをチェック
+  const prevChildTasksUpdated = prevProps.task.childTasks?.reduce((latest, task) => {
+    const taskTime = safeGetTime(task.updatedAt);
+    return taskTime > latest ? taskTime : latest;
+  }, 0) || 0;
+  
+  const nextChildTasksUpdated = nextProps.task.childTasks?.reduce((latest, task) => {
+    const taskTime = safeGetTime(task.updatedAt);
+    return taskTime > latest ? taskTime : latest;
+  }, 0) || 0;
   
   return (
     prevProps.task.id === nextProps.task.id &&
     prevUpdatedTime === nextUpdatedTime &&
+    prevChildTasksLength === nextChildTasksLength &&
+    prevChildTasksUpdated === nextChildTasksUpdated &&
     prevProps.editable === nextProps.editable &&
     prevProps.availableTags?.length === nextProps.availableTags?.length
   );

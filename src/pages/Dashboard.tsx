@@ -209,12 +209,33 @@ const Dashboard: React.FC = () => {
       // フォールバック: TaskDetailが見つからない場合、Taskから基本的なTaskDetailを作成
       if (!taskDetail && !abortController.signal.aborted) {
         console.log('TaskDetail not found, converting from Task:', task);
+        
+        // SessionStorageから一時保存されたサブタスクを復元
+        const storageKey = `tempSubtasks_${task.id}`;
+        const savedSubtasks = sessionStorage.getItem(storageKey);
+        let existingChildTasks = [];
+        
+        if (savedSubtasks) {
+          try {
+            existingChildTasks = JSON.parse(savedSubtasks);
+            // 日付オブジェクトを復元
+            existingChildTasks = existingChildTasks.map((subtask: any) => ({
+              ...subtask,
+              createdAt: new Date(subtask.createdAt),
+              updatedAt: new Date(subtask.updatedAt)
+            }));
+          } catch (error) {
+            console.warn('Failed to parse saved subtasks:', error);
+            existingChildTasks = [];
+          }
+        }
+        
         taskDetail = {
           ...task,
           comments: [],
           attachments: [],
           history: [],
-          childTasks: []
+          childTasks: existingChildTasks
         };
       }
       
@@ -304,40 +325,121 @@ const Dashboard: React.FC = () => {
         setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
       }
     }
-  }, [selectedTask, updateTask]);
+  }, [selectedTask]);
 
-  const handleSubtaskToggle = useCallback((subtaskId: string, completed: boolean) => {
-    // Mock環境では状態表示のみ
+  const handleSubtaskToggle = useCallback(async (subtaskId: string, completed: boolean) => {
+    // サブタスクステータスをローカル状態とストアに永続化
     if (selectedTask) {
       const updatedChildTasks = selectedTask.childTasks?.map(subtask => 
-        subtask.id === subtaskId ? { ...subtask, completed } : subtask
+        subtask.id === subtaskId 
+          ? { ...subtask, status: (completed ? 'done' : 'todo') as TaskStatus, updatedAt: new Date() }
+          : subtask
       ) || [];
-      setSelectedTask({ ...selectedTask, childTasks: updatedChildTasks });
+      
+      // ローカル状態更新（即座に反映）
+      const updatedTask = { 
+        ...selectedTask, 
+        childTasks: updatedChildTasks
+      };
+      setSelectedTask(updatedTask);
+      
+      // SessionStorageに一時保存
+      const storageKey = `tempSubtasks_${selectedTask.id}`;
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify(updatedChildTasks));
+      } catch (error) {
+        console.warn('Failed to save subtasks to sessionStorage:', error);
+      }
+      
+      try {
+        // タスクストアへも反映（Mock環境のためタイムスタンプのみ更新）
+        await updateTask(selectedTask.id, {});
+        console.log('[Dashboard] サブタスクステータス更新完了:', { subtaskId, completed, newStatus: completed ? 'done' : 'todo', totalSubtasks: updatedChildTasks.length });
+      } catch (error) {
+        console.error('[Dashboard] サブタスクステータス更新のストア更新エラー:', error);
+        // エラー時もローカル状態は維持
+      }
     }
-  }, [selectedTask]);
+  }, [selectedTask, updateTask]);
 
-  const handleSubtaskAdd = useCallback((title: string) => {
-    // Mock環境では新しいサブタスクをローカル状態に追加
+  const handleSubtaskAdd = useCallback(async (title: string) => {
+    // サブタスクをローカル状態とストアに永続化
     if (selectedTask && title.trim()) {
-      const newSubtask = {
+      const newSubtask: Task = {
         id: `subtask-${Date.now()}`,
         title: title.trim(),
-        completed: false,
+        description: '',
+        status: 'todo' as const,
+        priority: 'medium' as const,
+        projectId: selectedTask.projectId || 'no-project',
+        assigneeId: selectedTask.assigneeId || 'current-user',
+        tags: [],
+        subtasks: [],
+        estimatedHours: 0,
+        actualHours: 0,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        createdBy: 'current-user',
+        updatedBy: 'current-user'
       };
       const updatedChildTasks = [...(selectedTask.childTasks || []), newSubtask];
-      setSelectedTask({ ...selectedTask, childTasks: updatedChildTasks });
+      
+      // ローカル状態更新（即座に反映）
+      const updatedTask = { 
+        ...selectedTask, 
+        childTasks: updatedChildTasks
+      };
+      setSelectedTask(updatedTask);
+      
+      // SessionStorageに一時保存
+      const storageKey = `tempSubtasks_${selectedTask.id}`;
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify(updatedChildTasks));
+      } catch (error) {
+        console.warn('Failed to save subtasks to sessionStorage:', error);
+      }
+      
+      try {
+        // タスクストアへも反映（Mock環境のためタイムスタンプのみ更新）
+        await updateTask(selectedTask.id, {});
+        console.log('[Dashboard] サブタスク追加完了:', { title, subtaskId: newSubtask.id, totalSubtasks: updatedChildTasks.length });
+      } catch (error) {
+        console.error('[Dashboard] サブタスク追加のストア更新エラー:', error);
+        // エラー時もローカル状態は維持
+      }
     }
-  }, [selectedTask]);
+  }, [selectedTask, updateTask]);
 
-  const handleSubtaskDelete = useCallback((subtaskId: string) => {
-    // Mock環境ではローカル状態から削除
+  const handleSubtaskDelete = useCallback(async (subtaskId: string) => {
+    // サブタスクをローカル状態とストアから削除
     if (selectedTask) {
       const updatedChildTasks = selectedTask.childTasks?.filter(subtask => subtask.id !== subtaskId) || [];
-      setSelectedTask({ ...selectedTask, childTasks: updatedChildTasks });
+      
+      // ローカル状態更新（即座に反映）
+      const updatedTask = { 
+        ...selectedTask, 
+        childTasks: updatedChildTasks
+      };
+      setSelectedTask(updatedTask);
+      
+      // SessionStorageに一時保存
+      const storageKey = `tempSubtasks_${selectedTask.id}`;
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify(updatedChildTasks));
+      } catch (error) {
+        console.warn('Failed to save subtasks to sessionStorage:', error);
+      }
+      
+      try {
+        // タスクストアへも反映（Mock環境のためタイムスタンプのみ更新）
+        await updateTask(selectedTask.id, {});
+        console.log('[Dashboard] サブタスク削除完了:', { subtaskId, totalSubtasks: updatedChildTasks.length });
+      } catch (error) {
+        console.error('[Dashboard] サブタスク削除のストア更新エラー:', error);
+        // エラー時もローカル状態は維持
+      }
     }
-  }, [selectedTask]);
+  }, [selectedTask, updateTask]);
 
   const handleTaskDelete = useCallback(async (taskId: string) => {
     console.log('[Dashboard] handleTaskDelete called with taskId:', taskId);
@@ -709,6 +811,7 @@ const Dashboard: React.FC = () => {
 
       {/* タスク詳細モーダル */}
       <TaskDetailModal
+        key={`task-detail-${selectedTask?.id}`}
         isOpen={showTaskDetailModal}
         onClose={handleCloseTaskDetail}
         task={selectedTask}
@@ -717,6 +820,9 @@ const Dashboard: React.FC = () => {
         onTaskDelete={handleTaskDelete}
         availableTags={availableTags}
         onProjectClick={handleProjectClick}
+        onSubtaskAdd={handleSubtaskAdd}
+        onSubtaskToggle={handleSubtaskToggle}
+        onSubtaskDelete={handleSubtaskDelete}
       />
     </div>
   );

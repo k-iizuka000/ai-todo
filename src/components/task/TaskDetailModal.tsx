@@ -39,6 +39,12 @@ export interface TaskDetailModalProps {
   availableTags?: Tag[];
   /** プロジェクトクリック時のコールバック */
   onProjectClick?: (projectId: string) => void;
+  /** サブタスク追加時のコールバック */
+  onSubtaskAdd?: (title: string) => void;
+  /** サブタスクステータス変更時のコールバック */
+  onSubtaskToggle?: (subtaskId: string, completed: boolean) => void;
+  /** サブタスク削除時のコールバック */
+  onSubtaskDelete?: (subtaskId: string) => void;
 }
 
 /**
@@ -53,7 +59,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onTaskUpdate,
   onTaskDelete,
   availableTags = [],
-  onProjectClick
+  onProjectClick,
+  onSubtaskAdd,
+  onSubtaskToggle,
+  onSubtaskDelete
 }) => {
   const previousFocusRef = useRef<HTMLElement | null>(null);
   
@@ -132,6 +141,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               onClose={onClose}
               availableTags={availableTags}
               onProjectClick={onProjectClick}
+              onSubtaskAdd={onSubtaskAdd}
+              onSubtaskToggle={onSubtaskToggle}
+              onSubtaskDelete={onSubtaskDelete}
               enableA11y={true}
             />
           </Suspense>

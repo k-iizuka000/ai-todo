@@ -6,10 +6,13 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { Task, TaskFilter, TaskSort, CreateTaskInput, UpdateTaskInput, TaskScheduleInfo } from '../types/task';
+import { Task, TaskFilter, TaskSort, CreateTaskInput, UpdateTaskInput, TaskScheduleInfo, TaskWithCategories, CreateTaskWithCategoriesInput, UpdateTaskWithCategoriesInput } from '../types/task';
+import { Tag } from '../types/tag';
 import { UnscheduledTaskData } from '../types/schedule';
 import { taskAPI } from './api/taskApi';
 import { useConnectionStore } from './connectionStore';
+import { useProjectStore } from './projectStore';
+import { useTagStore } from './tagStore';
 
 // タスクストアの状態型定義 - API統合版（Issue #038対応）
 interface TaskState {
@@ -44,6 +47,14 @@ interface TaskState {
   getTasksByProject: (projectId: string) => Task[];
   getTasksByAssignee: (assigneeId: string) => Task[];
   
+  // プロジェクト・タグ連携機能
+  getTasksWithCategories: () => TaskWithCategories[];
+  getFilteredTasksWithCategories: () => TaskWithCategories[];
+  getTaskWithCategoriesById: (id: string) => TaskWithCategories | undefined;
+  getTasksByTag: (tagId: string) => Task[];
+  addTaskWithCategories: (taskInput: CreateTaskWithCategoriesInput) => Promise<Task>;
+  updateTaskWithCategories: (id: string, taskInput: UpdateTaskWithCategoriesInput) => Promise<Task>;
+  
   // アーカイブ関連（新規追加）
   getArchivedTasks: () => Task[];
   getNonArchivedTasks: () => Task[];
@@ -62,6 +73,15 @@ interface TaskState {
   initializeStore: () => Promise<void>;
   resetStore: () => void;
   syncWithServer: () => Promise<void>;
+  
+  // データ同期機能（ProjectStore連携）
+  notifyProjectStore: (taskId: string, task: Task | null, operation: 'create' | 'update' | 'delete') => Promise<void>;
+  handleProjectUpdate: (projectId: string, updatedProject: any) => Promise<void>;
+  
+  // TagStore連携機能
+  notifyTagStore: (taskId: string, task: Task | null, operation: 'create' | 'update' | 'delete') => Promise<void>;
+  handleTagUpdate: (tagId: string, updatedTag: Tag) => Promise<void>;
+  handleTagDeletion: (tagId: string) => Promise<void>;
   
   // スケジュール関連メソッド
   getUnscheduledTasks: () => UnscheduledTaskData[];
@@ -236,6 +256,17 @@ export const useTaskStore = create<TaskState>()(
               totalDuration: Date.now() - startTime,
               lastUpdated: successTimestamp
             });
+
+            // ProjectStoreにタスク作成を通知
+            get().notifyProjectStore(newTask.id, newTask, 'create').catch(error => 
+              logError('Async ProjectStore notification failed', { taskId: newTask.id }, error)
+            );
+            
+            // TagStoreにタスク作成を通知（タグ使用統計更新）
+            get().notifyTagStore(newTask.id, newTask, 'create').catch(error => 
+              logError('Async TagStore notification failed', { taskId: newTask.id }, error)
+            );
+
             return newTask;
             
           } catch (apiError) {
@@ -285,6 +316,16 @@ export const useTaskStore = create<TaskState>()(
               duration: Date.now() - startTime,
               pendingSyncCount: get().pendingSyncCount
             });
+            
+            // MockモードでもProjectStoreに通知（オフライン状態での統計更新用）
+            get().notifyProjectStore(mockTask.id, mockTask, 'create').catch(error => 
+              logError('Async ProjectStore notification failed', { taskId: mockTask.id }, error)
+            );
+            
+            // TagStoreにモックタスク作成を通知
+            get().notifyTagStore(mockTask.id, mockTask, 'create').catch(error => 
+              logError('Async TagStore notification failed', { taskId: mockTask.id }, error)
+            );
             
             return mockTask;
           } finally {
@@ -365,6 +406,17 @@ export const useTaskStore = create<TaskState>()(
             }
             
             logInfo('[Issue #028] Task updated successfully', { taskId: id });
+
+            // ProjectStoreにタスク更新を通知
+            get().notifyProjectStore(id, updatedTask, 'update').catch(error => 
+              logError('Async ProjectStore notification failed', { taskId: id }, error)
+            );
+            
+            // TagStoreにタスク更新を通知（タグ使用統計更新）
+            get().notifyTagStore(id, updatedTask, 'update').catch(error => 
+              logError('Async TagStore notification failed', { taskId: id }, error)
+            );
+
             return updatedTask;
             
           } catch (error) {
@@ -463,6 +515,18 @@ export const useTaskStore = create<TaskState>()(
             }
             
             logInfo('[Issue #028] Task deleted successfully', { taskId: id });
+
+            // ProjectStoreにタスク削除を通知（削除前のタスク情報を送信）
+            // taskToDeleteはすでに459行目で取得済み
+            if (taskToDelete) {
+              get().notifyProjectStore(id, taskToDelete, 'delete').catch(error => 
+                logError('Async ProjectStore notification failed', { taskId: id }, error)
+              );
+              // TagStoreにタスク削除を通知（タグ使用統計更新）
+              get().notifyTagStore(id, taskToDelete, 'delete').catch(error => 
+                logError('Async TagStore notification failed', { taskId: id }, error)
+              );
+            }
             
           } catch (error) {
             // Issue #028: エラー処理時の中断確認
@@ -697,6 +761,105 @@ export const useTaskStore = create<TaskState>()(
 
         getTasksByAssignee: (assigneeId) => {
           return get().tasks.filter(task => task.assigneeId === assigneeId);
+        },
+
+        // プロジェクト・タグ連携機能の実装
+        getTasksWithCategories: () => {
+          const { tasks } = get();
+          const projectStore = useProjectStore.getState();
+          const tagStore = useTagStore.getState();
+          
+          return tasks.map(task => {
+            const project = task.projectId ? projectStore.getProjectById(task.projectId) : undefined;
+            const tags = task.tags || [];
+            
+            return {
+              ...task,
+              project,
+              tags
+            } as TaskWithCategories;
+          });
+        },
+
+        getFilteredTasksWithCategories: () => {
+          const filteredTasks = get().getFilteredTasks();
+          const projectStore = useProjectStore.getState();
+          
+          return filteredTasks.map(task => {
+            const project = task.projectId ? projectStore.getProjectById(task.projectId) : undefined;
+            const tags = task.tags || [];
+            
+            return {
+              ...task,
+              project,
+              tags
+            } as TaskWithCategories;
+          });
+        },
+
+        getTaskWithCategoriesById: (id) => {
+          const task = get().getTaskById(id);
+          if (!task) return undefined;
+          
+          const projectStore = useProjectStore.getState();
+          const project = task.projectId ? projectStore.getProjectById(task.projectId) : undefined;
+          const tags = task.tags || [];
+          
+          return {
+            ...task,
+            project,
+            tags
+          } as TaskWithCategories;
+        },
+
+        getTasksByTag: (tagId) => {
+          return get().tasks.filter(task => 
+            task.tags && task.tags.some(tag => tag.id === tagId)
+          );
+        },
+
+        addTaskWithCategories: async (taskInput) => {
+          // tagIdsをTag[]に変換
+          const tagStore = useTagStore.getState();
+          const tags = taskInput.tagIds ? 
+            taskInput.tagIds.map(tagId => tagStore.tags.find(tag => tag.id === tagId)).filter(Boolean) as Tag[] : 
+            [];
+
+          const createInput: CreateTaskInput = {
+            title: taskInput.title,
+            description: taskInput.description,
+            priority: taskInput.priority,
+            projectId: taskInput.projectId,
+            assigneeId: taskInput.assigneeId,
+            tags: tags,
+            dueDate: taskInput.dueDate,
+            estimatedHours: taskInput.estimatedHours
+          };
+
+          return get().addTask(createInput);
+        },
+
+        updateTaskWithCategories: async (id, taskInput) => {
+          // tagIdsをTag[]に変換
+          const tagStore = useTagStore.getState();
+          const tags = taskInput.tagIds ? 
+            taskInput.tagIds.map(tagId => tagStore.tags.find(tag => tag.id === tagId)).filter(Boolean) as Tag[] : 
+            undefined;
+
+          const updateInput: UpdateTaskInput = {
+            title: taskInput.title,
+            description: taskInput.description,
+            status: taskInput.status,
+            priority: taskInput.priority,
+            projectId: taskInput.projectId,
+            assigneeId: taskInput.assigneeId,
+            tags: tags,
+            dueDate: taskInput.dueDate,
+            estimatedHours: taskInput.estimatedHours,
+            actualHours: taskInput.actualHours
+          };
+
+          return get().updateTask(id, updateInput);
         },
 
         // アーカイブ関連メソッド（新規追加）
@@ -981,6 +1144,286 @@ export const useTaskStore = create<TaskState>()(
           }, false, 'resetStore');
         },
 
+        // ==============================
+        // データ同期機能（ProjectStore連携）
+        // ==============================
+
+        // ProjectStoreへの通知機能（ES Module対応版）
+        notifyProjectStore: async (taskId: string, task: Task | null, operation: 'create' | 'update' | 'delete') => {
+          try {
+            // 循環参照回避のためES Module動的import
+            const { useProjectStore } = await import('./projectStore');
+            const projectStore = useProjectStore?.getState?.();
+            
+            // ProjectStoreやgetStateメソッドが存在するかチェック
+            if (!projectStore) {
+              console.warn('ProjectStore not available - skipping notification', { 
+                taskId, 
+                operation,
+                reason: 'store_not_available'
+              });
+              return;
+            }
+            
+            // handleTaskStoreUpdateメソッドが存在するかチェック
+            if (typeof projectStore.handleTaskStoreUpdate !== 'function') {
+              console.warn('ProjectStore.handleTaskStoreUpdate method not available - skipping notification', { 
+                taskId, 
+                operation,
+                reason: 'method_not_available',
+                availableMethods: Object.keys(projectStore).filter(key => typeof projectStore[key] === 'function')
+              });
+              return;
+            }
+            
+            // ProjectStoreにTaskStoreの変更を通知
+            projectStore.handleTaskStoreUpdate(taskId, task, operation);
+
+            logInfo('Successfully notified project store of task change', {
+              taskId,
+              operation,
+              projectId: task?.projectId,
+              hasProjectId: !!task?.projectId
+            });
+          } catch (error) {
+            // エラー詳細を記録するが、タスク操作は継続
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            const errorStack = error instanceof Error ? error.stack : undefined;
+            
+            console.warn('Failed to notify project store, but task operation will continue', { 
+              taskId, 
+              operation,
+              projectId: task?.projectId,
+              error: errorMessage,
+              errorType: error instanceof Error ? error.constructor.name : typeof error,
+              timestamp: new Date().toISOString()
+            });
+            
+            // デバッグ情報として詳細ログ
+            if (process.env.NODE_ENV === 'development') {
+              console.debug('ProjectStore notification error details:', {
+                error: errorMessage,
+                stack: errorStack,
+                taskData: task,
+                operation
+              });
+            }
+            
+            // 従来のlogError呼び出しも保持
+            logError('Failed to notify project store', { taskId, operation }, error);
+            
+            // エラーが発生してもタスク処理は継続
+            // この通知はベストエフォートであり、失敗してもタスク作成・更新・削除の主要機能に影響しない
+          }
+        },
+
+        // ProjectStoreからのプロジェクト更新通知を処理
+        handleProjectUpdate: async (projectId: string, updatedProject: any) => {
+          try {
+            const { tasks } = get();
+            const relatedTasks = tasks.filter(task => task.projectId === projectId);
+            
+            if (relatedTasks.length === 0) {
+              logInfo('No related tasks found for project update', { projectId });
+              return;
+            }
+
+            let updatesNeeded = false;
+            const updatedTasks = tasks.map(task => {
+              if (task.projectId !== projectId) {
+                return task;
+              }
+
+              // プロジェクトがアーカイブされた場合の処理
+              if (updatedProject.isArchived && task.status !== 'archived') {
+                updatesNeeded = true;
+                return {
+                  ...task,
+                  status: 'archived' as const,
+                  updatedAt: new Date(),
+                  updatedBy: 'system-project-sync'
+                };
+              }
+
+              return task;
+            });
+
+            // 必要な更新があれば状態を更新
+            if (updatesNeeded) {
+              set({
+                tasks: updatedTasks,
+                lastUpdated: Date.now()
+              }, false, 'handleProjectUpdate:sync');
+
+              logInfo('Tasks updated due to project changes', {
+                projectId,
+                relatedTaskCount: relatedTasks.length,
+                updatedTaskCount: updatedTasks.filter((task, index) => 
+                  task !== tasks[index]
+                ).length
+              });
+            }
+          } catch (error) {
+            logError('Failed to handle project update', { projectId }, error);
+          }
+        },
+        
+        // ==============================
+        // TagStore連携機能
+        // ==============================
+        
+        // TagStoreへの通知機能（タグ使用統計更新用）
+        notifyTagStore: async (taskId: string, task: Task | null, operation: 'create' | 'update' | 'delete') => {
+          try {
+            // 循環参照回避のためES Module動的import
+            const { useTagStore } = await import('./tagStore');
+            const tagStore = useTagStore?.getState?.();
+            
+            // TagStoreやgetStateメソッドが存在するかチェック
+            if (!tagStore) {
+              console.warn('TagStore not available - skipping notification', { 
+                taskId, 
+                operation,
+                reason: 'store_not_available'
+              });
+              return;
+            }
+            
+            // handleTaskStoreUpdateメソッドが存在するかチェック
+            if (typeof tagStore.handleTaskStoreUpdate !== 'function') {
+              console.warn('TagStore.handleTaskStoreUpdate method not available - skipping notification', { 
+                taskId, 
+                operation,
+                reason: 'method_not_available',
+                availableMethods: Object.keys(tagStore).filter(key => typeof tagStore[key] === 'function')
+              });
+              return;
+            }
+            
+            // TagStoreにTaskStoreの変更を通知
+            tagStore.handleTaskStoreUpdate(taskId, task, operation);
+
+            logInfo('Successfully notified tag store of task change', {
+              taskId,
+              operation,
+              tagCount: task?.tags?.length || 0,
+              hasTagData: !!(task?.tags && task.tags.length > 0)
+            });
+          } catch (error) {
+            // エラー詳細を記録するが、タスク操作は継続
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            const errorStack = error instanceof Error ? error.stack : undefined;
+            
+            console.warn('Failed to notify tag store, but task operation will continue', { 
+              taskId, 
+              operation,
+              tagCount: task?.tags?.length || 0,
+              error: errorMessage,
+              errorType: error instanceof Error ? error.constructor.name : typeof error,
+              timestamp: new Date().toISOString()
+            });
+            
+            // デバッグ情報として詳細ログ
+            if (process.env.NODE_ENV === 'development') {
+              console.debug('TagStore notification error details:', {
+                error: errorMessage,
+                stack: errorStack,
+                taskData: task,
+                operation
+              });
+            }
+            
+            // 従来のlogError呼び出しも保持
+            logError('Failed to notify tag store', { taskId, operation }, error);
+            
+            // エラーが発生してもタスク処理は継続
+            // この通知はベストエフォートであり、失敗してもタスク作成・更新・削除の主要機能に影響しない
+          }
+        },
+        
+        // TagStoreからのタグ更新通知を処理
+        handleTagUpdate: async (tagId: string, updatedTag: Tag) => {
+          try {
+            const { tasks } = get();
+            let updatesNeeded = false;
+            
+            // 該当するタグを含むタスクを更新
+            const updatedTasks = tasks.map(task => {
+              const hasTag = task.tags.some(tag => tag.id === tagId);
+              if (hasTag) {
+                updatesNeeded = true;
+                return {
+                  ...task,
+                  tags: task.tags.map(tag => 
+                    tag.id === tagId ? updatedTag : tag
+                  ),
+                  updatedAt: new Date(),
+                  updatedBy: 'system-tag-sync'
+                };
+              }
+              return task;
+            });
+            
+            // 必要な更新があれば状態を更新
+            if (updatesNeeded) {
+              set({
+                tasks: updatedTasks,
+                lastUpdated: Date.now()
+              }, false, 'handleTagUpdate:sync');
+              
+              logInfo('Tasks updated due to tag changes', {
+                tagId,
+                tagName: updatedTag.name,
+                affectedTasks: updatedTasks.filter((task, index) => 
+                  task !== tasks[index]
+                ).length
+              });
+            }
+          } catch (error) {
+            logError('Failed to handle tag update', { tagId }, error);
+          }
+        },
+        
+        // TagStoreからのタグ削除通知を処理
+        handleTagDeletion: async (tagId: string) => {
+          try {
+            const { tasks } = get();
+            let updatesNeeded = false;
+            
+            // 該当するタグを含むタスクからタグを削除
+            const updatedTasks = tasks.map(task => {
+              const hasTag = task.tags.some(tag => tag.id === tagId);
+              if (hasTag) {
+                updatesNeeded = true;
+                return {
+                  ...task,
+                  tags: task.tags.filter(tag => tag.id !== tagId),
+                  updatedAt: new Date(),
+                  updatedBy: 'system-tag-sync'
+                };
+              }
+              return task;
+            });
+            
+            // 必要な更新があれば状態を更新
+            if (updatesNeeded) {
+              set({
+                tasks: updatedTasks,
+                lastUpdated: Date.now()
+              }, false, 'handleTagDeletion:sync');
+              
+              logInfo('Tasks updated due to tag deletion', {
+                tagId,
+                affectedTasks: updatedTasks.filter((task, index) => 
+                  task !== tasks[index]
+                ).length
+              });
+            }
+          } catch (error) {
+            logError('Failed to handle tag deletion', { tagId }, error);
+          }
+        },
+
         // スケジュール関連メソッド
         getUnscheduledTasks: () => {
           const { tasks } = get();
@@ -1197,6 +1640,33 @@ export const useTaskStats = () => {
   });
 };
 
+// カスタムフック：TaskWithCategoriesを取得
+export const useTasksWithCategories = () => {
+  return useTaskStore(state => state.getTasksWithCategories());
+};
+
+// カスタムフック：フィルタリングされたTaskWithCategoriesを取得
+export const useFilteredTasksWithCategories = () => {
+  return useTaskStore(state => state.getFilteredTasksWithCategories());
+};
+
+// カスタムフック：特定のTaskWithCategoriesを取得
+export const useTaskWithCategoriesById = (id: string) => {
+  return useTaskStore(state => 
+    id ? state.getTaskWithCategoriesById(id) : null
+  );
+};
+
+// カスタムフック：プロジェクト・タグ関連の操作を取得
+export const useTaskCategoryOperations = () => {
+  return useTaskStore(state => ({
+    addTaskWithCategories: state.addTaskWithCategories,
+    updateTaskWithCategories: state.updateTaskWithCategories,
+    getTasksByProject: state.getTasksByProject,
+    getTasksByTag: state.getTasksByTag
+  }));
+};
+
 // カスタムフック：Analytics画面用の統計情報を取得
 export const useAnalyticsStats = (includeArchived: boolean = false) => {
   return useTaskStore(state => {
@@ -1271,3 +1741,9 @@ export const useAnalyticsStats = (includeArchived: boolean = false) => {
     };
   });
 };
+
+// 開発環境でのデバッグ用: TaskStoreをwindowオブジェクトに設定
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  (window as any).useTaskStore = useTaskStore;
+  console.log('[TaskStore] Debug: Store exposed to window.useTaskStore');
+}

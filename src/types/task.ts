@@ -2,7 +2,8 @@
  * タスク管理システムの型定義
  */
 
-import { Tag } from './tag';
+import { Tag, TagWithTaskCount } from './tag';
+import { Project, ProjectWithTaskCount } from './project';
 
 // タスクの状態を表すenum
 export type TaskStatus = 
@@ -76,6 +77,13 @@ export interface TaskFormData {
   estimatedHours: string; // フォーム入力では文字列として管理
   tags: Tag[];
   projectId?: string;
+}
+
+// プロジェクト・タグ連携対応のフォームデータ型
+export interface TaskFormWithCategoriesData extends TaskFormData {
+  projectId?: string | null;   // プロジェクト選択（null許可）
+  selectedTags: Tag[];        // 選択済みタグの配列
+  tagIds: string[];           // タグIDの配列（フォーム管理用）
 }
 
 // メインのTask型定義
@@ -236,4 +244,51 @@ export interface CreateSubtaskInput {
   assigneeId?: string;
   dueDate?: Date;
   estimatedHours?: number;
+}
+
+// === プロジェクト・タグ連携の拡張型定義 ===
+
+// プロジェクト・タグ情報を含むTask型（populated）
+export interface TaskWithCategories extends Task {
+  project?: Project;           // プロジェクト情報（populated）
+  tags: Tag[];                // タグ情報の配列（populated）
+  
+  // 統計情報（オプション）
+  relatedTaskCount?: number;   // 同じプロジェクト・タグの関連タスク数
+  completionRate?: number;     // 同カテゴリのタスクの完了率
+}
+
+// プロジェクト・タグ選択用のフォームデータ型
+export interface TaskCategoryFormData {
+  projectId?: string | null;   // 選択されたプロジェクトID
+  tagIds: string[];           // 選択されたタグIDの配列
+}
+
+// プロジェクト・タグ連携用の作成Input
+export interface CreateTaskWithCategoriesInput extends CreateTaskInput {
+  projectId?: string | null;   // プロジェクトID
+  tagIds?: string[];          // タグIDの配列
+}
+
+// プロジェクト・タグ連携用の更新Input
+export interface UpdateTaskWithCategoriesInput extends UpdateTaskInput {
+  projectId?: string | null;   // プロジェクトID（null許可で削除可能）
+  tagIds?: string[];          // タグIDの配列
+}
+
+// タスク一覧でのプロジェクト・タグフィルター
+export interface TaskCategoryFilter extends TaskFilter {
+  projectIds?: string[];      // 複数プロジェクトでのフィルタリング
+  tagIds?: string[];         // 複数タグでのフィルタリング
+  hasProject?: boolean;      // プロジェクト有無でのフィルタリング
+  hasTags?: boolean;         // タグ有無でのフィルタリング
+}
+
+// プロジェクト・タグ統計情報付きTaskリスト
+export interface TaskListWithCategories {
+  tasks: TaskWithCategories[];
+  projectStats: ProjectWithTaskCount[];
+  tagStats: TagWithTaskCount[];
+  totalCount: number;
+  filteredCount: number;
 }

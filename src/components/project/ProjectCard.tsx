@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Users, DollarSign, TrendingUp, Clock, MoreVertical, Settings, Archive } from 'lucide-react';
+import { Calendar, Users, DollarSign, TrendingUp, Clock, MoreVertical, Settings, Archive, Edit, Trash2 } from 'lucide-react';
 import { Project, ProjectWithStats } from '@/types/project';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +10,9 @@ interface ProjectCardProps {
   project: Project | ProjectWithStats;
   onClick?: (project: Project) => void;
   onSettingsClick?: (project: Project) => void;
+  onEditClick?: (project: Project) => void;
   onArchiveClick?: (project: Project) => void;
+  onDeleteClick?: (project: Project) => void;
   showStats?: boolean;
   className?: string;
   variant?: 'default' | 'compact' | 'detailed';
@@ -23,7 +25,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   project,
   onClick,
   onSettingsClick,
+  onEditClick,
   onArchiveClick,
+  onDeleteClick,
   showStats = true,
   className,
   variant = 'default',
@@ -109,9 +113,19 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
     onSettingsClick?.(project);
   };
 
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEditClick?.(project);
+  };
+
   const handleArchiveClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onArchiveClick?.(project);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDeleteClick?.(project);
   };
 
   if (variant === 'compact') {
@@ -184,12 +198,24 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           </div>
           
           <div className="flex items-center space-x-1 flex-shrink-0">
+            {onEditClick && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleEditClick}
+                className="h-8 w-8 p-0"
+                title="プロジェクトを編集"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            )}
             {onSettingsClick && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleSettingsClick}
                 className="h-8 w-8 p-0"
+                title="プロジェクト設定"
               >
                 <Settings className="h-4 w-4" />
               </Button>
@@ -200,8 +226,20 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 size="sm"
                 onClick={handleArchiveClick}
                 className="h-8 w-8 p-0"
+                title="プロジェクトをアーカイブ"
               >
                 <Archive className="h-4 w-4" />
+              </Button>
+            )}
+            {onDeleteClick && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDeleteClick}
+                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                title="プロジェクトを削除"
+              >
+                <Trash2 className="h-4 w-4" />
               </Button>
             )}
             <Button

@@ -76,6 +76,7 @@ const DialogContent = React.forwardRef<
           event.preventDefault();
         }
       })}
+      aria-describedby={props["aria-describedby"]}
       {...props}
     >
       {children}
@@ -172,6 +173,8 @@ const Modal: React.FC<ModalProps> = ({
   useDefaultExcludeSelectors = true,
 }) => {
   const contentRef = React.useRef<HTMLDivElement>(null);
+  const titleId = React.useId();
+  const descId = React.useId();
   
   // Combine default and custom exclude selectors
   const allExcludeSelectors = React.useMemo(() => {
@@ -212,14 +215,21 @@ const Modal: React.FC<ModalProps> = ({
         size={size} 
         className={cn("flex flex-col", className)}
         onPointerDownOutside={handlePointerDownOutside}
+        aria-labelledby={titleId}
+        aria-describedby={descId}
       >
-        {/* 固定ヘッダー */}
-        {(title || description) && (
-          <DialogHeader className="flex-shrink-0">
-            {title && <DialogTitle>{title}</DialogTitle>}
-            {description && <DialogDescription>{description}</DialogDescription>}
-          </DialogHeader>
-        )}
+        {/* 固定ヘッダー（アクセシビリティ: Title/Description を常に提供） */}
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle id={titleId} className={title ? undefined : "sr-only"}>
+            {title || "ダイアログ"}
+          </DialogTitle>
+          {description !== undefined ? (
+            <DialogDescription id={descId}>{description}</DialogDescription>
+          ) : (
+            // 説明がない場合も要素を提供（視覚的には非表示）
+            <DialogDescription id={descId} className="sr-only">説明</DialogDescription>
+          )}
+        </DialogHeader>
         
         {/* スクロール可能なボディ - DialogContentレベルでスクロール管理するため内部スクロールを削除 */}
         <div className="flex-1 py-4">

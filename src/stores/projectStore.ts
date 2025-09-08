@@ -16,6 +16,7 @@ import type {
 } from '../types/project';
 import { projectsAPI } from '../lib/api/projects';
 import { logger } from '../lib/logger';
+import { useTaskStore } from './taskStore';
 
 // プロジェクトストアの状態型定義（API統合版）
 interface ProjectState {
@@ -46,6 +47,7 @@ interface ProjectState {
   getProjectsByMember: (memberId: string) => ProjectWithDetails[];
   getActiveProjects: () => ProjectWithDetails[];
   getProjectWithStats: (id: string) => ProjectWithStats | undefined;
+  getProjectRelatedTaskCount: (projectId: string) => number;
   
   // 一括操作（API統合）
   bulkUpdateProjects: (ids: string[], updates: UpdateProjectInput) => Promise<void>;
@@ -60,6 +62,12 @@ interface ProjectState {
   
   // データ初期化
   resetStore: () => void;
+  
+  // データ同期機能（新規追加）
+  syncRelatedTasks: (projectId: string, updatedProject: Project) => Promise<void>;
+  refreshProjectStats: (projectId: string) => Promise<void>;
+  refreshAllProjectStats: () => Promise<void>;
+  handleTaskStoreUpdate: (taskId: string, updatedTask: any, operation: 'create' | 'update' | 'delete') => void;
   
   // 内部状態管理
   _setProjects: (projects: ProjectWithDetails[]) => void;
@@ -101,13 +109,16 @@ export const useProjectStore = create<ProjectState>()(
         try {
           set({ isLoading: true, error: null }, false, 'loadProjects:start');
           
-          const projects = await projectsAPI.getAll({
+          const response = await projectsAPI.getAll({
             filter: get().filter,
             sort: get().sort,
             includeStats: true,
             includeMembers: true,
             includeTags: true
           });
+          
+          // APIレスポンスからプロジェクト配列を抽出
+          const projects = Array.isArray(response) ? response : (response?.data || []);
           
           set({ 
             projects, 
@@ -250,6 +261,19 @@ export const useProjectStore = create<ProjectState>()(
         try {
           if (!id) {
             get().setError('プロジェクトIDが必要です');
+            return;
+          }
+
+          // 削除前に関連タスクをチェック
+          const relatedTaskCount = get().getProjectRelatedTaskCount(id);
+          if (relatedTaskCount > 0) {
+            const errorMessage = `このプロジェクトには${relatedTaskCount}個の関連タスクがあります。関連タスクを削除または他のプロジェクトに移動してから、プロジェクトを削除してください。`;
+            get().setError(errorMessage);
+            logger.warn('Project deletion blocked due to related tasks', {
+              category: 'project_store',
+              projectId: id,
+              relatedTaskCount
+            });
             return;
           }
 
@@ -495,6 +519,13 @@ export const useProjectStore = create<ProjectState>()(
         };
       },
 
+      getProjectRelatedTaskCount: (projectId) => {
+        // タスクストアから該当プロジェクトのタスク数を取得
+        const taskStore = useTaskStore.getState();
+        const relatedTasks = taskStore.getTasksByProject(projectId);
+        return relatedTasks.length;
+      },
+
       // 一括操作（API統合）
       bulkUpdateProjects: async (ids, updates) => {
         try {
@@ -676,6 +707,104 @@ export const useProjectStore = create<ProjectState>()(
         logger.info('Project store reset', {
           category: 'project_store'
         });
+      },
+
+      // TaskStoreからの通知を処理するメソッド
+      handleTaskStoreUpdate: (taskId: string, updatedTask: any, operation: 'create' | 'update' | 'delete') => {
+        try {
+          const currentState = get();
+          
+          // タスクにprojectIdが関連している場合のみ処理
+          if (updatedTask?.projectId && operation === 'create') {
+            // プロジェクトが存在するか確認
+            const project = currentState.getProjectById(updatedTask.projectId);
+            if (project) {
+              logger.info('Task added to project - updating project statistics', { 
+                taskId, 
+                projectId: updatedTask.projectId,
+                category: 'project_store' 
+              });
+              
+              // プロジェクト統計の更新をスケジュール（非同期）
+              setTimeout(async () => {
+                try {
+                  await currentState.refreshProjectStats(updatedTask.projectId);
+                } catch (error) {
+                  logger.error('Failed to refresh project stats after task creation', {
+                    taskId,
+                    projectId: updatedTask.projectId,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    category: 'project_store'
+                  });
+                }
+              }, 100); // 100ms後に実行（UI更新後）
+            }
+          } else if (operation === 'update' && updatedTask?.projectId) {
+            // タスク更新時の処理
+            const project = currentState.getProjectById(updatedTask.projectId);
+            if (project) {
+              logger.info('Task updated in project - refreshing statistics', { 
+                taskId, 
+                projectId: updatedTask.projectId,
+                category: 'project_store' 
+              });
+              
+              // 非同期でプロジェクト統計更新
+              setTimeout(async () => {
+                try {
+                  await currentState.refreshProjectStats(updatedTask.projectId);
+                } catch (error) {
+                  logger.error('Failed to refresh project stats after task update', {
+                    taskId,
+                    projectId: updatedTask.projectId,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    category: 'project_store'
+                  });
+                }
+              }, 100);
+            }
+          } else if (operation === 'delete' && updatedTask?.projectId) {
+            // タスク削除時の処理
+            const project = currentState.getProjectById(updatedTask.projectId);
+            if (project) {
+              logger.info('Task deleted from project - refreshing statistics', { 
+                taskId, 
+                projectId: updatedTask.projectId,
+                category: 'project_store' 
+              });
+              
+              // 非同期でプロジェクト統計更新
+              setTimeout(async () => {
+                try {
+                  await currentState.refreshProjectStats(updatedTask.projectId);
+                } catch (error) {
+                  logger.error('Failed to refresh project stats after task deletion', {
+                    taskId,
+                    projectId: updatedTask.projectId,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    category: 'project_store'
+                  });
+                }
+              }, 100);
+            }
+          }
+          
+          // 操作が成功したことをログ
+          logger.info('Successfully handled TaskStore update notification', { 
+            taskId, 
+            operation,
+            hasProjectId: !!updatedTask?.projectId,
+            category: 'project_store' 
+          });
+        } catch (error) {
+          logger.error('Failed to handle TaskStore update', { 
+            taskId, 
+            operation,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            category: 'project_store' 
+          });
+          // エラーが発生してもProjectStoreの状態は維持
+        }
       }
     }),
     {
@@ -775,3 +904,9 @@ export const useProjectHelper = () => {
     }
   };
 };
+
+// 開発環境でのデバッグ用: ProjectStoreをwindowオブジェクトに設定
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  (window as any).useProjectStore = useProjectStore;
+  console.log('[ProjectStore] Debug: Store exposed to window.useProjectStore');
+}

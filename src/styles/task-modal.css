@@ -1,0 +1,209 @@
+/* タスクモーダル共通スタイル */
+
+/* モーダル全体のコンテンツ余白 */
+.task-modal-content {
+  padding: 24px;
+}
+
+.task-modal-content > * + * {
+  margin-top: 20px;
+}
+
+/* セクション共通スタイル */
+.task-modal-section {
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--section-bg, #f9fafb);
+  margin-bottom: 16px;
+}
+
+.dark .task-modal-section {
+  background: var(--section-bg-dark, #1f2937);
+}
+
+/* フィールド余白 */
+.task-modal-field {
+  margin-bottom: 20px;
+}
+
+.task-modal-field:last-child {
+  margin-bottom: 0;
+}
+
+/* ラベルスタイル */
+.task-modal-label {
+  font-weight: 500;
+  margin-bottom: 8px;
+  display: block;
+  color: #374151;
+}
+
+.dark .task-modal-label {
+  color: #d1d5db;
+}
+
+/* フォーム要素の余白調整 */
+.task-form-input {
+  padding: 12px;
+  margin-bottom: 4px;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  transition: all 0.2s ease;
+}
+
+.dark .task-form-input {
+  border-color: #4b5563;
+  background: #1f2937;
+  color: #f3f4f6;
+}
+
+.task-form-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* テキストエリアの余白 */
+.task-form-textarea {
+  padding: 12px;
+  min-height: 100px;
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  resize: vertical;
+  transition: all 0.2s ease;
+}
+
+.dark .task-form-textarea {
+  border-color: #4b5563;
+  background: #1f2937;
+  color: #f3f4f6;
+}
+
+.task-form-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* ボタングループの余白 */
+.task-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.dark .task-modal-buttons {
+  border-top-color: #4b5563;
+}
+
+/* タグセレクター余白改善 */
+.tag-selector-dropdown {
+  margin-bottom: 4px;
+}
+
+.tag-selector-dropdown .tag-badge {
+  margin: 2px;
+}
+
+/* プロジェクトセレクター余白改善 */
+.project-selector {
+  margin-bottom: 4px;
+}
+
+/* サブタスクリストの余白 */
+.subtask-list {
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 8px;
+  margin-top: 12px;
+}
+
+.dark .subtask-list {
+  background: #111827;
+}
+
+.subtask-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #f9fafb;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.dark .subtask-item {
+  background: #1f2937;
+}
+
+.subtask-item:hover {
+  background: #f3f4f6;
+}
+
+.dark .subtask-item:hover {
+  background: #374151;
+}
+
+/* タブコンテンツの余白 */
+.task-detail-tabs-content {
+  padding: 20px;
+}
+
+/* プライオリティバッジの余白 */
+.priority-badge {
+  padding: 6px 12px;
+  margin: 0 4px;
+}
+
+/* ステータスバッジの余白 */
+.status-badge {
+  padding: 6px 12px;
+  margin: 0 4px;
+}
+
+/* 詳細ビューのヘッダー余白 */
+.task-detail-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dark .task-detail-header {
+  border-bottom-color: #4b5563;
+}
+
+/* 詳細ビューのボディ余白 */
+.task-detail-body {
+  padding: 24px;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+  .task-modal-content {
+    padding: 16px;
+  }
+  
+  .task-modal-section {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  
+  .task-modal-field {
+    margin-bottom: 16px;
+  }
+  
+  .task-form-input,
+  .task-form-textarea {
+    padding: 10px;
+  }
+  
+  .task-detail-header {
+    padding: 16px;
+  }
+  
+  .task-detail-body {
+    padding: 16px;
+  }
+}

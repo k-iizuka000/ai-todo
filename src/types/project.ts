@@ -93,6 +93,15 @@ export interface Project {
   updatedBy: string;
 }
 
+// プロジェクトとタスク数の統計情報を含む型
+export interface ProjectWithTaskCount extends Project {
+  taskCount: number;              // 関連タスク数
+  completedTaskCount: number;     // 完了済みタスク数
+  activeTaskCount?: number;       // アクティブタスク数
+  todoTaskCount?: number;         // 未着手タスク数
+  inProgressTaskCount?: number;   // 進行中タスク数
+}
+
 // JOINでタグやメンバーを取得する場合のプロジェクト型 (サーバーサイドレスポンス型と一致)
 export interface ProjectWithDetails extends Project {
   owner: {

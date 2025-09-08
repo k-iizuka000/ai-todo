@@ -123,8 +123,8 @@ export const TaskDetailModalBasic: React.FC<TaskDetailModalBasicProps> = ({
                           ? 'opacity-0 scale-95' 
                           : 'opacity-100 scale-100'
                       }`}
-          aria-labelledby="task-detail-title"
-          aria-describedby="task-detail-description"
+          aria-labelledby="task-detail-title-basic"
+          aria-describedby="task-detail-description-basic"
           onInteractOutside={(e) => {
             // アクセシビリティ向上: クリックアウトサイドでは閉じない
             // 意図しない操作を防止し、Escapeキーでの明示的なクローズを推奨
@@ -132,11 +132,11 @@ export const TaskDetailModalBasic: React.FC<TaskDetailModalBasicProps> = ({
           }}
           onEscapeKeyDown={handleClose}
         >
-          {/* アクセシビリティ用の隠しタイトルと説明 */}
-          <Dialog.Title id="task-detail-title" className="sr-only">
+          {/* アクセシビリティ用の隠しタイトルと説明（常に提供） */}
+          <Dialog.Title id="task-detail-title-basic" className="sr-only">
             タスク詳細: {task.title}
           </Dialog.Title>
-          <Dialog.Description id="task-detail-description" className="sr-only">
+          <Dialog.Description id="task-detail-description-basic" className="sr-only">
             タスクの詳細情報を表示しています。Escapeキーで閉じられます。
           </Dialog.Description>
 

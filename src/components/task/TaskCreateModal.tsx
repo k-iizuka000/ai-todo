@@ -123,11 +123,12 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
       title="新しいタスクを作成"
       description="タスクの詳細情報を入力してください"
       useDefaultExcludeSelectors={true}
+      data-testid="task-create-modal"
     >
-      <div className="space-y-4">
+      <div className="space-y-4" data-testid="task-create-content">
         {/* エラー表示 */}
         {error && (
-          <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3">
+          <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3" data-testid="task-create-error">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-2">
                 <div className="bg-destructive text-destructive-foreground rounded-full p-1">
@@ -145,6 +146,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
                 size="sm"
                 onClick={clearError}
                 className="text-destructive hover:text-destructive/80"
+                data-testid="error-close-button"
               >
                 ×
               </Button>
@@ -153,7 +155,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
         )}
 
         {/* AI支援ヒント */}
-        <div className="bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-md p-3">
+        <div className="bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-md p-3" data-testid="ai-assistance-hint">
           <div className="flex items-start gap-2">
             <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400 mt-0.5" />
             <div>
@@ -171,6 +173,7 @@ export const TaskCreateModal: React.FC<TaskCreateModalProps> = ({
         {/* メインフォーム */}
         <TaskForm
           {...taskFormProps}
+          data-testid="task-create-form"
         />
       </div>
     </Modal>
@@ -212,6 +215,7 @@ export const TaskCreateButton: React.FC<TaskCreateButtonProps> = ({
         onClick={() => setIsModalOpen(true)}
         disabled={disabled}
         className={className}
+        data-testid="task-create-trigger"
       >
         {children || (
           <>
@@ -227,6 +231,7 @@ export const TaskCreateButton: React.FC<TaskCreateButtonProps> = ({
         onTaskCreate={onTaskCreate}
         projectId={projectId}
         initialData={initialData}
+        data-testid="task-create-modal-from-button"
       />
     </>
   )
@@ -275,7 +280,7 @@ export const QuickTaskCreate: React.FC<QuickTaskCreateProps> = ({
   }
 
   return (
-    <form onSubmit={handleSubmit} className={className}>
+    <form onSubmit={handleSubmit} className={className} data-testid="quick-task-create">
       <div className="flex gap-2">
         <input
           type="text"
@@ -285,12 +290,14 @@ export const QuickTaskCreate: React.FC<QuickTaskCreateProps> = ({
           disabled={isLoading}
           className="flex-1 px-3 py-2 border rounded-md text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           maxLength={100}
+          data-testid="quick-task-input"
         />
         <Button
           type="submit"
           size="sm"
           disabled={!title.trim() || isLoading}
           loading={isLoading}
+          data-testid="quick-task-submit"
         >
           <Plus className="h-4 w-4" />
         </Button>

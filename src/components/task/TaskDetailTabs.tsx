@@ -2,7 +2,7 @@
  * タスク詳細のタブコンポーネント
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Input, Badge } from '@/components/ui';
 import { Plus, MessageCircle, Clock, Paperclip, Trash2 } from 'lucide-react';
 import type { TaskDetail, TaskComment, TaskHistory, CreateSubtaskInput } from '@/types/task';
@@ -15,6 +15,8 @@ interface TaskDetailTabsProps {
   onSubtaskAdd?: (title: string) => void;
   onSubtaskToggle?: (subtaskId: string, completed: boolean) => void;
   onSubtaskDelete?: (subtaskId: string) => void;
+  enableA11y?: boolean;
+  compact?: boolean;
 }
 
 export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
@@ -24,40 +26,53 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
   onUpdate,
   onSubtaskAdd,
   onSubtaskToggle,
-  onSubtaskDelete
+  onSubtaskDelete,
+  enableA11y = false,
+  compact = false
 }) => {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newComment, setNewComment] = useState('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  
+  // ローカル状態でサブタスクを管理（即時反映のため）
+  const [localChildTasks, setLocalChildTasks] = useState(task.childTasks);
+  
+  // タスクが更新されたら、ローカル状態も更新
+  useEffect(() => {
+    setLocalChildTasks(task.childTasks);
+  }, [task.childTasks]);
 
   const handleAddSubtask = () => {
     if (!newSubtaskTitle.trim()) return;
     
-    // Use individual handler if available, otherwise fall back to generic onUpdate
+    // 新しいサブタスクを作成
+    const newSubtask = {
+      id: `subtask-${Date.now()}`,
+      title: newSubtaskTitle,
+      description: '',
+      status: 'todo' as const,
+      priority: 'medium' as const,
+      projectId: task.projectId,
+      assigneeId: task.assigneeId,
+      tags: [],
+      subtasks: [],
+      dueDate: undefined,
+      estimatedHours: undefined,
+      actualHours: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: 'current-user',
+      updatedBy: 'current-user'
+    };
+    
+    // 即座にローカル状態を更新（UIに即時反映）
+    const updatedChildTasks = [...localChildTasks, newSubtask];
+    setLocalChildTasks(updatedChildTasks);
+    
+    // バックエンドに送信
     if (onSubtaskAdd) {
       onSubtaskAdd(newSubtaskTitle);
     } else {
-      // Fallback to original generic update logic
-      const newSubtask = {
-        id: `subtask-${Date.now()}`,
-        title: newSubtaskTitle,
-        description: '',
-        status: 'todo' as const,
-        priority: 'medium' as const,
-        projectId: task.projectId,
-        assigneeId: task.assigneeId,
-        tags: [],
-        subtasks: [],
-        dueDate: undefined,
-        estimatedHours: undefined,
-        actualHours: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        createdBy: 'current-user',
-        updatedBy: 'current-user'
-      };
-
-      const updatedChildTasks = [...task.childTasks, newSubtask];
       onUpdate?.({ childTasks: updatedChildTasks });
     }
     
@@ -66,31 +81,35 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
   };
 
   const handleSubtaskStatusToggle = (subtaskId: string) => {
-    // Use individual handler if available, otherwise fall back to generic onUpdate
+    // 即座にローカル状態を更新
+    const updatedChildTasks = localChildTasks.map(subtask =>
+      subtask.id === subtaskId
+        ? { ...subtask, status: subtask.status === 'done' ? 'todo' : 'done' as const }
+        : subtask
+    );
+    setLocalChildTasks(updatedChildTasks);
+    
+    // バックエンドに送信
     if (onSubtaskToggle) {
-      const subtask = task.childTasks.find(s => s.id === subtaskId);
+      const subtask = localChildTasks.find(s => s.id === subtaskId);
       if (subtask) {
         const newCompleted = subtask.status !== 'done';
         onSubtaskToggle(subtaskId, newCompleted);
       }
     } else {
-      // Fallback to original generic update logic
-      const updatedChildTasks = task.childTasks.map(subtask =>
-        subtask.id === subtaskId
-          ? { ...subtask, status: subtask.status === 'done' ? 'todo' : 'done' as const }
-          : subtask
-      );
       onUpdate?.({ childTasks: updatedChildTasks });
     }
   };
 
   const handleDeleteSubtask = (subtaskId: string) => {
-    // Use individual handler if available, otherwise fall back to generic onUpdate
+    // 即座にローカル状態を更新
+    const updatedChildTasks = localChildTasks.filter(subtask => subtask.id !== subtaskId);
+    setLocalChildTasks(updatedChildTasks);
+    
+    // バックエンドに送信
     if (onSubtaskDelete) {
       onSubtaskDelete(subtaskId);
     } else {
-      // Fallback to original generic update logic
-      const updatedChildTasks = task.childTasks.filter(subtask => subtask.id !== subtaskId);
       onUpdate?.({ childTasks: updatedChildTasks });
     }
   };
@@ -148,8 +167,8 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
     }
   };
 
-  const completedSubtasks = task.childTasks.filter(subtask => subtask.status === 'done').length;
-  const totalSubtasks = task.childTasks.length;
+  const completedSubtasks = localChildTasks.filter(subtask => subtask.status === 'done').length;
+  const totalSubtasks = localChildTasks.length;
 
   return (
     <div className="w-full min-w-0 flex flex-col border-l bg-gray-50 dark:bg-gray-800">
@@ -213,7 +232,7 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
 
             {/* サブタスク一覧 - スクロール対応 */}
             <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
-              {task.childTasks.map((subtask) => (
+              {localChildTasks.map((subtask) => (
                 <div key={subtask.id} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-900 rounded-lg border">
                   <input
                     type="checkbox"

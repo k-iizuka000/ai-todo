@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import AppRouter from './router/AppRouter';
 import { QueryProvider } from './providers/QueryProvider';
 import { AccessibilityProvider } from './providers/AccessibilityProvider';
-import { useProjectStore } from './stores/projectStore';
+import './styles/task-modal.css';
 
 const App: React.FC = () => {
   return (

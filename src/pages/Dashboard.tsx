@@ -16,6 +16,7 @@ import { Plus, Search, Filter, Columns, List, X } from 'lucide-react';
 import { TagBadge } from '@/components/tag/TagBadge';
 import { useTagStore } from '@/stores/tagStore';
 import { useTaskStore } from '@/stores/taskStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { useKanbanTasks } from '@/hooks/useKanbanTasks';
 import { useTaskActions } from '@/hooks/useTaskActions';
 import type { Task, TaskStatus, TaskDetail, CreateTaskInput } from '@/types/task';
@@ -40,10 +41,13 @@ const Dashboard: React.FC = () => {
   const [showTagFilter, setShowTagFilter] = useState(false);
   
   // タグストアから利用可能なタグを取得
-  const { tags: availableTags } = useTagStore();
+  const { tags: availableTags, initialize: initializeTagStore } = useTagStore();
   
   // タスクストア - 通常のパターンを使用（Archive用の基本データ取得）
   const { tasks: tasksFromStore, addTask, updateTask, error, clearError, initializeStore, isInitialized } = useTaskStore();
+  
+  // プロジェクトストア - プロジェクト情報の管理
+  const { projects, loadProjects, isLoading: projectsLoading } = useProjectStore();
   
   // タスク操作フック
   const { removeTask } = useTaskActions();
@@ -131,6 +135,61 @@ const Dashboard: React.FC = () => {
     };
   }, [isInitialized, initializeStore]);
   
+  // プロジェクトストアの初期化処理
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeProjects = async () => {
+      try {
+        console.log('[Dashboard] Initializing project store...');
+        await loadProjects();
+        if (isMounted) {
+          console.log('[Dashboard] Project store initialized successfully');
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.error('[Dashboard] Failed to initialize project store:', error);
+        }
+      }
+    };
+
+    // プロジェクトが存在しない、または空の場合に初期化
+    if (projects.length === 0 && !projectsLoading) {
+      initializeProjects();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [projects.length, projectsLoading, loadProjects]);
+
+  // タグストアの初期化処理
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeTags = async () => {
+      try {
+        console.log('[Dashboard] Initializing tag store...');
+        await initializeTagStore();
+        if (isMounted) {
+          console.log('[Dashboard] Tag store initialized successfully');
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.error('[Dashboard] Failed to initialize tag store:', error);
+        }
+      }
+    };
+
+    // タグが存在しない場合に初期化
+    if (availableTags.length === 0) {
+      initializeTags();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [availableTags.length, initializeTagStore]);
   
   // リストビュー用のフィルタリング済みタスク（KanbanBoardと同じロジック）
   const { tasks: filteredTasksForList } = useKanbanTasks({
@@ -246,8 +305,32 @@ const Dashboard: React.FC = () => {
         setShowTaskDetailModal(true);
         
         // URLを更新してタスク詳細表示を反映
-        const currentPath = location.pathname;
-        const newPath = currentPath.endsWith('/') ? `${currentPath}${task.id}` : `${currentPath}/${task.id}`;
+        const pathParts = location.pathname.split('/').filter(p => p); // 空文字列を除去
+        
+        // パスの構造を判定
+        let newPath: string;
+        
+        if (pathParts.length === 1 && pathParts[0] === 'dashboard') {
+          // /dashboard -> /dashboard/{taskId}
+          newPath = `/dashboard/${task.id}`;
+        } else if (pathParts.length === 2 && pathParts[0] === 'dashboard') {
+          // /dashboard/{something} を判定
+          const secondPart = pathParts[1];
+          if (/^\d+$/.test(secondPart) || secondPart.startsWith('task-')) {
+            // /dashboard/{taskId} -> /dashboard/{newTaskId} (置き換え)
+            newPath = `/dashboard/${task.id}`;
+          } else {
+            // /dashboard/today, /dashboard/demo など -> そのまま追加
+            newPath = `/dashboard/${secondPart}/${task.id}`;
+          }
+        } else if (pathParts.length === 3 && pathParts[0] === 'dashboard') {
+          // /dashboard/today/{taskId} -> /dashboard/today/{newTaskId} (置き換え)
+          newPath = `/dashboard/${pathParts[1]}/${task.id}`;
+        } else {
+          // その他の場合は /dashboard/{taskId} にフォールバック
+          newPath = `/dashboard/${task.id}`;
+        }
+        
         navigate(newPath, { replace: true });
       }
     } catch (error) {
@@ -550,16 +633,17 @@ const Dashboard: React.FC = () => {
   );
 
   return (
-    <div className="p-6">
+    <div className="p-6" data-testid="dashboard-container">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-foreground">{getPageTitle()}</h1>
+        <h1 className="text-2xl font-bold text-foreground" data-testid="dashboard-title">{getPageTitle()}</h1>
         <div className="flex gap-2">
           {/* 表示モード切り替え */}
-          <div className="flex border rounded-lg p-1">
+          <div className="flex border rounded-lg p-1" data-testid="view-mode-toggle">
             <Button
               variant={viewMode === 'list' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setViewMode('list')}
+              data-testid="view-mode-list"
             >
               <List className="h-4 w-4" />
             </Button>
@@ -567,11 +651,12 @@ const Dashboard: React.FC = () => {
               variant={viewMode === 'kanban' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => setViewMode('kanban')}
+              data-testid="view-mode-kanban"
             >
               <Columns className="h-4 w-4" />
             </Button>
           </div>
-          <Button onClick={() => setShowCreateModal(true)}>
+          <Button onClick={() => setShowCreateModal(true)} data-testid="create-task-button">
             <Plus className="h-4 w-4 mr-2" />
             新しいタスク
           </Button>
@@ -579,7 +664,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* 検索とフィルター */}
-      <div className="flex gap-4 mb-6">
+      <div className="flex gap-4 mb-6" data-testid="search-filter-section">
         <div className="flex-1">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -591,6 +676,7 @@ const Dashboard: React.FC = () => {
               aria-label="タスクを検索"
               role="searchbox"
               name="タスクを検索"
+              data-testid="search-input"
             />
           </div>
         </div>
@@ -600,11 +686,12 @@ const Dashboard: React.FC = () => {
           aria-expanded={showTagFilter}
           aria-controls="tag-filter-panel"
           aria-label={`タグフィルター${selectedTags.length > 0 ? `（${selectedTags.length}件選択中）` : ''}`}
+          data-testid="tag-filter-toggle"
         >
           <Filter className="h-4 w-4 mr-2" />
           タグフィルター
           {selectedTags.length > 0 && (
-            <Badge variant="secondary" className="ml-2">
+            <Badge variant="secondary" className="ml-2" data-testid="tag-filter-count">
               {selectedTags.length}
             </Badge>
           )}
@@ -613,7 +700,7 @@ const Dashboard: React.FC = () => {
 
       {/* タグフィルター */}
       {showTagFilter && (
-        <div id="tag-filter-panel" className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg mb-6" role="region" aria-label="タグフィルターパネル">
+        <div id="tag-filter-panel" className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg mb-6" role="region" aria-label="タグフィルターパネル" data-testid="tag-filter-panel">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium">タグで絞り込み</h3>
             <div className="flex items-center gap-2" role="radiogroup" aria-label="タグフィルターモード">
@@ -651,6 +738,7 @@ const Dashboard: React.FC = () => {
                   size="sm"
                   onClick={handleClearTagFilters}
                   className="text-gray-500 hover:text-gray-700"
+                  data-testid="clear-tag-filters"
                 >
                   <X className="h-4 w-4" />
                   クリア
@@ -703,7 +791,7 @@ const Dashboard: React.FC = () => {
         {viewMode === 'kanban' ? (
           <>
             {filteredTasksForList.length === 0 && searchQuery.trim() && (
-              <div className="text-center text-muted-foreground py-8" role="status" aria-live="polite">
+              <div className="text-center text-muted-foreground py-8" role="status" aria-live="polite" data-testid="no-results-message">
                 検索結果が見つかりません
               </div>
             )}
@@ -719,6 +807,7 @@ const Dashboard: React.FC = () => {
                 tagFilterMode,
                 pageType
               }}
+              data-testid="kanban-board"
             />
             {/* 設計書2.1: カンバンビューにアーカイブセクションを追加 */}
             <div className="mt-6">
@@ -738,9 +827,9 @@ const Dashboard: React.FC = () => {
                 検索結果が見つかりません
               </div>
             )}
-            <div className="space-y-4">
+            <div className="space-y-4" data-testid="task-list">
               {filteredTasksForList.map((task) => (
-                <Card key={task.id} variant="interactive" onClick={() => handleTaskClick(task)}>
+                <Card key={task.id} variant="interactive" onClick={() => handleTaskClick(task)} data-testid={`task-card-${task.id}`}>
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <CardTitle className="text-lg">{task.title}</CardTitle>
@@ -787,14 +876,15 @@ const Dashboard: React.FC = () => {
 
       {/* エラー表示 */}
       {error && (
-        <div className="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50" role="alert">
+        <div className="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50" role="alert" data-testid="error-notification">
           <div className="flex items-center justify-between">
-            <span>{error}</span>
+            <span data-testid="error-message">{error}</span>
             <Button
               variant="ghost"
               size="sm"
               onClick={clearError}
               className="ml-2 text-white hover:bg-red-600"
+              data-testid="error-close"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -807,6 +897,7 @@ const Dashboard: React.FC = () => {
         open={showCreateModal}
         onOpenChange={setShowCreateModal}
         onTaskCreate={handleTaskCreate}
+        data-testid="task-create-modal"
       />
 
       {/* タスク詳細モーダル */}
@@ -823,6 +914,7 @@ const Dashboard: React.FC = () => {
         onSubtaskAdd={handleSubtaskAdd}
         onSubtaskToggle={handleSubtaskToggle}
         onSubtaskDelete={handleSubtaskDelete}
+        data-testid="task-detail-modal"
       />
     </div>
   );

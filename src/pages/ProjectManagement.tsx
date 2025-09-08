@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Grid, List } from 'lucide-react';
 import { Project, ProjectWithFullDetails, CreateProjectInput, UpdateProjectInput, mapFromLegacyStatus, mapFromLegacyPriority } from '@/types/project';
 import { projectsAPI } from '@/lib/api/projects';
-import { ProjectSelector, ProjectCreateModal, ProjectSettings, ProjectCard } from '@/components/project';
+import { ProjectSelector, ProjectCreateModal, ProjectEditModal, ProjectDeleteConfirmModal, ProjectSettings, ProjectCard } from '@/components/project';
+import { useProjectStore } from '@/stores/projectStore';
 import { Button, Input } from '@/components/ui';
 
 /**
@@ -14,11 +15,19 @@ export const ProjectManagement: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState<ProjectWithFullDetails | undefined>(undefined);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [projectToEdit, setProjectToEdit] = useState<ProjectWithFullDetails | undefined>(undefined);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<ProjectWithFullDetails | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // プロジェクトストアから関連タスク数を取得する機能
+  const getProjectRelatedTaskCount = useProjectStore(state => state.getProjectRelatedTaskCount);
+  const deleteProject = useProjectStore(state => state.deleteProject);
 
   // プロジェクト一覧をAPIから読み込む
   const loadProjects = async () => {
@@ -126,7 +135,7 @@ export const ProjectManagement: React.FC = () => {
       console.log('Project created successfully:', newProject);
       
       // 成功通知を表示
-      setSuccessMessage(`プロジェクト「${newProject.name}」を作成しました`);
+      setSuccessMessage(`プロジェクト「${projectData.name}」を作成しました`);
       
       // サーバーからの最新データで更新
       await loadProjects();
@@ -148,9 +157,48 @@ export const ProjectManagement: React.FC = () => {
     }
   };
 
-  const handleUpdateProject = (id: string, updates: UpdateProjectInput) => {
-    console.log('Updating project:', id, updates);
-    // ここで実際のプロジェクト更新処理を行う
+  const handleUpdateProject = async (id: string, updates: UpdateProjectInput) => {
+    try {
+      console.log('Updating project:', id, updates);
+      
+      // 元のプロジェクト名を取得（通知用）
+      const originalProject = projects.find(p => p.id === id);
+      const projectName = updates.name || originalProject?.name || 'プロジェクト';
+      
+      // 楽観的更新: UIに即座に反映
+      const updatedProjects = projects.map(project => {
+        if (project.id === id) {
+          return { ...project, ...updates, updatedAt: new Date() };
+        }
+        return project;
+      });
+      setProjects(updatedProjects);
+      setFilteredProjects(searchQuery ? updatedProjects.filter(p => 
+        p.name.toLowerCase().includes(searchQuery.toLowerCase())
+      ) : updatedProjects);
+
+      // サーバーに更新を送信
+      const updatedProject = await projectsAPI.update(id, updates);
+      console.log('Project updated successfully:', updatedProject);
+      
+      // 成功通知を表示
+      setSuccessMessage(`プロジェクト「${projectName}」を更新しました`);
+      
+      // サーバーからの最新データで更新
+      await loadProjects();
+      
+      // 3秒後に成功メッセージを自動で消す
+      setTimeout(() => setSuccessMessage(null), 3000);
+      
+    } catch (err) {
+      console.error('Failed to update project:', err);
+      
+      // 楽観的更新をロールバック
+      await loadProjects();
+      
+      setError('プロジェクトの更新に失敗しました。');
+      throw err; // ProjectEditModalでキャッチするためにエラーを再スロー
+    }
   };
 
 
@@ -164,12 +212,39 @@ export const ProjectManagement: React.FC = () => {
     setShowSettings(true);
   };
 
+  const handleEditClick = (project: ProjectWithFullDetails) => {
+    setProjectToEdit(project);
+    setShowEditModal(true);
+  };
+
   const handleArchiveClick = (project: ProjectWithFullDetails) => {
     console.log('Archive project:', project);
   };
 
   const handleArchiveById = (id: string) => {
     console.log('Archive project by id:', id);
+  };
+
+  const handleDeleteClick = (project: ProjectWithFullDetails) => {
+    setProjectToDelete(project);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async (projectId: string) => {
+    try {
+      await deleteProject(projectId);
+      setSuccessMessage(`プロジェクト「${projectToDelete?.name}」を削除しました`);
+      
+      // 削除が成功した場合のみプロジェクト一覧を再読み込み
+      await loadProjects();
+      
+      // 3秒後に成功メッセージを自動で消す
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+      setError('プロジェクトの削除に失敗しました');
+      throw err; // モーダルでキャッチするために再スロー
+    }
   };
 
   return (
@@ -293,7 +368,9 @@ export const ProjectManagement: React.FC = () => {
                   project={project as Project}
                   onClick={() => handleProjectClick(project)}
                   onSettingsClick={() => handleSettingsClick(project)}
+                  onEditClick={() => handleEditClick(project)}
                   onArchiveClick={() => handleArchiveClick(project)}
+                  onDeleteClick={() => handleDeleteClick(project)}
                   showStats={true}
                 />
               ))}
@@ -306,7 +383,9 @@ export const ProjectManagement: React.FC = () => {
                   project={project as Project}
                   onClick={() => handleProjectClick(project)}
                   onSettingsClick={() => handleSettingsClick(project)}
+                  onEditClick={() => handleEditClick(project)}
                   onArchiveClick={() => handleArchiveClick(project)}
+                  onDeleteClick={() => handleDeleteClick(project)}
                   variant="compact"
                   showStats={true}
                 />
@@ -337,6 +416,27 @@ export const ProjectManagement: React.FC = () => {
         onOpenChange={setShowCreateModal}
         onCreateProject={handleCreateProject}
       />
+
+      {/* プロジェクト編集モーダル */}
+      {projectToEdit && (
+        <ProjectEditModal
+          open={showEditModal}
+          onOpenChange={setShowEditModal}
+          onUpdateProject={handleUpdateProject}
+          project={projectToEdit}
+        />
+      )}
+
+      {/* プロジェクト削除確認モーダル */}
+      {projectToDelete && (
+        <ProjectDeleteConfirmModal
+          open={showDeleteModal}
+          onOpenChange={setShowDeleteModal}
+          onConfirm={handleDeleteConfirm}
+          project={projectToDelete}
+          relatedTaskCount={getProjectRelatedTaskCount(projectToDelete.id)}
+        />
+      )}
 
       {/* プロジェクト設定 */}
       {selectedProject && showSettings && (

@@ -5,16 +5,62 @@
 
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
+import { Root as VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { TaskDetail } from '../../types/task';
 import { Tag } from '../../types/tag';
 import { Spinner } from '../ui/loading';
 
+// エラーバウンダリコンポーネント
+class LazyLoadErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('タスク詳細の読み込みに失敗しました:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div 
+          className="bg-white dark:bg-gray-800 rounded-lg shadow-lg flex items-center justify-center p-8"
+          style={{ width: 'min(95vw, 72rem)', height: '90vh', maxHeight: '90vh' }}
+          data-testid="task-detail-error"
+        >
+          <div className="text-center space-y-4">
+            <div className="text-red-500 text-2xl">⚠️</div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              読み込みエラー
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              タスク詳細の読み込み中にエラーが発生しました。
+            </p>
+            <button 
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              onClick={() => window.location.reload()}
+            >
+              ページを再読み込み
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 // レイジーローディング対応コンポーネント
-const LazyTaskDetailView = lazy(() => 
-  import('./TaskDetailView').then(module => ({ 
-    default: module.default 
-  }))
-);
+const LazyTaskDetailView = lazy(() => import('./TaskDetailView'));
 
 const LazyTaskDetailTabs = lazy(() => 
   import('./TaskDetailTabs').then(module => ({ 
@@ -88,7 +134,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   }
 
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()} data-testid="task-detail-modal-root">
       <Dialog.Portal>
         {/* オーバーレイ */}
         <Dialog.Overlay 
@@ -97,13 +143,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             console.log('Overlay clicked directly');
             onClose();
           }}
+          data-testid="task-detail-overlay"
         />
         
         {/* モーダルコンテンツ */}
         <Dialog.Content 
-          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-6xl h-[90vh] z-50 animate-in fade-in zoom-in-95 duration-200"
-          aria-labelledby="task-detail-title"
-          aria-describedby="task-detail-description"
+          className="fixed inset-0 flex items-center justify-center z-50 bg-transparent"
           onInteractOutside={(event) => {
             // クリックアウトサイドでモーダルを閉じる
             console.log('onInteractOutside triggered', event);
@@ -113,40 +158,58 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             // Escapeキーでのみ閉じる
             onClose();
           }}
+          data-testid="task-detail-content"
+          forceMount
         >
-          {/* アクセシビリティ用の隠しタイトル */}
-          <Dialog.Title id="task-detail-title" className="sr-only">
-            タスク詳細: {task.title}
-          </Dialog.Title>
-          <Dialog.Description id="task-detail-description" className="sr-only">
-            タスクの詳細情報を表示しています。Escキーで閉じられます。
-          </Dialog.Description>
+          {/* アクセシビリティ用の隠しタイトル/説明（Radix推奨のVisuallyHiddenで包む） */}
+          <VisuallyHidden>
+            <Dialog.Title>
+              タスク詳細: {task.title}
+            </Dialog.Title>
+          </VisuallyHidden>
+          <VisuallyHidden>
+            <Dialog.Description>
+              タスクの詳細情報を表示しています。Escキーで閉じられます。
+            </Dialog.Description>
+          </VisuallyHidden>
 
-          {/* Suspenseでレイジーローディングをラップ */}
-          <Suspense 
-            fallback={
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg h-full flex items-center justify-center">
-                <div className="text-center">
-                  <Spinner size="lg" />
-                  <p className="mt-4 text-sm text-gray-500">タスク詳細を読み込んでいます...</p>
+          {/* エラーバウンダリでラップされたSuspenseでレイジーローディング対応 */}
+          <LazyLoadErrorBoundary>
+            <Suspense 
+              fallback={
+                <div 
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-lg flex items-center justify-center"
+                  style={{ width: 'min(95vw, 72rem)', height: '90vh', maxHeight: '90vh' }}
+                  data-testid="task-detail-loading"
+                >
+                  <div className="text-center">
+                    <Spinner size="lg" />
+                    <p className="mt-4 text-sm text-gray-500">タスク詳細を読み込んでいます...</p>
+                  </div>
                 </div>
+              }
+            >
+              <div 
+                className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden"
+                style={{ width: 'min(95vw, 72rem)', height: '90vh', maxHeight: '90vh' }}
+              >
+                <LazyTaskDetailView
+                  task={task}
+                  editable={editable}
+                  onTaskUpdate={onTaskUpdate}
+                  onTaskDelete={onTaskDelete}
+                  onClose={onClose}
+                  availableTags={availableTags}
+                  onProjectClick={onProjectClick}
+                  onSubtaskAdd={onSubtaskAdd}
+                  onSubtaskToggle={onSubtaskToggle}
+                  onSubtaskDelete={onSubtaskDelete}
+                  enableA11y={true}
+                  data-testid="task-detail-view"
+                />
               </div>
-            }
-          >
-            <LazyTaskDetailView
-              task={task}
-              editable={editable}
-              onTaskUpdate={onTaskUpdate}
-              onTaskDelete={onTaskDelete}
-              onClose={onClose}
-              availableTags={availableTags}
-              onProjectClick={onProjectClick}
-              onSubtaskAdd={onSubtaskAdd}
-              onSubtaskToggle={onSubtaskToggle}
-              onSubtaskDelete={onSubtaskDelete}
-              enableA11y={true}
-            />
-          </Suspense>
+            </Suspense>
+          </LazyLoadErrorBoundary>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

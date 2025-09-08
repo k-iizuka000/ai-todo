@@ -9,7 +9,7 @@ import { useTagStore } from '@/stores/tagStore'
 import { ProjectSelector } from '@/components/project/ProjectSelector'
 import { useProjectStore } from '@/stores/projectStore'
 import { Project } from '@/types/project'
-import { Calendar, Clock } from 'lucide-react'
+import { Calendar, Clock, Loader2 } from 'lucide-react'
 import { createDateFromFormInput } from '../../utils/dateUtils'
 import { validateTaskForm, isValidationClean, type ValidationErrors, type TaskFormData } from '../../utils/validationUtils'
 import { validateSelectorInput } from '../../utils/selectorUtils'
@@ -33,7 +33,6 @@ const PRIORITY_OPTIONS: Array<{ value: Priority; label: string; color: string }>
   { value: 'urgent', label: '緊急', color: 'bg-priority-urgent' },
 ]
 
-
 export const TaskForm: React.FC<TaskFormProps> = ({
   initialData,
   onSubmit,
@@ -44,8 +43,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({
 }) => {
   // タグストアからタグデータを取得
   const { tags } = useTagStore()
-  // プロジェクトストアからプロジェクトデータを取得
-  const { getProjectById } = useProjectStore()
+  // プロジェクトストアからプロジェクトデータを取得（projects一覧も追加）
+  const { projects, getProjectById } = useProjectStore()
   // フォームデータ
   const [formData, setFormData] = useState<TaskFormData>({
     title: '',
@@ -80,9 +79,17 @@ export const TaskForm: React.FC<TaskFormProps> = ({
 
   // フォーム入力変更時のリアルタイムバリデーション
   useEffect(() => {
-    const isValid = formData.title.trim().length > 0 && Object.keys(errors).length === 0
-    setIsFormValid(isValid)
-  }, [formData, errors])
+    // タイトルが入力されている場合のみバリデーションを実行
+    if (formData.title.trim().length > 0) {
+      const newErrors = validateTaskForm(formData)
+      setErrors(newErrors)
+      setIsFormValid(Object.keys(newErrors).length === 0)
+    } else {
+      // タイトルが空の場合は、他のエラーをクリアし、フォームを無効にする
+      setErrors({})
+      setIsFormValid(false)
+    }
+  }, [formData])
 
   // バリデーション関数（セレクター検証を含む）
   const validateForm = useCallback((): boolean => {
@@ -146,14 +153,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       ...prev,
       [field]: value,
     }))
-    
-    // エラーをクリア
-    if (errors[field]) {
-      setErrors(prev => ({
-        ...prev,
-        [field]: undefined,
-      }))
-    }
   }
 
   // タグ変更処理
@@ -161,9 +160,8 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     handleFieldChange('tags', newTags)
   }, [handleFieldChange])
 
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="task-modal-content space-y-6">
       <h2 className="text-xl font-semibold mb-6">{title}</h2>
       
       {/* タイトル */}
@@ -171,6 +169,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         label="タイトル"
         required
         error={errors.title?.[0]}
+        className="task-modal-field"
       >
         <Input
           value={formData.title}
@@ -178,6 +177,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
           placeholder="タスクのタイトルを入力..."
           variant={errors.title ? 'error' : 'default'}
           maxLength={100}
+          className="task-form-input"
         />
       </FormField>
 
@@ -186,6 +186,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         label="説明"
         error={errors.description?.[0]}
         hint="詳細な説明を入力してください（任意）"
+        className="task-modal-field"
       >
         <div className="space-y-2">
           <Textarea
@@ -195,6 +196,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
             rows={4}
             variant={errors.description ? 'error' : 'default'}
             maxLength={1000}
+            className="task-form-textarea"
           />
         </div>
       </FormField>
@@ -229,6 +231,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         error={errors.projectId?.[0]}
       >
         <ProjectSelector
+          projects={projects}
           selectedProject={formData.projectId ? getProjectById(formData.projectId) : undefined}
           selectedProjectId={formData.projectId}
           onProjectSelect={(project: Project | null) => 
@@ -291,16 +294,17 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       <FormField
         label="タグ"
         error={errors.tags?.[0]}
-        hint="タグを選択または新規作成してください（最大10個）"
+        hint="登録済みのタグから選択してください（最大10個）"
       >
         <TagSelector
           selectedTags={formData.tags}
           availableTags={tags}
           maxTags={10}
-          allowCreate={true}
+          allowCreate={false}  // 新規作成を無効化
           onTagsChange={handleTagsChange}
           editing={true}
-          placeholder="タグを追加..."
+          mode="dropdown"
+          placeholder="タグを選択..."
           displayMode="auto"
           disabled={loading}
           error={!!errors.tags}
@@ -323,10 +327,16 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         </Button>
         <Button
           type="submit"
-          loading={loading}
           disabled={loading || !isFormValid}
         >
-          {submitLabel}
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              送信中...
+            </>
+          ) : (
+            submitLabel
+          )}
         </Button>
       </div>
     </form>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Search, Plus, MoreVertical, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/modal';
 import { TagList } from './TagList';
 import { TagCreateModal } from './TagCreateModal';
 import { TagEditModal } from './TagEditModal';
+import { TagDeleteConfirmModal } from './TagDeleteConfirmModal';
 import { getTagStats } from '@/mock/tags';
 import { useTagStore } from '@/stores/tagStore';
 import type { Tag, TagFilter } from '@/types/tag';
@@ -22,7 +23,7 @@ export interface TagManagerProps {
  */
 export const TagManager = React.memo<TagManagerProps>(({ className }) => {
   // ストアからタグデータを取得（エラーハンドリング対応）
-  const { tags, error, isLoading } = useTagStore();
+  const { tags, error, isLoading, deleteTag, initialize, getTagRelatedTaskCount } = useTagStore();
   // エラー時は空配列をフォールバックとして使用
   const safeTags = error ? [] : tags;
   
@@ -35,6 +36,13 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // 初期データ読み込み
+  useEffect(() => {
+    if (tags.length === 0 && !isLoading) {
+      initialize();
+    }
+  }, [tags.length, isLoading, initialize]);
 
   // フィルター設定をメモ化
   const filter = useMemo<TagFilter>(() => ({
@@ -84,14 +92,18 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
   }, []);
 
   // 削除確認ハンドラー
-  const handleConfirmDelete = useCallback(() => {
-    if (selectedTag) {
-      // TODO: タグストアから削除処理を実装
-      console.log('削除するタグ:', selectedTag.id);
+  const handleConfirmDelete = useCallback(async (tagId: string) => {
+    try {
+      await deleteTag(tagId);
+      console.log('削除完了:', tagId);
       setShowDeleteConfirm(false);
       setSelectedTag(null);
+    } catch (error) {
+      console.error('削除失敗:', error);
+      // エラーハンドリングはTagStore内で行われるため、UIリセットのみ
+      throw error; // モーダルに表示するためにエラーを再スロー
     }
-  }, [selectedTag]);
+  }, [deleteTag]);
 
   // ソート変更ハンドラー
   const handleSortChange = useCallback((newSortBy: typeof sortBy) => {
@@ -110,17 +122,45 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
   }, []);
 
   // 一括削除ハンドラー
-  const handleBulkDelete = useCallback(() => {
+  const handleBulkDelete = useCallback(async () => {
     if (selectedTags.length > 0) {
-      // TODO: 一括削除処理を実装
-      console.log('一括削除するタグ:', selectedTags);
-      setSelectedTags([]);
-      setShowBulkActions(false);
+      try {
+        // 複数のタグを並行削除
+        await Promise.all(selectedTags.map(tagId => deleteTag(tagId)));
+        console.log('一括削除完了:', selectedTags);
+        setSelectedTags([]);
+        setShowBulkActions(false);
+      } catch (error) {
+        console.error('一括削除エラー:', error);
+        // エラーハンドリングはTagStore内で行われるため、選択状態のリセットのみ
+        setSelectedTags([]);
+        setShowBulkActions(false);
+      }
     }
-  }, [selectedTags]);
+  }, [selectedTags, deleteTag]);
 
   return (
     <div className={`space-y-6 ${className}`}>
+      {/* エラー表示 */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-red-800 dark:text-red-200 flex items-center">
+              <span className="mr-2">⚠️</span>
+              {error}
+            </p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => initialize()}
+              disabled={isLoading}
+            >
+              再試行
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* ヘッダー部分 */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -298,7 +338,8 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
         onOpenChange={setShowCreateModal}
         onSuccess={(tagId) => {
           console.log('タグが作成されました:', tagId);
-          // TODO: 作成されたタグをリストに反映
+          // TagStoreが自動的にリストを更新するため、明示的な反映処理は不要
+          setShowCreateModal(false);
         }}
       />
 
@@ -309,49 +350,22 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
         tag={selectedTag}
         onSuccess={(tagId) => {
           console.log('タグが更新されました:', tagId);
-          // TODO: 更新されたタグをリストに反映
+          // TagStoreが自動的にリストを更新するため、明示的な反映処理は不要
+          setShowEditModal(false);
           setSelectedTag(null);
         }}
       />
 
       {/* 削除確認モーダル */}
-      <Modal
-        open={showDeleteConfirm}
-        onOpenChange={setShowDeleteConfirm}
-        title="タグの削除"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            タグ「{selectedTag?.name}」を削除しますか？
-          </p>
-          {selectedTag?.usageCount && selectedTag.usageCount > 0 && (
-            <div className="p-3 bg-orange-50 border border-orange-200 rounded">
-              <p className="text-sm text-orange-800">
-                ⚠️ このタグは {selectedTag.usageCount} 個のタスクで使用されています。
-                削除すると、これらのタスクからタグが除去されます。
-              </p>
-            </div>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setShowDeleteConfirm(false);
-                setSelectedTag(null);
-              }}
-            >
-              キャンセル
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleConfirmDelete}
-            >
-              削除
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {selectedTag && (
+        <TagDeleteConfirmModal
+          open={showDeleteConfirm}
+          onOpenChange={setShowDeleteConfirm}
+          onConfirm={handleConfirmDelete}
+          tag={selectedTag}
+          relatedTaskCount={getTagRelatedTaskCount(selectedTag.id)}
+        />
+      )}
     </div>
   );
 });

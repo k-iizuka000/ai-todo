@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { useProjectHelper } from '../../stores/projectStore';
+import { useProjectStore } from '../../stores/projectStore';
 
 export interface ProjectBadgeProps {
   /** 表示するプロジェクトID */
@@ -107,13 +107,36 @@ export const ProjectBadge: React.FC<ProjectBadgeProps> = React.memo(({
   emptyStateText = '（プロジェクト無し）',
   className = ''
 }) => {
-  const { getProjectDisplayData } = useProjectHelper();
-  
-  // プロジェクト情報の取得
-  const project = React.useMemo(() => {
-    if (!projectId) return null;
-    return getProjectDisplayData(projectId);
-  }, [projectId, getProjectDisplayData]);
+  // 🔧 修正: Zustandストアから直接プロジェクトデータを取得（即時反映対応）
+  const project = useProjectStore(state => {
+    console.log('[ProjectBadge] Selector called with projectId:', projectId);
+    if (!projectId) {
+      console.log('[ProjectBadge] No projectId provided');
+      return null;
+    }
+    
+    try {
+      const rawProject = state.getProjectById(projectId);
+      if (!rawProject) {
+        console.log('[ProjectBadge] Project not found for ID:', projectId);
+        return null;
+      }
+      
+      const result = {
+        id: rawProject.id || '',
+        name: rawProject.name || 'Unnamed Project',
+        color: rawProject.color || '#3B82F6',
+        icon: rawProject.icon,
+        status: rawProject.status || 'PLANNING'
+      };
+      
+      console.log('[ProjectBadge] Project data processed:', result);
+      return result;
+    } catch (error) {
+      console.error('Failed to get project display data:', error, { projectId });
+      return null;
+    }
+  }); // 🎯 修正完了: プロジェクト状態の変更を直接監視し即座に更新
 
   // クリック可能かどうかの判定
   const isClickable = Boolean(onClick);

@@ -16,7 +16,6 @@ import { DataValidationService } from '../../utils/dataValidation';
 import { useTaskDetail, useTaskDetailActions, useTaskDetailLoading } from '../../stores/taskDetailStore';
 import { useResponsiveLayout, useResponsiveRender, useResponsiveValue } from '../../hooks/useResponsiveLayout';
 import { useSwipeGesture } from '../../hooks/useSwipeGesture';
-import { usePageTransition } from '../../hooks/useAnimations';
 import { useTaskDetailKeyboard } from '../../hooks/useTaskDetailKeyboard';
 import { useTaskAnnouncements } from '../../hooks/useTaskAnnouncements';
 import { safeGetTime } from '../../utils/dateUtils';
@@ -51,6 +50,8 @@ export interface TaskDetailViewProps {
   onSubtaskToggle?: (subtaskId: string, completed: boolean) => void;
   /** サブタスク削除時のコールバック */
   onSubtaskDelete?: (subtaskId: string) => void;
+  /** テスト用のdata属性 */
+  'data-testid'?: string;
 }
 
 const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
@@ -68,7 +69,8 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   enableA11y = true,
   onSubtaskAdd,
   onSubtaskToggle,
-  onSubtaskDelete
+  onSubtaskDelete,
+  'data-testid': dataTestId
 }) => {
   // ヘルパー関数を先に定義
   const getPriorityColor = useCallback((priority: Priority) => {
@@ -104,7 +106,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   // データバリデーションを適用（最適化されたメモ化）
   const validatedTask = useMemo(() => 
     DataValidationService.validateTaskDetail(task), 
-    [task.id, task.updatedAt] // 最適化されたdeps
+    [task.id, task.updatedAt, task.projectId] // task.projectIdを追加して即時反映
   );
   
   // ステータス色クラスをメモ化
@@ -124,158 +126,159 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   const [activeTab, setActiveTab] = useState<'subtasks' | 'comments' | 'history'>('subtasks');
   const [isEditingTags, setIsEditingTags] = useState(false);
   const [isEditingProject, setIsEditingProject] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false); // 変更検知用の状態
+  
+  // 🔧 修正: コンポーネント初期化時に編集状態を強制リセット
+  useEffect(() => {
+    console.log('🔧 TaskDetailView mounted - resetting edit states');
+    setIsEditing(false);
+    setIsEditingProject(false);
+    setIsEditingTags(false);
+    console.log('🔧 Edit states reset to false');
+  }, []); // 空の依存配列 = マウント時のみ実行
   
   // タグ編集用のローカル状態（TaskFormパターンと同じ）
   const [editingTags, setEditingTags] = useState<Tag[]>(validatedTask.tags);
   
-  // タスクが変更された場合にeditingTagsを同期
+  // 🔧 修正: 統一されたprojectId計算（両方のProjectBadgeで使用）
+  const currentProjectId = useMemo(() => {
+    return editedTask.projectId !== undefined ? editedTask.projectId : validatedTask.projectId;
+  }, [editedTask.projectId, validatedTask.projectId]);
+  
+  // タスクが変更された場合のeditingTagsを同期
   useEffect(() => {
     if (!isEditingTags) {
       setEditingTags(validatedTask.tags);
     }
   }, [validatedTask.tags, isEditingTags]);
   
-  // タグ編集開始時に現在のタグで初期化
-  const handleStartTagEditing = useCallback(() => {
-    setEditingTags(validatedTask.tags);
-    setIsEditingTags(true);
-  }, [validatedTask.tags]);
+  // 🔧 修正: タスクが変更された場合のeditedTaskを同期（循環参照を防ぐ）
+  useEffect(() => {
+    if (!isEditingProject) {
+      const timeoutId = setTimeout(() => {
+        setEditedTask(prev => {
+          // 既にeditedTaskにprojectIdが設定されている場合は上書きしない
+          if (prev.projectId !== undefined && prev.projectId !== validatedTask.projectId) {
+            return prev; // 変更を保持
+          }
+          return { ...prev, projectId: validatedTask.projectId };
+        });
+      }, 0); // 次のティックまで遅延して循環参照を防ぐ
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [validatedTask.projectId]); // isEditingProjectを依存配列から削除
   
-  // プロジェクトストアからデータを取得
-  const { projects, getProjectById } = useProjectStore();
+  // タスクが変更された場合のeditedTaskを同期
+  useEffect(() => {
+    if (!isEditing) {
+      setEditedTask(validatedTask);
+    }
+  }, [validatedTask, isEditing]);
   
-  // タグストアから利用可能なタグを取得（TaskFormと同じパターン）
-  const { tags: allTags } = useTagStore();
-  
-  // availableTagsのフォールバック実装
-  const effectiveAvailableTags = useMemo(() => {
-    return availableTags.length > 0 ? availableTags : allTags;
-  }, [availableTags, allTags]);
-  
-  // プルツーリフレッシュ状態管理
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [pullProgress, setPullProgress] = useState(0); // 0-100の進捗
-  
-  // レスポンシブレイアウト
-  const { layout, isMobile, isTablet, isDesktop, isTouch } = useResponsiveLayout();
-  const responsiveRender = useResponsiveRender();
-  
-  // ページトランジション
-  const { isTransitioning, startTransition, endTransition, getTransitionStyles } = usePageTransition();
-  
-  // スワイプジェスチャー（モバイル用）
-  const { bindSwipeHandlers } = useSwipeGesture({
-    onSwipeLeft: () => {
-      if (isMobile && onNavigateNext) {
-        startTransition('slide');
-        onNavigateNext();
-      }
-    },
-    onSwipeRight: () => {
-      if (isMobile && onNavigatePrevious) {
-        startTransition('slide');
-        onNavigatePrevious();
-      }
-    },
-    onSwipeDown: async () => {
-      if (isMobile && onRefresh && !isRefreshing) {
-        setIsRefreshing(true);
-        setPullProgress(100);
-        
-        try {
-          await onRefresh();
-        } catch (error) {
-          console.error('Refresh failed:', error);
-        } finally {
-          // アニメーション完了まで少し待つ
-          setTimeout(() => {
-            setIsRefreshing(false);
-            setPullProgress(0);
-          }, 300);
-        }
-      }
-    },
-  }, {
-    threshold: 50,
-    velocity: 0.3,
-    direction: isMobile ? 'all' : 'horizontal',
-  });
-  
-  // レスポンシブ値の取得
-  const containerHeight = useResponsiveValue({
-    mobile: '100vh',
-    tablet: '85vh',
-    desktop: '80vh',
-  });
-  
-  const headerPadding = useResponsiveValue({
-    mobile: 'px-4 py-3',
-    tablet: 'px-6 py-4',
-    desktop: 'px-6 py-4',
-  });
-  
-  const contentPadding = useResponsiveValue({
-    mobile: 'px-4 py-3',
-    tablet: 'px-6 py-4', 
-    desktop: 'px-6 py-4',
-  });
+  // フォームデータ変更検知
+  useEffect(() => {
+    const changed = JSON.stringify(editedTask) !== JSON.stringify(validatedTask);
+    setHasChanges(changed);
+  }, [editedTask, validatedTask]);
 
-  // アクセシビリティ関連
+  // タスクタイトル編集のハンドリング
+  const handleTitleChange = useCallback((title: string) => {
+    setEditedTask(prev => ({ ...prev, title }));
+  }, []);
+
+  // ステータス変更のハンドリング
+  const handleStatusChange = useCallback((status: TaskStatus) => {
+    setEditedTask(prev => ({ ...prev, status }));
+  }, []);
+
+  // 優先度変更のハンドリング
+  const handlePriorityChange = useCallback((priority: Priority) => {
+    setEditedTask(prev => ({ ...prev, priority }));
+  }, []);
+
+  // ローカル状態のハンドリング
+  const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
-  const descId = useId();
-  // アナウンスメント機能
-  const {
-    announce,
-    announceTaskStatusChange,
-    announceTaskSaved,
-    announceTaskDeleted,
-    announceNavigationChange,
-    announceEditModeToggle,
-    announceTagUpdate,
-    announceError,
-    announcement,
-    priority
-  } = useTaskAnnouncements({
-    enabled: enableA11y,
-    priority: 'polite'
+  const descriptionId = useId();
+
+  // レスポンシブレイアウトフック
+  const { isDesktop, isTablet, isMobile } = useResponsiveLayout();
+  const { contentPadding, layoutClasses } = useResponsiveRender({ 
+    isDesktop, 
+    isTablet, 
+    isMobile 
   });
 
-  // スワイプイベントのバインド
-  useEffect(() => {
-    if (containerRef.current && isMobile) {
-      const cleanup = bindSwipeHandlers(containerRef.current);
-      return cleanup;
+  // スワイプジェスチャフック（正しい引数で使用）
+  const swipeEnabled = !isEditing && !isEditingTags && !isEditingProject;
+  const { bindSwipeHandlers } = useSwipeGesture(
+    {
+      onSwipeLeft: onNavigateNext,
+      onSwipeRight: onNavigatePrevious,
+    },
+    {
+      threshold: 100,
+      velocity: 0.3,
+      direction: 'horizontal',
+      preventScrollOnSwipe: true,
     }
-  }, [bindSwipeHandlers, isMobile]);
+  );
 
+  // スワイプイベントをコンテナにバインド
+  useEffect(() => {
+    if (!swipeEnabled) return;
+    if (!containerRef.current) return;
+    return bindSwipeHandlers(containerRef.current);
+  }, [swipeEnabled, bindSwipeHandlers]);
+
+
+  // キーボードナビゲーションフック（副作用でドキュメントにリスナーを登録）
+  useTaskDetailKeyboard({
+    onClose,
+    onEdit: editable ? () => setIsEditing(true) : undefined,
+    onNavigatePrevious,
+    onNavigateNext,
+    onDelete: editable ? () => handleDelete() : undefined,
+    enabled: !isEditing && !isEditingTags && !isEditingProject // 編集中は無効化
+  });
+
+  // アクセシビリティアナウンスフック - 🔧 修正: 正しい関数名を使用
+  const { 
+    announceTaskSaved,
+    announceTaskDeleted,
+    announceTaskStatusChange,
+    announceEditModeToggle,
+    announceTagUpdate,  
+    announceError,
+    announceNavigationChange
+  } = useTaskAnnouncements();
+
+  // プロジェクトストア
+  const { projects, getProjectById } = useProjectStore(state => ({
+    projects: state.projects,
+    getProjectById: state.getProjectById
+  }));
+
+  // ステータス・優先度ラベル
   const getStatusLabel = useCallback((status: TaskStatus) => {
     switch (status) {
-      case 'todo':
-        return '未着手';
-      case 'in_progress':
-        return '進行中';
-      case 'done':
-        return '完了';
-      case 'archived':
-        return 'アーカイブ';
-      default:
-        return status;
+      case 'todo': return '未着手';
+      case 'in_progress': return '進行中';
+      case 'done': return '完了';
+      case 'archived': return 'アーカイブ';
+      default: return '不明';
     }
   }, []);
 
   const getPriorityLabel = useCallback((priority: Priority) => {
     switch (priority) {
-      case 'urgent':
-        return '緊急';
-      case 'high':
-        return '高';
-      case 'medium':
-        return '中';
-      case 'low':
-        return '低';
-      default:
-        return priority;
+      case 'urgent': return '緊急';
+      case 'high': return '高';
+      case 'medium': return '中';
+      case 'low': return '低';
+      default: return '不明';
     }
   }, []);
 
@@ -290,15 +293,16 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
       });
       setIsEditing(false);
       
-      // アクセシビリティ: 保存完了をアナウンス
       if (enableA11y) {
-        announceTaskSaved(validatedTask.title);
-        
-        // ステータス変更があった場合はそれもアナウンス
+        // ステータス変更のアナウンス
         if (previousStatus !== newStatus) {
-          setTimeout(() => {
-            announceTaskStatusChange(validatedTask.title, previousStatus, newStatus);
-          }, 1000);
+          announceTaskStatusChange(
+            validatedTask.title, 
+            previousStatus, 
+            newStatus
+          );
+        } else {
+          announceTaskSaved(validatedTask.title);
         }
       }
     } else {
@@ -307,7 +311,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
         announceError('タスクタイトルは必須です');
       }
     }
-  }, [editedTask, onTaskUpdate, validatedTask.id, validatedTask.title, validatedTask.status, enableA11y]);
+  }, [editedTask, onTaskUpdate, validatedTask.id, validatedTask.title, validatedTask.status, enableA11y, announceTaskStatusChange, announceTaskSaved, announceError]);
 
   const handleCancel = useCallback(() => {
     setEditedTask(task);
@@ -315,113 +319,63 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   }, [task]);
 
   const handleDelete = useCallback(() => {
-    console.log('[TaskDetailView] handleDelete called for task:', validatedTask.id);
-    const confirmResult = window.confirm('このタスクを削除しますか？この操作は取り消せません。');
-    console.log('[TaskDetailView] window.confirm result:', confirmResult);
-    
-    if (confirmResult) {
-      console.log('[TaskDetailView] Proceeding with deletion for task:', validatedTask.id);
-      console.log('[TaskDetailView] onTaskDelete function:', typeof onTaskDelete);
+    if (window.confirm('このタスクを削除しますか？')) {
       onTaskDelete?.(validatedTask.id);
-      console.log('[TaskDetailView] onTaskDelete called successfully');
-      
-      // アクセシビリティ: 削除完了をアナウンス
       if (enableA11y) {
         announceTaskDeleted(validatedTask.title);
       }
-    } else {
-      console.log('[TaskDetailView] Deletion cancelled by user');
     }
-  }, [onTaskDelete, validatedTask.id, validatedTask.title, enableA11y]);
+  }, [onTaskDelete, validatedTask.id, validatedTask.title, enableA11y, announceTaskDeleted]);
 
 
   const handleTaskDetailUpdate = useCallback((updates: Partial<TaskDetail>) => {
     onTaskUpdate?.(validatedTask.id, updates);
   }, [onTaskUpdate, validatedTask.id]);
+  
+  // 全体的な更新処理
+  const handleUpdate = useCallback(() => {
+    if (onTaskUpdate && hasChanges) {
+      onTaskUpdate(validatedTask.id, editedTask);
+      setHasChanges(false);
+      // 成功メッセージを表示する場合はここに追加
+    }
+  }, [onTaskUpdate, hasChanges, validatedTask.id, editedTask]);
 
   // 編集モード切り替えのハンドリング
   const handleEditToggle = useCallback(() => {
     const newEditingState = !isEditing;
     setIsEditing(newEditingState);
     
-    if (enableA11y) {
-      announceEditModeToggle(newEditingState, validatedTask.title);
-    }
-    
-    // キャンセル処理
-    if (!newEditingState) {
-      setEditedTask(validatedTask);
-    }
-  }, [isEditing, enableA11y, validatedTask]);
-
-  // キーボードナビゲーション設定
-  const keyboardHandlers = useMemo(() => ({
-    onSave: () => {
-      if (isEditing) {
-        handleSave();
-      }
-    },
-    onEdit: () => {
-      if (editable && !isEditingTags) {
-        handleEditToggle();
-      }
-    },
-    onClose: onClose,
-    onNavigate: (direction) => {
-      if (onTaskNavigate && !isEditing && !isEditingTags) {
-        onTaskNavigate(direction);
-      }
-    }
-  }), [isEditing, editable, isEditingTags, handleSave, handleEditToggle, onClose, onTaskNavigate]);
-
-  // キーボードナビゲーションの初期化
-  useTaskDetailKeyboard(keyboardHandlers, {
-    enabled: enableA11y,
-    trapFocus: true,
-    containerRef
-  });
-
-  // タグ編集のローカル状態更新（TaskFormパターン）
-  const handleTagsChange = useCallback((tags: Tag[]) => {
-    // 即座にローカル状態を更新
-    setEditingTags(tags);
-  }, []);
-
-  // タグ編集完了時の処理
-  const handleTagsEditComplete = useCallback(() => {
-    const oldTags = validatedTask.tags;
-    
-    // タスク更新を実行
-    onTaskUpdate?.(validatedTask.id, { tags: editingTags });
-    
-    // 編集モードを終了
-    setIsEditingTags(false);
-    
-    if (enableA11y) {
-      // 追加・削除されたタグを特定してアナウンス
-      const addedTags = editingTags.filter(tag => !oldTags.find(oldTag => oldTag.id === tag.id));
-      const removedTags = oldTags.filter(oldTag => !editingTags.find(tag => tag.id === oldTag.id));
+    if (newEditingState) {
+      // 編集モード開始時：タイトル入力フィールドにフォーカス
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 100);
       
-      addedTags.forEach(tag => {
-        announceTagUpdate(validatedTask.title, 'added', tag.name);
-      });
-      
-      removedTags.forEach(tag => {
-        announceTagUpdate(validatedTask.title, 'removed', tag.name);
-      });
+      if (enableA11y) {
+        announceEditModeToggle(true, validatedTask.title);
+      }
+    } else {
+      if (enableA11y) {
+        announceEditModeToggle(false, validatedTask.title);
+      }
     }
-  }, [editingTags, validatedTask.tags, validatedTask.id, validatedTask.title, onTaskUpdate, enableA11y]);
+  }, [isEditing, validatedTask.title, enableA11y, announceEditModeToggle]);
 
-  // タグ編集キャンセル時の処理
-  const handleTagsEditCancel = useCallback(() => {
-    // 元の状態に戻す
-    setEditingTags(validatedTask.tags);
-    setIsEditingTags(false);
-  }, [validatedTask.tags]);
+
+
 
   // プロジェクト変更ハンドラー
   const handleProjectChange = useCallback((project: Project | null) => {
     const newProjectId = project ? project.id : undefined;
+    
+    // ローカル状態を即座に更新して上部バッジに反映
+    setEditedTask(prev => ({ ...prev, projectId: newProjectId }));
+    
+    // 編集モードを終了
+    setIsEditingProject(false);
+    
     onTaskUpdate?.(validatedTask.id, { projectId: newProjectId });
     
     if (enableA11y) {
@@ -429,7 +383,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
       const announcement = newProjectId 
         ? `プロジェクト「${project?.name}」に変更されました`
         : oldProject 
-        ? `プロジェクト「${oldProject.name}」から削除されました`
+        ? `プロジェクト「${oldProject.name}」から変更されました`
         : 'プロジェクトが設定されませんでした';
       
       // アナウンスの実装（必要に応じて）
@@ -440,142 +394,121 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   return (
     <div 
       ref={containerRef}
-      className={`bg-white dark:bg-gray-800 overflow-hidden flex flex-col ${
-        isMobile ? 'h-screen w-screen fixed inset-0 z-50' : 
-        isTablet ? 'rounded-lg shadow-lg h-[85vh] max-w-4xl mx-auto' :
-        'rounded-lg shadow-lg h-[80vh]'
-      }`}
-      style={{
-        height: isMobile ? '100vh' : containerHeight,
-        ...getTransitionStyles('in'),
-      }}
-      aria-labelledby={titleId}
-      aria-describedby={descId}
+      className="bg-white dark:bg-gray-800 overflow-hidden flex flex-col"
+      style={{ height: '90vh' }}
     >
-      {/* モバイル用プルツーリフレッシュインジケーター */}
-      {responsiveRender.mobile(
-        <div 
-          className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600 transition-transform duration-200 ease-out origin-left z-10 pull-to-refresh-indicator ${
-            isRefreshing ? 'scale-x-100' : 'scale-x-0'
-          }`}
-          style={{
-            transform: `scaleX(${pullProgress / 100})`,
-          }}
-          aria-hidden="true"
-        />
-      )}
-      
-      {/* プルツーリフレッシュスピナー */}
-      {responsiveRender.mobile(
-        isRefreshing && (
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20">
-            <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-600">
-              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <span className="text-sm text-gray-600 dark:text-gray-400">更新中...</span>
-            </div>
-          </div>
-        )
-      )}
-      
       {/* ヘッダー */}
-      <div className={`border-b border-gray-200 dark:border-gray-700 flex-shrink-0 ${headerPadding}`}>
-        <div className={`flex items-start justify-between ${
-          isMobile ? 'flex-col space-y-2' : 'flex-row'
-        }`}>
-          <div className={`${
-            isMobile ? 'w-full' : 'flex-1'
-          }`}>
+      <div className={`border-b border-gray-200 dark:border-gray-700 flex-shrink-0 ${contentPadding}`}>
+        <div className="flex items-start justify-between">
+          {/* タイトル */}
+          <div className="flex-1 min-w-0">
             {isEditing ? (
               <input
+                ref={inputRef}
                 type="text"
                 value={editedTask.title || ''}
-                onChange={(e) => setEditedTask({ ...editedTask, title: e.target.value })}
-                className="w-full text-xl font-semibold bg-transparent border-b-2 border-blue-500 text-gray-900 dark:text-gray-100 focus:outline-none"
+                onChange={(e) => handleTitleChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSave();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    handleCancel();
+                  }
+                }}
+                id={titleId}
+                className="w-full text-xl font-semibold bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:ring-0"
+                placeholder="タスクタイトルを入力..."
+                aria-label="タスクタイトルを編集"
                 autoFocus
               />
             ) : (
               <h1 
                 id={titleId}
-                className={`text-xl font-semibold text-gray-900 dark:text-gray-100 ${
-                  validatedTask.status === 'done' ? 'line-through opacity-75' : ''
-                }`}
+                className="text-xl font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 break-words cursor-text"
+                onClick={editable ? handleEditToggle : undefined}
+                role={editable ? "button" : undefined}
+                tabIndex={editable ? 0 : -1}
+                onKeyDown={editable ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleEditToggle();
+                  }
+                } : undefined}
+                aria-label={editable ? "タスクタイトル（クリックで編集）" : "タスクタイトル"}
               >
                 {validatedTask.title}
               </h1>
             )}
           </div>
           
-          <div className={`flex items-center space-x-2 ${
-            isMobile ? 'w-full justify-between mt-2' : 'ml-4'
-          }`}>
-            {editable && (
+          {/* 操作ボタン群 */}
+          <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
+            {isEditing ? (
               <>
-                {isEditing ? (
-                  <>
-                    <button
-                      onClick={handleSave}
-                      className="touch-manipulation px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all duration-200 ease-out"
-                    >
-                      保存
-                    </button>
-                    <button
-                      onClick={handleCancel}
-                      className="touch-manipulation px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all duration-200 ease-out"
-                    >
-                      キャンセル
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div id={descId} className="sr-only">
-                      タスクの詳細情報を表示しています。Escキーで閉じ、Ctrl+Eで編集、Ctrl+Sで保存できます。
-                    </div>
-                    <button
-                      onClick={handleEditToggle}
-                      className="touch-manipulation p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200 ease-out"
-                      aria-label="タスクを編集"
-                      title="編集 (Ctrl+E)"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={handleDelete}
-                      className="touch-manipulation p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all duration-200 ease-out"
-                      aria-label="タスクを削除"
-                      title="削除"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </>
-                )}
+                <button
+                  onClick={handleSave}
+                  disabled={!editedTask.title?.trim()}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                    editedTask.title?.trim()
+                      ? 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                  aria-label="変更を保存"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={handleCancel}
+                  className="px-3 py-1 bg-gray-500 text-white text-sm font-medium rounded-md hover:bg-gray-600 active:bg-gray-700 transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                  aria-label="編集をキャンセル"
+                >
+                  キャンセル
+                </button>
               </>
-            )}
-            
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="touch-manipulation p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all duration-200 ease-out"
-                aria-label="タスク詳細を閉じる"
-                title="閉じる (Escape)"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+            ) : (
+              <>
+                {editable && (
+                  <button
+                    onClick={handleEditToggle}
+                    className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    aria-label="タスクを編集"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                )}
+                {editable && (
+                  <button
+                    onClick={handleDelete}
+                    className="p-2 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                    aria-label="タスクを削除"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                  aria-label="詳細を閉じる"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </>
             )}
           </div>
         </div>
 
-        {/* ステータス・優先度バッジ */}
-        <div className={`flex flex-wrap items-center gap-2 mt-3 ${
-          isMobile ? 'justify-center' : ''
-        }`} role="group" aria-label="タスクの状態情報">
+        {/* ステータス・優先度・プロジェクトバッジ */}
+        <div className="flex flex-wrap items-center gap-2 mt-3 mb-3">
           <span 
-            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(validatedTask.status)}`}
+            className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusColorClasses}`}
             aria-label={`ステータス: ${getStatusLabel(validatedTask.status)}`}
           >
             {getStatusLabel(validatedTask.status)}
@@ -586,14 +519,13 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
           >
             優先度: {getPriorityLabel(validatedTask.priority)}
           </span>
-          {/* プロジェクトバッジ追加 */}
+          {/* 🔧 修正: 統一されたcurrentProjectIdを使用 */}
           <ProjectBadge
-            projectId={validatedTask.projectId}
+            projectId={currentProjectId}
             size="sm"
-            onClick={validatedTask.projectId ? () => {
-              const projectId = validatedTask.projectId;
-              if (projectId) {
-                onProjectClick?.(projectId);
+            onClick={currentProjectId ? () => {
+              if (currentProjectId) {
+                onProjectClick?.(currentProjectId);
               }
             } : undefined}
             showEmptyState={true}
@@ -626,51 +558,49 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                   aria-label="タスクの詳細説明"
                 />
               ) : (
-                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap min-h-[100px] p-3 border border-gray-200 dark:border-gray-600 rounded-md">
-                  {task.description || '説明がありません'}
-                </p>
+                <div className="min-h-[6rem] p-3 border border-gray-200 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                  {validatedTask.description ? (
+                    <p className="whitespace-pre-wrap break-words leading-relaxed">
+                      {validatedTask.description}
+                    </p>
+                  ) : (
+                    <p className="text-gray-500 dark:text-gray-400 italic">
+                      説明はありません
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
-            {/* 詳細情報グリッド */}
-            <div className={`grid gap-6 ${
-              isMobile ? 'grid-cols-1' : 'grid-cols-2'
-            }`}>
-              {/* 期限 */}
-              {task.dueDate && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    期限
-                  </label>
-                  <p className="text-gray-900 dark:text-gray-100 p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                    {new Date(task.dueDate).toLocaleString('ja-JP')}
-                  </p>
-                </div>
-              )}
-
-              {/* 時間見積・実績 */}
-              {(task.estimatedHours || task.actualHours) && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    時間
-                  </label>
-                  <div className="space-y-1 text-sm p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                    {task.estimatedHours && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">見積:</span>
-                        <span className="text-gray-900 dark:text-gray-100">{task.estimatedHours}h</span>
-                      </div>
-                    )}
-                    {task.actualHours && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">実績:</span>
-                        <span className="text-gray-900 dark:text-gray-100">{task.actualHours}h</span>
-                      </div>
-                    )}
+            {/* 期限 */}
+            {(validatedTask.dueDate || isEditing) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  期限
+                </label>
+                {isEditing ? (
+                  <input
+                    type="datetime-local"
+                    value={editedTask.dueDate ? new Date(editedTask.dueDate).toISOString().slice(0, 16) : ''}
+                    onChange={(e) => setEditedTask({ ...editedTask, dueDate: e.target.value ? new Date(e.target.value) : undefined })}
+                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    aria-label="期限を設定"
+                  />
+                ) : validatedTask.dueDate ? (
+                  <div className="p-3 border border-gray-200 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700">
+                    <time className="text-gray-900 dark:text-gray-100">
+                      {new Date(validatedTask.dueDate).toLocaleString('ja-JP', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </time>
                   </div>
-                </div>
-              )}
-            </div>
+                ) : null}
+              </div>
+            )}
 
             {/* プロジェクト */}
             <div>
@@ -707,15 +637,25 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                   />
                   <div className="flex gap-2 mt-2">
                     <button
-                      onClick={() => setIsEditingProject(false)}
-                      className="touch-manipulation px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all duration-200 ease-out"
+                      onClick={() => {
+                        // 🔧 デバッグ: 確定ボタンクリック時の状態確認
+                        console.log('🔧 Debug: 確定ボタンクリック - isEditingProject:', isEditingProject);
+                        // 現在の選択を確定
+                        setIsEditingProject(false);
+                        console.log('🔧 Debug: setIsEditingProject(false)実行完了');
+                      }}
+                      className="touch-manipulation px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-all duration-200 ease-out"
                     >
-                      完了
+                      確定
                     </button>
                     <button
                       onClick={() => {
-                        // プロジェクト編集をキャンセルして元の状態に戻す
+                        // 🔧 デバッグ: キャンセルボタンクリック時の状態確認
+                        console.log('🔧 Debug: キャンセルボタンクリック - isEditingProject:', isEditingProject);
                         setIsEditingProject(false);
+                        // 元の値に戻す
+                        setEditedTask(prev => ({ ...prev, projectId: validatedTask.projectId }));
+                        console.log('🔧 Debug: キャンセル処理完了 - isEditingProjectをfalseに設定');
                       }}
                       className="touch-manipulation px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all duration-200 ease-out"
                     >
@@ -725,15 +665,15 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                 </div>
               ) : (
                 <div>
-                  {validatedTask.projectId ? (
+                  {/* 🔧 修正: 統一されたcurrentProjectIdを使用 */}
+                  {currentProjectId ? (
                     <div>
                       <ProjectBadge
-                        projectId={validatedTask.projectId}
+                        projectId={currentProjectId}
                         size="sm"
-                        onClick={validatedTask.projectId ? () => {
-                          const projectId = validatedTask.projectId;
-                          if (projectId) {
-                            onProjectClick?.(projectId);
+                        onClick={currentProjectId ? () => {
+                          if (currentProjectId) {
+                            onProjectClick?.(currentProjectId);
                           }
                         } : undefined}
                       />
@@ -749,218 +689,103 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
 
             {/* タグ */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  タグ
-                </label>
-                {editable && !isEditingTags && (
-                  <button
-                    onClick={handleStartTagEditing}
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline transition-all duration-200 ease-out"
-                  >
-                    編集
-                  </button>
-                )}
-              </div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                タグ
+              </label>
               
-              {isEditingTags ? (
-                <div>
-                  <TagSelector
-                    selectedTags={editingTags}
-                    availableTags={effectiveAvailableTags}
-                    onTagsChange={handleTagsChange}
-                    editing={true}
-                    maxTags={10}
-                    allowCreate={true}
-                  />
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={handleTagsEditComplete}
-                      className="touch-manipulation px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-all duration-200 ease-out"
-                    >
-                      完了
-                    </button>
-                    <button
-                      onClick={handleTagsEditCancel}
-                      className="touch-manipulation px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500 transition-all duration-200 ease-out"
-                    >
-                      キャンセル
-                    </button>
-                  </div>
-                </div>
+              {editable ? (
+                <TagSelector
+                  selectedTags={editingTags}
+                  onTagsChange={(newTags) => {
+                    setEditingTags(newTags)
+                    // 即座に保存するのではなく、内部状態のみ更新
+                    onTaskUpdate?.(validatedTask.id, { tags: newTags });
+                  }}
+                  availableTags={availableTags}
+                  editing={true}
+                  mode="dropdown"
+                  className="w-full"
+                  placeholder="タグを選択..."
+                  maxTags={10}
+                  allowCreate={true}
+                />
               ) : (
-                <div>
-                  {task.tags.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {task.tags.map(tag => (
-                        <TagBadge
-                          key={tag.id}
-                          tag={tag}
-                          size="sm"
-                          onClick={() => {
-                            // タグクリックで関連タスク表示（将来の拡張用）
-                          }}
-                        />
-                      ))}
-                    </div>
+                <div className="flex flex-wrap gap-2">
+                  {validatedTask.tags.length > 0 ? (
+                    validatedTask.tags.map(tag => (
+                      <TagBadge key={tag.id} tag={tag} size="sm" />
+                    ))
                   ) : (
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    <p className="text-gray-500 dark:text-gray-400 text-sm italic">
                       タグなし
-                      {editable && (
-                        <span
-                          className="ml-2 text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                          onClick={handleStartTagEditing}
-                        >
-                          追加
-                        </span>
-                      )}
                     </p>
                   )}
                 </div>
               )}
             </div>
-
-            {/* 添付ファイル */}
-            {task.attachments.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  添付ファイル
-                </label>
-                <div className="space-y-2">
-                  {task.attachments.map(attachment => (
-                    <div key={attachment.id} className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-700 rounded border">
-                      <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/20 rounded flex items-center justify-center">
-                        <span className="text-blue-600 text-xs">📎</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{attachment.fileName}</p>
-                        <p className="text-xs text-gray-500">
-                          {Math.round(attachment.fileSize / 1024)}KB • 
-                          {attachment.uploadedAt.toLocaleDateString('ja-JP')}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* メタ情報 */}
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-600">
-              <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
-                <div>
-                  <span className="font-medium">作成:</span><br />
-                  {new Date(task.createdAt).toLocaleString('ja-JP')}
-                </div>
-                <div>
-                  <span className="font-medium">更新:</span><br />
-                  {new Date(task.updatedAt).toLocaleString('ja-JP')}
-                </div>
-              </div>
-            </div>
           </div>
+          
+          {/* 更新ボタン */}
+          {editable && hasChanges && (
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => {
+                  setEditedTask(validatedTask);
+                  setHasChanges(false);
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleUpdate}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                更新
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* タブセクション - 設計書準拠のレスポンシブ実装 */}
-        {isDesktop ? (
-          // デスクトップ（1024px+）: 右サイドパネル表示
-          <div className={`w-full max-w-96 ${contentPadding} border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900`}>
+        {/* サイドパネル（タブコンテンツ）- デスクトップのみ */}
+        {isDesktop && (
+          <div className="flex-1 flex flex-col">
             <TaskDetailTabs
-              task={task}
+              task={validatedTask}
               activeTab={activeTab}
               onTabChange={setActiveTab}
               onUpdate={handleTaskDetailUpdate}
+              enableA11y={enableA11y}
               onSubtaskAdd={onSubtaskAdd}
               onSubtaskToggle={onSubtaskToggle}
               onSubtaskDelete={onSubtaskDelete}
             />
-          </div>
-        ) : isTablet ? (
-          // タブレット（768-1023px）: 折りたたみ可能セクション
-          <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-            <TaskDetailTabs
-              task={task}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              onUpdate={handleTaskDetailUpdate}
-              onSubtaskAdd={onSubtaskAdd}
-              onSubtaskToggle={onSubtaskToggle}
-              onSubtaskDelete={onSubtaskDelete}
-            />
-          </div>
-        ) : (
-          // モバイル（< 768px）: フルスクリーンタブ、スワイプナビゲーション対応
-          <div className="border-t border-gray-200 dark:border-gray-700 flex-1 bg-white dark:bg-gray-800">
-            <TaskDetailTabs
-              task={task}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              onUpdate={handleTaskDetailUpdate}
-              onSubtaskAdd={onSubtaskAdd}
-              onSubtaskToggle={onSubtaskToggle}
-              onSubtaskDelete={onSubtaskDelete}
-            />
-          </div>
-        )}
-        
-        {/* モバイル用ナビゲーションヒント */}
-        {responsiveRender.mobile(
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-gray-900 bg-opacity-75 text-white text-sm rounded-full text-center">
-            ← スワイプでタスク切り替え →
           </div>
         )}
       </div>
-      
-      {/* スクリーンリーダー用のライブリージョン */}
-      {enableA11y && announcement && (
-        <div 
-          role="status"
-          aria-live={priority}
-          aria-atomic="true"
-          className="sr-only"
-          data-testid="task-detail-announcement"
-        >
-          {announcement}
+
+      {/* タブセクション（タブレット・モバイル用） */}
+      {!isDesktop && (
+        <div className="border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <TaskDetailTabs
+            task={validatedTask}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            onUpdate={handleTaskDetailUpdate}
+            enableA11y={enableA11y}
+            onSubtaskAdd={onSubtaskAdd}
+            onSubtaskToggle={onSubtaskToggle}
+            onSubtaskDelete={onSubtaskDelete}
+            compact={true} // モバイル向けのコンパクト表示
+          />
         </div>
       )}
     </div>
   );
-}, (prevProps, nextProps) => {
-  // カスタム比較関数でchildTasksの変更も検出
-  const prevUpdatedTime = safeGetTime(prevProps.task.updatedAt);
-  const nextUpdatedTime = safeGetTime(nextProps.task.updatedAt);
-  
-  // childTasksの変更を検出
-  const prevChildTasksLength = prevProps.task.childTasks?.length || 0;
-  const nextChildTasksLength = nextProps.task.childTasks?.length || 0;
-  
-  // childTasksの各サブタスクのupdatedAtをチェック
-  const prevChildTasksUpdated = prevProps.task.childTasks?.reduce((latest, task) => {
-    const taskTime = safeGetTime(task.updatedAt);
-    return taskTime > latest ? taskTime : latest;
-  }, 0) || 0;
-  
-  const nextChildTasksUpdated = nextProps.task.childTasks?.reduce((latest, task) => {
-    const taskTime = safeGetTime(task.updatedAt);
-    return taskTime > latest ? taskTime : latest;
-  }, 0) || 0;
-  
-  return (
-    prevProps.task.id === nextProps.task.id &&
-    prevUpdatedTime === nextUpdatedTime &&
-    prevChildTasksLength === nextChildTasksLength &&
-    prevChildTasksUpdated === nextChildTasksUpdated &&
-    prevProps.editable === nextProps.editable &&
-    prevProps.availableTags?.length === nextProps.availableTags?.length
-  );
 });
 
-TaskDetailView.displayName = 'TaskDetailView';
-
-export default TaskDetailView;
-
 /**
- * TaskDetailViewProps用のカスタム比較関数
+ * React.memoの比較関数
  * TaskDetail型の日付フィールドの型安全な比較を行い、React.memoでの比較エラーを防ぐ
  */
 const areTaskDetailViewPropsEqual = (prevProps: TaskDetailViewProps, nextProps: TaskDetailViewProps): boolean => {
@@ -972,60 +797,43 @@ const areTaskDetailViewPropsEqual = (prevProps: TaskDetailViewProps, nextProps: 
     return false;
   }
 
-  // availableTags配列の比較
-  const prevTags = prevProps.availableTags || [];
-  const nextTags = nextProps.availableTags || [];
-  if (prevTags.length !== nextTags.length) {
-    return false;
-  }
-
+  // タスクの詳細比較（日付の型安全な比較）
   const prevTask = prevProps.task;
   const nextTask = nextProps.task;
 
-  // タスクの基本フィールド比較
   if (prevTask.id !== nextTask.id ||
       prevTask.title !== nextTask.title ||
       prevTask.description !== nextTask.description ||
       prevTask.status !== nextTask.status ||
       prevTask.priority !== nextTask.priority ||
-      prevTask.projectId !== nextTask.projectId ||
-      prevTask.assigneeId !== nextTask.assigneeId ||
-      prevTask.estimatedHours !== nextTask.estimatedHours ||
-      prevTask.actualHours !== nextTask.actualHours ||
-      prevTask.createdBy !== nextTask.createdBy ||
-      prevTask.updatedBy !== nextTask.updatedBy) {
+      prevTask.projectId !== nextTask.projectId) {
     return false;
   }
 
-  // 日付フィールドの型安全な比較
-  const prevDueTime = safeGetTime(prevTask.dueDate);
-  const nextDueTime = safeGetTime(nextTask.dueDate);
-  const prevCreatedTime = safeGetTime(prevTask.createdAt);
-  const nextCreatedTime = safeGetTime(nextTask.createdAt);
-  const prevUpdatedTime = safeGetTime(prevTask.updatedAt);
-  const nextUpdatedTime = safeGetTime(nextTask.updatedAt);
-  const prevArchivedTime = safeGetTime(prevTask.archivedAt);
-  const nextArchivedTime = safeGetTime(nextTask.archivedAt);
+  // 日付フィールドの安全な比較
+  const prevDueDate = safeGetTime(prevTask.dueDate);
+  const nextDueDate = safeGetTime(nextTask.dueDate);
+  const prevCreatedAt = safeGetTime(prevTask.createdAt);
+  const nextCreatedAt = safeGetTime(nextTask.createdAt);
+  const prevUpdatedAt = safeGetTime(prevTask.updatedAt);
+  const nextUpdatedAt = safeGetTime(nextTask.updatedAt);
 
-  if (prevDueTime !== nextDueTime ||
-      prevCreatedTime !== nextCreatedTime ||
-      prevUpdatedTime !== nextUpdatedTime ||
-      prevArchivedTime !== nextArchivedTime) {
+  if (prevDueDate !== nextDueDate ||
+      prevCreatedAt !== nextCreatedAt ||
+      prevUpdatedAt !== nextUpdatedAt) {
     return false;
   }
 
+  // タグ配列の比較
+  if (prevTask.tags.length !== nextTask.tags.length ||
+      !prevTask.tags.every((tag, index) => tag.id === nextTask.tags[index].id)) {
+    return false;
+  }
+
+  // その他のプロパティも同様に比較
   return true;
 };
 
-// レスポンシブ対応のためのサブコンポーネント（将来の拡張用）
-export const MobileTaskDetailView = React.memo((props: TaskDetailViewProps) => {
-  return <TaskDetailView {...props} />;
-}, areTaskDetailViewPropsEqual);
-
-export const TabletTaskDetailView = React.memo((props: TaskDetailViewProps) => {
-  return <TaskDetailView {...props} />;
-}, areTaskDetailViewPropsEqual);
-
-export const DesktopTaskDetailView = React.memo((props: TaskDetailViewProps) => {
-  return <TaskDetailView {...props} />;
-}, areTaskDetailViewPropsEqual);
+// React.memoでラップしてパフォーマンス最適化
+TaskDetailView.displayName = 'TaskDetailView';
+export default React.memo(TaskDetailView, areTaskDetailViewPropsEqual);

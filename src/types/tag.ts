@@ -17,6 +17,13 @@ export type UpdateTagInput = Partial<CreateTagInput>;
 export type TagWithoutDates = Omit<Tag, 'createdAt' | 'updatedAt'>;
 export type RequiredTag = Required<Tag>;
 
+// タグとタスク数の統計情報を含む型
+export interface TagWithTaskCount extends Tag {
+  taskCount: number;          // 関連タスク数
+  completedTaskCount?: number; // 完了済みタスク数
+  activeTaskCount?: number;   // アクティブタスク数
+}
+
 export interface TagFilter {
   search?: string;
   sortBy?: 'name' | 'usageCount' | 'createdAt';

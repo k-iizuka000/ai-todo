@@ -467,13 +467,14 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   }, [allTasks, tasksByStatus, moveTask]);
 
   return (
-    <div className={`h-full ${className}`}>
+    <div className={`h-full ${className}`} data-testid="kanban-board">
       <DndContext
         sensors={sensors}
         collisionDetection={rectIntersection}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        data-testid="kanban-dnd-context"
       >
         <SortableContext items={allTaskIds} strategy={verticalListSortingStrategy}>
           {/* カンバンボード */}
@@ -483,7 +484,7 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
               ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' 
               : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-4'
             }
-          `}>
+          `} data-testid="kanban-columns-container">
             {COLUMN_ORDER.map((status) => {
               const handleAddTask = onAddTask ? () => onAddTask(status) : undefined;
               
@@ -497,6 +498,7 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
                   onAddTask={handleAddTask}
                   onToggleTaskCollapse={handleToggleTaskCollapse}
                   onSubtaskToggle={handleSubtaskToggle}
+                  data-testid={`kanban-column-${status}`}
                   onTagClick={onTagClick}
                   onProjectClick={onProjectClick}
                   compact={compact}

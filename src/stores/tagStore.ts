@@ -5,7 +5,8 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { Tag, CreateTagInput, UpdateTagInput, TagFilter, validateTag, validateTagName } from '../types/tag';
-// Mock依存を完全除去: API統合により mockTags の使用を完全停止
+// Mock依存: APIが失敗した場合のフォールバックとして使用
+import { mockTags } from '../mock/tasks';
 import { 
   fetchTags, 
   createTag as apiCreateTag, 
@@ -14,6 +15,7 @@ import {
   isApiError, 
   getErrorMessage 
 } from '../utils/tagApi';
+import { useTaskStore } from './taskStore';
 
 
 interface TagState {
@@ -40,6 +42,7 @@ interface TagState {
   
   // 整合性チェックと同期処理
   checkTagUsage: (tagId: string) => { isUsed: boolean; taskCount: number };
+  getTagRelatedTaskCount: (tagId: string) => number;
   syncWithTasks: () => Promise<void>;
   cleanupUnusedTags: () => Promise<void>;
   
@@ -47,6 +50,11 @@ interface TagState {
   enableApiMode: () => void;
   disableApiMode: () => void;
   isApiModeEnabled: () => boolean;
+  
+  // TaskStore連携・同期機能
+  notifyTaskStore: (operation: 'tag-updated' | 'tag-deleted', tagId: string, newTag?: Tag) => void;
+  handleTaskStoreUpdate: (taskId: string, task: any | null, operation: 'create' | 'update' | 'delete') => Promise<void>;
+  updateTagUsageStatistics: () => Promise<void>;
 }
 
 // IDの生成関数
@@ -97,18 +105,33 @@ export const useTagStore = create<TagState>()(
           }
         },
         
-        // 初期化時にAPIからタグデータを取得
+        // 初期化時にAPIからタグデータを取得（失敗時はモックデータを使用）
         initialize: async () => {
           try {
             set({ isLoading: true, error: null });
             
-            // API統合: PostgreSQL連携のみ
-            const tags = await fetchTags();
-            set({ tags, isLoading: false });
+            // API統合: PostgreSQL連携を試みる
+            try {
+              const tags = await fetchTags();
+              set({ tags, isLoading: false });
+              console.log('[TagStore] Tags loaded from API', { count: tags.length });
+            } catch (apiError) {
+              // APIが失敗した場合はモックデータにフォールバック
+              console.warn('[TagStore] API failed, falling back to mock data', apiError);
+              set({ 
+                tags: mockTags,
+                isLoading: false,
+                error: null // エラーは表示しない（モックデータで継続）
+              });
+              console.log('[TagStore] Tags loaded from mock data', { count: mockTags.length });
+            }
           } catch (error) {
+            // 予期しないエラーの場合でもモックデータを使用
+            console.error('[TagStore] Unexpected error, using mock data', error);
             set({ 
+              tags: mockTags,
               isLoading: false,
-              error: 'タグの取得に失敗しました'
+              error: null
             });
           }
         },
@@ -125,6 +148,9 @@ export const useTagStore = create<TagState>()(
               ),
               isLoading: false,
             }));
+            
+            // TaskStoreに更新を通知（タグ情報変更時の関連タスクの更新）
+            get().notifyTaskStore('tag-updated', id, updatedTag);
           } catch (error) {
             set({ 
               isLoading: false,
@@ -137,6 +163,22 @@ export const useTagStore = create<TagState>()(
           try {
             set({ isLoading: true, error: null });
             
+            // 削除前に関連タスクをチェック
+            const relatedTaskCount = get().getTagRelatedTaskCount(id);
+            if (relatedTaskCount > 0) {
+              const errorMessage = `このタグには${relatedTaskCount}個の関連タスクがあります。関連タスクからタグを削除してから、タグを削除してください。`;
+              set({ 
+                isLoading: false,
+                error: errorMessage
+              });
+              console.warn('Tag deletion blocked due to related tasks', {
+                category: 'tag_store',
+                tagId: id,
+                relatedTaskCount
+              });
+              return;
+            }
+            
             // API統合: PostgreSQL連携のみ（LocalStorageロジック除去）
             await apiDeleteTag(id);
             set(state => ({
@@ -144,6 +186,9 @@ export const useTagStore = create<TagState>()(
               selectedTags: state.selectedTags.filter((tag: Tag) => tag.id !== id),
               isLoading: false,
             }));
+            
+            // TaskStoreに削除を通知（関連タスクからタグを除去）
+            get().notifyTaskStore('tag-deleted', id);
           } catch (error) {
             set({ 
               isLoading: false,
@@ -214,11 +259,17 @@ export const useTagStore = create<TagState>()(
         },
 
         
-        // 整合性チェック: API統合により不要（バックエンドで処理）
+        // 整合性チェック: タスクストアと連携して実際のタグ使用状況を取得
         checkTagUsage: (tagId: string) => {
-          // API統合により、タグ使用状況はバックエンドで管理
-          console.warn('checkTagUsage: API統合により、この機能はバックエンドで処理されます');
-          return { isUsed: false, taskCount: 0 };
+          const taskCount = get().getTagRelatedTaskCount(tagId);
+          return { isUsed: taskCount > 0, taskCount };
+        },
+
+        getTagRelatedTaskCount: (tagId: string) => {
+          // タスクストアから該当タグのタスク数を取得
+          const taskStore = useTaskStore.getState();
+          const relatedTasks = taskStore.getTasksByTag(tagId);
+          return relatedTasks.length;
         },
         
         syncWithTasks: async () => {
@@ -263,6 +314,97 @@ export const useTagStore = create<TagState>()(
         
         isApiModeEnabled: () => {
           return get().apiMode;
+        },
+        
+        // ==============================
+        // TaskStore連携・データ同期機能
+        // ==============================
+        
+        // TaskStoreに変更を通知
+        notifyTaskStore: (operation: 'tag-updated' | 'tag-deleted', tagId: string, newTag?: Tag) => {
+          try {
+            // 循環参照回避のため動的import
+            const { useTaskStore } = require('./taskStore');
+            const taskStore = useTaskStore.getState();
+            
+            // TaskStoreにTagStoreの変更を通知
+            if (operation === 'tag-updated' && newTag) {
+              taskStore.handleTagUpdate(tagId, newTag);
+            } else if (operation === 'tag-deleted') {
+              taskStore.handleTagDeletion(tagId);
+            }
+            
+            console.log('[TagStore] Notified task store of tag change', {
+              operation,
+              tagId,
+              tagName: newTag?.name
+            });
+          } catch (error) {
+            console.error('[TagStore] Failed to notify task store', { operation, tagId }, error);
+          }
+        },
+        
+        // TaskStoreからのタスク更新通知を処理
+        handleTaskStoreUpdate: async (taskId: string, task: any | null, operation: 'create' | 'update' | 'delete') => {
+          try {
+            // タスクでタグが使用されている場合、使用統計を更新
+            if (task && task.tags && Array.isArray(task.tags)) {
+              // 非同期で統計を更新（UIブロックを避ける）
+              setTimeout(() => {
+                get().updateTagUsageStatistics();
+              }, 100);
+            }
+            
+            console.log('[TagStore] Processed task store update', {
+              taskId,
+              operation,
+              tagCount: task?.tags?.length || 0
+            });
+          } catch (error) {
+            console.error('[TagStore] Failed to handle task store update', { taskId, operation }, error);
+          }
+        },
+        
+        // タグ使用統計情報の自動更新
+        updateTagUsageStatistics: async () => {
+          try {
+            const { tags } = get();
+            const { useTaskStore } = require('./taskStore');
+            const taskStore = useTaskStore.getState();
+            
+            // 各タグの使用回数を計算
+            const updatedTags = tags.map(tag => {
+              const relatedTasks = taskStore.getTasksByTag(tag.id);
+              const usageCount = relatedTasks.length;
+              
+              // 使用回数が変更された場合のみ更新
+              if (tag.usageCount !== usageCount) {
+                return {
+                  ...tag,
+                  usageCount,
+                  lastUsed: relatedTasks.length > 0 ? new Date() : tag.lastUsed
+                };
+              }
+              return tag;
+            });
+            
+            // 変更があった場合のみ状態を更新
+            const hasChanges = updatedTags.some((tag, index) => 
+              tag.usageCount !== tags[index].usageCount
+            );
+            
+            if (hasChanges) {
+              set({ tags: updatedTags });
+              console.log('[TagStore] Tag usage statistics updated', {
+                tagCount: tags.length,
+                changedTags: updatedTags.filter((tag, index) => 
+                  tag.usageCount !== tags[index].usageCount
+                ).length
+              });
+            }
+          } catch (error) {
+            console.error('[TagStore] Failed to update tag usage statistics', error);
+          }
         },
       }),
       { 

@@ -38,6 +38,42 @@ let mockTasks: any[] = [
     description: 'This is a sample task',
     status: 'todo',
     priority: 'medium',
+    projectId: 'project-1',
+    assigneeId: null,
+    tags: [],
+    subtasks: [],
+    dueDate: null,
+    estimatedHours: null,
+    actualHours: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: 'mock-user',
+    updatedBy: 'mock-user'
+  },
+  {
+    id: '2',
+    title: 'プロジェクト連携テストタスク',
+    description: 'プロジェクトとの連携をテストするためのタスク',
+    status: 'todo',
+    priority: 'medium',
+    projectId: 'project-1',
+    assigneeId: null,
+    tags: [],
+    subtasks: [],
+    dueDate: null,
+    estimatedHours: null,
+    actualHours: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: 'mock-user',
+    updatedBy: 'mock-user'
+  },
+  {
+    id: '3',
+    title: '修正後テストタスク',
+    description: '修正が正常に動作するかテストするタスク',
+    status: 'todo',
+    priority: 'medium',
     projectId: null,
     assigneeId: null,
     tags: [],
@@ -135,7 +171,7 @@ app.delete('/api/v1/tasks/:id', (req, res) => {
 // モックプロジェクトデータ
 let mockProjects: any[] = [
   {
-    id: '1',
+    id: 'project-1',
     name: 'Sample Project',
     description: 'This is a sample project for testing',
     status: 'ACTIVE',
@@ -302,6 +338,161 @@ app.delete('/api/v1/projects/:id', (req, res) => {
   res.json({
     success: true,
     message: 'Project deleted successfully',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// モックタグデータ
+let mockTags: any[] = [
+  {
+    id: '1',
+    name: 'Urgent',
+    color: '#ff4757',
+    description: 'High priority tasks',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: 'mock-user',
+    updatedBy: 'mock-user'
+  },
+  {
+    id: '2',
+    name: 'Development',
+    color: '#3742fa',
+    description: 'Development related tasks',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: 'mock-user',
+    updatedBy: 'mock-user'
+  }
+];
+
+// タグAPIエンドポイント
+app.get('/api/v1/tags', (_req, res) => {
+  console.log('GET /api/v1/tags - Returning tags:', mockTags.length);
+  res.json({
+    success: true,
+    message: 'Tags retrieved successfully',
+    data: mockTags,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/v1/tags/:id', (req, res) => {
+  const { id } = req.params;
+  const tag = mockTags.find(t => t.id === id);
+  
+  if (!tag) {
+    return res.status(404).json({
+      success: false,
+      message: 'Tag not found',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'Tag retrieved successfully',
+    data: tag,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.post('/api/v1/tags', (req, res) => {
+  if (!req.body.name) {
+    return res.status(400).json({
+      success: false,
+      message: 'Tag name is required',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // 重複チェック
+  const existingTag = mockTags.find(t => t.name.toLowerCase() === req.body.name.toLowerCase());
+  if (existingTag) {
+    return res.status(409).json({
+      success: false,
+      message: 'Tag with this name already exists',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  const tag = {
+    id: Date.now().toString(),
+    name: req.body.name,
+    color: req.body.color || '#6c5ce7',
+    description: req.body.description || '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: 'mock-user',
+    updatedBy: 'mock-user'
+  };
+
+  mockTags.push(tag);
+  
+  res.status(201).json({
+    success: true,
+    message: 'Tag created successfully',
+    data: tag,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.put('/api/v1/tags/:id', (req, res) => {
+  const { id } = req.params;
+  const tagIndex = mockTags.findIndex(t => t.id === id);
+  
+  if (tagIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'Tag not found',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // 重複チェック（更新時）
+  if (req.body.name) {
+    const existingTag = mockTags.find(t => t.id !== id && t.name.toLowerCase() === req.body.name.toLowerCase());
+    if (existingTag) {
+      return res.status(409).json({
+        success: false,
+        message: 'Tag with this name already exists',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+  mockTags[tagIndex] = {
+    ...mockTags[tagIndex],
+    ...req.body,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'mock-user'
+  };
+
+  res.json({
+    success: true,
+    message: 'Tag updated successfully',
+    data: mockTags[tagIndex],
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.delete('/api/v1/tags/:id', (req, res) => {
+  const { id } = req.params;
+  const tagIndex = mockTags.findIndex(t => t.id === id);
+  
+  if (tagIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'Tag not found',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  mockTags.splice(tagIndex, 1);
+  
+  res.json({
+    success: true,
+    message: 'Tag deleted successfully',
     timestamp: new Date().toISOString()
   });
 });

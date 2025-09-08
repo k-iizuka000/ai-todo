@@ -55,6 +55,9 @@ export default defineConfig(async ({ mode }) => {
       },
     },
     server: {
+      port: 5173,
+      host: true, // ネットワークからのアクセス許可
+      strictPort: true, // ポート5173が使用できない場合は失敗させる
       proxy: {
         '/api': {
           target: 'http://api-layer:3003',

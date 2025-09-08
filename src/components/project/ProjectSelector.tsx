@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChevronDown, Check, Plus, X, Loader2 } from 'lucide-react';
 import { Project } from '@/types/project';
-import { mockProjects } from '@/mock/projects';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { 
@@ -14,6 +13,7 @@ import {
 import { createStopPropagationClickHandler } from '@/utils/eventUtils';
 
 interface ProjectSelectorProps {
+  projects: Project[];  // 新規追加：プロジェクト一覧を外部から注入
   selectedProject?: Project;
   selectedProjectId?: string | null;  // 新規追加：ID直接指定
   onProjectSelect: (project: Project | null) => void;
@@ -35,6 +35,7 @@ interface ProjectSelectorProps {
  * ドロップダウンでプロジェクトを選択し、新規作成ボタンも提供
  */
 export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
+  projects: projectsProp,  // 外部から注入されたプロジェクト一覧
   selectedProject,
   selectedProjectId,
   onProjectSelect,
@@ -55,10 +56,11 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const [retryCount, setRetryCount] = useState(0);
   const [hasAttemptedReload, setHasAttemptedReload] = useState(false);
   
-  // プロジェクトデータの取得（エラー時のフォールバック含む）
+  // プロジェクトデータの取得（外部から注入されたprojectsを使用）
   const projects = useMemo(() => {
     try {
-      const availableProjects = mockProjects.filter(p => !p.isArchived);
+      // アーカイブされていないプロジェクトのみをフィルタ
+      const availableProjects = projectsProp.filter(p => !p.isArchived);
       
       // エラー状態でもフォールバック表示を有効にする場合
       if (error && enableFallback && availableProjects.length === 0) {
@@ -90,7 +92,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
         updatedAt: new Date()
       }] : [];
     }
-  }, [error, enableFallback]);
+  }, [projectsProp, error, enableFallback]);
 
   // プロパティのバリデーション
   if (selectedProject && selectedProjectId !== undefined) {

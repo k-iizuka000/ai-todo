@@ -3,10 +3,10 @@
  * 設計書グループ3: TagCreateModal/TagEditModal用
  */
 
-import { Tag, TagValidationResult } from '@/types/tag';
+import type { Tag, TagValidationResult, CreateTagInput, UpdateTagInput, TagWithTaskCount } from '@/types/tag';
 
 /**
- * タグ名のバリデーション
+ * タグ名のバリデーション（基本バージョン）
  * @param name タグ名
  * @param existingTags 既存のタグ一覧
  * @param currentTagId 編集時の現在のタグID（重複チェック除外用）
@@ -73,7 +73,7 @@ export const validateTagColor = (color: string): TagValidationResult => {
 };
 
 /**
- * タグデータ全体のバリデーション
+ * タグデータ全体のバリデーション（基本バージョン）
  * @param name タグ名
  * @param color カラーコード
  * @param existingTags 既存のタグ一覧
@@ -151,3 +151,235 @@ export const sanitizeTagName = (name: string): string => {
     .replace(/[<>&"']/g, '') // 危険な文字を削除
     .replace(/\s+/g, ' '); // 連続する空白を1つにまとめる
 };
+
+// ==============================
+// 拡張機能: タグ配列と選択のvalidation
+// ==============================
+
+// タグ配列validationエラーの型定義
+export interface TagArrayValidationErrors {
+  tags?: string[];
+  tagIds?: string[];
+  duplicates?: string[];
+  general?: string[];
+  [key: string]: string[] | undefined;
+}
+
+// タグ選択・validationエラー
+export interface TagSelectionValidationErrors extends TagArrayValidationErrors {
+  maxLimit?: string[];
+  required?: string[];
+  permission?: string[];
+}
+
+/**
+ * タグ配列の包括的validation
+ */
+export function validateTagArray(tags: Tag[]): string[] | undefined {
+  const errors: string[] = [];
+
+  if (!Array.isArray(tags)) {
+    errors.push('タグは配列形式で指定してください');
+    return errors;
+  }
+
+  if (tags.length > 10) {
+    errors.push('タグは10個以内で設定してください');
+  }
+
+  // 重複チェック（ID・名前両方）
+  const tagIds = new Set<string>();
+  const tagNames = new Set<string>();
+
+  for (const tag of tags) {
+    // タグ構造の基本チェック
+    if (!tag.id || typeof tag.id !== 'string') {
+      errors.push('無効なタグIDが含まれています');
+      break;
+    }
+
+    if (!tag.name || typeof tag.name !== 'string') {
+      errors.push('無効なタグ名が含まれています');
+      break;
+    }
+
+    // 重複チェック
+    if (tagIds.has(tag.id)) {
+      errors.push(`重複するタグ「${tag.name}」が選択されています`);
+    }
+    if (tagNames.has(tag.name.toLowerCase())) {
+      errors.push(`同じ名前のタグ「${tag.name}」が複数選択されています`);
+    }
+
+    tagIds.add(tag.id);
+    tagNames.add(tag.name.toLowerCase());
+
+    // 各タグの個別validation
+    if (tag.color) {
+      const colorValidation = validateTagColor(tag.color);
+      if (!colorValidation.isValid) {
+        errors.push(`タグ「${tag.name}」: ${colorValidation.errors.join(', ')}`);
+      }
+    }
+  }
+
+  return errors.length > 0 ? errors : undefined;
+}
+
+/**
+ * タグID配列のvalidation（文字列配列）
+ */
+export function validateTagIdArray(tagIds: string[]): string[] | undefined {
+  const errors: string[] = [];
+
+  if (!Array.isArray(tagIds)) {
+    errors.push('タグIDは配列形式で指定してください');
+    return errors;
+  }
+
+  if (tagIds.length > 10) {
+    errors.push('タグは10個以内で設定してください');
+  }
+
+  // 重複チェック
+  const uniqueTagIds = new Set(tagIds);
+  if (uniqueTagIds.size !== tagIds.length) {
+    errors.push('重複するタグが選択されています');
+  }
+
+  // 各タグIDの形式チェック
+  for (const tagId of tagIds) {
+    if (!tagId || typeof tagId !== 'string' || tagId.trim() === '') {
+      errors.push('無効なタグIDが含まれています');
+      break;
+    }
+  }
+
+  return errors.length > 0 ? errors : undefined;
+}
+
+/**
+ * 必須タグのvalidation
+ */
+export function validateRequiredTags(tags: Tag[], isRequired: boolean = false): string[] | undefined {
+  const errors: string[] = [];
+
+  if (isRequired && (!tags || tags.length === 0)) {
+    errors.push('少なくとも1つのタグを選択してください');
+  }
+
+  return errors.length > 0 ? errors : undefined;
+}
+
+/**
+ * タグと関連タスクの整合性validation
+ */
+export function validateTagTaskConsistency(
+  tags: Tag[],
+  existingTaskTags?: TagWithTaskCount[]
+): string[] | undefined {
+  const errors: string[] = [];
+
+  if (!existingTaskTags || existingTaskTags.length === 0) {
+    return undefined;
+  }
+
+  // 使用中タグの削除チェック
+  const newTagIds = new Set(tags.map(tag => tag.id));
+  const tagsWithTasks = existingTaskTags.filter(tag => tag.taskCount > 0);
+
+  for (const usedTag of tagsWithTasks) {
+    if (!newTagIds.has(usedTag.id)) {
+      errors.push(
+        `タグ「${usedTag.name}」は${usedTag.taskCount}個のタスクで使用中のため削除できません`
+      );
+    }
+  }
+
+  return errors.length > 0 ? errors : undefined;
+}
+
+/**
+ * タグの権限チェック（例：ユーザーがそのタグを使用できるか）
+ */
+export function validateTagPermissions(
+  tags: Tag[],
+  allowedTagIds?: string[]
+): string[] | undefined {
+  const errors: string[] = [];
+
+  if (!allowedTagIds) {
+    return undefined;
+  }
+
+  const allowedSet = new Set(allowedTagIds);
+  
+  for (const tag of tags) {
+    if (!allowedSet.has(tag.id)) {
+      errors.push(`タグ「${tag.name}」を使用する権限がありません`);
+    }
+  }
+
+  return errors.length > 0 ? errors : undefined;
+}
+
+/**
+ * タグ選択の包括的validation
+ */
+export function validateTagSelection(
+  selectedTags: Tag[],
+  options: {
+    isRequired?: boolean;
+    maxLimit?: number;
+    allowedTagIds?: string[];
+    existingTaskTags?: TagWithTaskCount[];
+  } = {}
+): TagSelectionValidationErrors {
+  const errors: TagSelectionValidationErrors = {};
+  const { isRequired = false, maxLimit = 10, allowedTagIds, existingTaskTags } = options;
+
+  // 基本的なタグ配列validation
+  const arrayErrors = validateTagArray(selectedTags);
+  if (arrayErrors) errors.tags = arrayErrors;
+
+  // 必須チェック
+  const requiredErrors = validateRequiredTags(selectedTags, isRequired);
+  if (requiredErrors) errors.required = requiredErrors;
+
+  // 最大数制限チェック（カスタム制限）
+  if (maxLimit && selectedTags.length > maxLimit) {
+    errors.maxLimit = [`タグは${maxLimit}個以内で設定してください`];
+  }
+
+  // 権限チェック
+  const permissionErrors = validateTagPermissions(selectedTags, allowedTagIds);
+  if (permissionErrors) errors.permission = permissionErrors;
+
+  // 既存タスクとの整合性チェック
+  const consistencyErrors = validateTagTaskConsistency(selectedTags, existingTaskTags);
+  if (consistencyErrors) errors.general = consistencyErrors;
+
+  return errors;
+}
+
+/**
+ * TagSelectionValidationErrorsにエラーが存在するかチェック
+ */
+export function hasTagSelectionErrors(errors: TagSelectionValidationErrors): boolean {
+  return Object.keys(errors).length > 0;
+}
+
+/**
+ * すべてのタグvalidationエラーを平均な配列で取得
+ */
+export function getAllTagErrorMessages(errors: TagSelectionValidationErrors): string[] {
+  const allErrors: string[] = [];
+
+  Object.values(errors).forEach(fieldErrors => {
+    if (fieldErrors && Array.isArray(fieldErrors)) {
+      allErrors.push(...fieldErrors);
+    }
+  });
+
+  return allErrors;
+}

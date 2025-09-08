@@ -16,6 +16,7 @@ import React, { useCallback, useMemo } from 'react';
 import { Tag } from '../../types/tag';
 import { TagBadge } from './TagBadge';
 import { TagInput } from './TagInput';
+import { TagDropdown } from './TagDropdown';
 import { useTagStore } from '../../stores/tagStore';
 
 interface TagSelectorProps {
@@ -31,6 +32,8 @@ interface TagSelectorProps {
   onTagsChange: (tags: Tag[]) => void;
   /** 編集モードかどうか */
   editing?: boolean;
+  /** UI モード: 'dropdown' | 'input' */
+  mode?: 'dropdown' | 'input';
   /** プレースホルダー */
   placeholder?: string;
   /** 表示モード: 'compact' | 'full' */
@@ -52,6 +55,7 @@ export const TagSelector: React.FC<TagSelectorProps> = React.memo(({
   allowCreate = true, // eslint-disable-line @typescript-eslint/no-unused-vars
   onTagsChange,
   editing = false, // eslint-disable-line @typescript-eslint/no-unused-vars
+  mode = 'dropdown', // デフォルトはドロップダウンモード
   placeholder = "タグを追加...", // eslint-disable-line @typescript-eslint/no-unused-vars
   variant = 'full', // eslint-disable-line @typescript-eslint/no-unused-vars
   displayMode = 'auto', // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -108,7 +112,25 @@ export const TagSelector: React.FC<TagSelectorProps> = React.memo(({
     );
   }
 
-  // 編集モード - variant に応じた表示
+  // 編集モード - mode に応じた表示
+  if (mode === 'dropdown') {
+    // ドロップダウンモード: TagDropdownを使用
+    return (
+      <div className={`tag-selector-dropdown ${className}`}>
+        <TagDropdown
+          selectedTags={selectedTags}
+          onTagsChange={onTagsChange}
+          placeholder={placeholder}
+          maxTags={maxTags}
+          allowCreate={allowCreate}
+          disabled={disabled}
+          error={error}
+        />
+      </div>
+    );
+  }
+
+  // 入力モード: variant に応じた表示
   if (variant === 'compact') {
     // コンパクトモード: TagInputを使用
     return (

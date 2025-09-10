@@ -495,7 +495,11 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                   </button>
                 )}
                 <button
-                  onClick={onClose}
+                  onClick={() => {
+                    console.log('🔧 Debug: ×ボタンがクリックされました');
+                    console.log('🔧 Debug: onClose function:', onClose);
+                    onClose?.();
+                  }}
                   className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
                   aria-label="詳細を閉じる"
                 >

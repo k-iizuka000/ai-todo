@@ -112,6 +112,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 }) => {
   const previousFocusRef = useRef<HTMLElement | null>(null);
   
+  // デバッグログ: isOpenプロパティの変化を追跡
+  useEffect(() => {
+    console.log('🔧 Debug: TaskDetailModal isOpen changed:', isOpen);
+  }, [isOpen]);
+  
   // フォーカス管理: モーダル開閉時の処理
   useEffect(() => {
     if (isOpen) {
@@ -134,28 +139,29 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   }
 
   return (
-    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()} data-testid="task-detail-modal-root">
+    <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }} data-testid="task-detail-modal-root">
       <Dialog.Portal>
         {/* オーバーレイ */}
         <Dialog.Overlay 
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 animate-in fade-in duration-200" 
+          data-testid="task-detail-overlay"
           onClick={() => {
-            console.log('Overlay clicked directly');
+            console.log('🔧 Debug: Overlay clicked directly');
             onClose();
           }}
-          data-testid="task-detail-overlay"
         />
         
         {/* モーダルコンテンツ */}
         <Dialog.Content 
-          className="fixed inset-0 flex items-center justify-center z-50 bg-transparent"
+          className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2"
           onInteractOutside={(event) => {
             // クリックアウトサイドでモーダルを閉じる
-            console.log('onInteractOutside triggered', event);
+            console.log('🔧 Debug: onInteractOutside triggered', event);
             onClose();
           }}
           onEscapeKeyDown={() => {
-            // Escapeキーでのみ閉じる
+            // Escapeキーで閉じる
+            console.log('🔧 Debug: onEscapeKeyDown triggered');
             onClose();
           }}
           data-testid="task-detail-content"

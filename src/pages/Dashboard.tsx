@@ -245,7 +245,7 @@ const Dashboard: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [location.pathname, showTaskDetailModal]);
+  }, [location.pathname, tasksFromStore]);
 
   // 設計書対応: KanbanBoardが直接状態管理するため、handleTaskMoveは不要
   // タスク移動処理はuseTaskActions内のmoveTaskで処理される
@@ -538,9 +538,14 @@ const Dashboard: React.FC = () => {
   }, [removeTask, navigate]);
 
   const handleCloseTaskDetail = useCallback(() => {
+    console.log('🔧 Debug: handleCloseTaskDetail が呼ばれました');
+    console.log('🔧 Debug: 現在の showTaskDetailModal:', showTaskDetailModal);
+    
     // 状態を強制的にリセット
     setShowTaskDetailModal(false);
     setSelectedTask(null);
+    
+    console.log('🔧 Debug: setShowTaskDetailModal(false) を実行しました');
     
     // URLからタスクIDを削除して元のページに戻る
     const pathParts = location.pathname.split('/');
@@ -549,6 +554,7 @@ const Dashboard: React.FC = () => {
     
     if (isTaskIdInUrl) {
       const newPath = pathParts.slice(0, -1).join('/');
+      console.log('🔧 Debug: URL navigation:', newPath);
       navigate(newPath, { replace: true });
     }
   }, [location.pathname, navigate]);

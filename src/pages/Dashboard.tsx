@@ -371,16 +371,45 @@ const Dashboard: React.FC = () => {
       
       // モーダルの状態も更新
       if (selectedTask && selectedTask.id === taskId) {
-        setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
+        const updatedData = { ...updates };
+        
+        // タグ更新の場合、availableTagsから完全なタグオブジェクトを取得
+        if (updates.tags) {
+          updatedData.tags = updates.tags.map(tag => {
+            // IDのみの場合や不完全なオブジェクトの場合、availableTagsから完全な情報を取得
+            if (typeof tag === 'string' || !tag.name || tag.name.trim() === '') {
+              const tagId = typeof tag === 'string' ? tag : tag.id;
+              const completeTag = availableTags.find(t => t.id === tagId);
+              return completeTag || tag;
+            }
+            return tag;
+          });
+        }
+        
+        setSelectedTask(prev => prev ? { ...prev, ...updatedData } : null);
       }
     } catch (error) {
       console.error('Task update failed:', error);
       // エラー時でもモーダルは更新して一貫性を保つ
       if (selectedTask && selectedTask.id === taskId) {
-        setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
+        const updatedData = { ...updates };
+        
+        // エラー時もタグ補完を行う
+        if (updates.tags) {
+          updatedData.tags = updates.tags.map(tag => {
+            if (typeof tag === 'string' || !tag.name || tag.name.trim() === '') {
+              const tagId = typeof tag === 'string' ? tag : tag.id;
+              const completeTag = availableTags.find(t => t.id === tagId);
+              return completeTag || tag;
+            }
+            return tag;
+          });
+        }
+        
+        setSelectedTask(prev => prev ? { ...prev, ...updatedData } : null);
       }
     }
-  }, [selectedTask]);
+  }, [selectedTask, updateTask, availableTags]);
 
   const handleSubtaskToggle = useCallback(async (subtaskId: string, completed: boolean) => {
     // サブタスクステータスをローカル状態とストアに永続化

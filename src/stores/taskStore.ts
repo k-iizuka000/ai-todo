@@ -354,9 +354,22 @@ export const useTaskStore = create<TaskState>()(
             
             // 実際のレスポンスでタスクを更新 - Issue #028: 中断確認付き
             if (isOperationActive && !abortController.signal.aborted) {
-              const finalTasks = get().tasks.map(task =>
-                task.id === id ? updatedTask : task
-              );
+              const finalTasks = get().tasks.map(task => {
+                if (task.id === id) {
+                  // APIレスポンスをマージ
+                  const mergedTask = { ...task, ...updatedTask };
+                  
+                  // APIレスポンスのタグに空のnameが含まれる場合、既存のタグを保持
+                  if (mergedTask.tags && task.tags && 
+                      mergedTask.tags.some(tag => !tag.name || tag.name.trim() === '')) {
+                    mergedTask.tags = task.tags; // 既存のタグを保持
+                    console.log('[taskStore] Preserved existing tags during update to prevent #Unknown Tag');
+                  }
+                  
+                  return mergedTask;
+                }
+                return task;
+              });
               
               set({
                 tasks: finalTasks,

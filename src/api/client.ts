@@ -20,7 +20,7 @@ class ApiClient {
   private defaultHeaders: HeadersInit;
 
   constructor() {
-    this.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+    this.baseURL = (import.meta.env.VITE_API_URL || 'http://localhost:3003') + '/api/v1';
     this.defaultHeaders = {
       'Content-Type': 'application/json',
     };

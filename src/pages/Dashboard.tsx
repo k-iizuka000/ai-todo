@@ -24,8 +24,6 @@ import { Tag } from '@/types/tag';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { TaskCreateModal } from '@/components/task/TaskCreateModal';
 import { TaskDetailModal } from '@/components/task/TaskDetailModal';
-import { mockTasks, mockTags } from '@/mock/tasks';
-import { getTaskDetail } from '@/mock/taskDetails';
 
 const Dashboard: React.FC = () => {
   const location = useLocation();
@@ -44,7 +42,7 @@ const Dashboard: React.FC = () => {
   const { tags: availableTags, initialize: initializeTagStore } = useTagStore();
   
   // タスクストア - 通常のパターンを使用（Archive用の基本データ取得）
-  const { tasks: tasksFromStore, addTask, updateTask, error, clearError, initializeStore, isInitialized } = useTaskStore();
+  const { tasks: tasksFromStore, addTask, updateTask, error, clearError, initializeStore, isInitialized, isLoading } = useTaskStore();
   
   // プロジェクトストア - プロジェクト情報の管理
   const { projects, loadProjects, isLoading: projectsLoading } = useProjectStore();
@@ -115,11 +113,7 @@ const Dashboard: React.FC = () => {
     if (!isInitialized) {
       const initializeTasks = async () => {
         try {
-          console.log('[Dashboard] Initializing task store...');
           await initializeStore();
-          if (isMounted) {
-            console.log('[Dashboard] Task store initialized successfully');
-          }
         } catch (error) {
           if (isMounted) {
             console.error('[Dashboard] Failed to initialize task store:', error);
@@ -141,11 +135,7 @@ const Dashboard: React.FC = () => {
 
     const initializeProjects = async () => {
       try {
-        console.log('[Dashboard] Initializing project store...');
         await loadProjects();
-        if (isMounted) {
-          console.log('[Dashboard] Project store initialized successfully');
-        }
       } catch (error) {
         if (isMounted) {
           console.error('[Dashboard] Failed to initialize project store:', error);
@@ -169,11 +159,7 @@ const Dashboard: React.FC = () => {
 
     const initializeTags = async () => {
       try {
-        console.log('[Dashboard] Initializing tag store...');
         await initializeTagStore();
-        if (isMounted) {
-          console.log('[Dashboard] Tag store initialized successfully');
-        }
       } catch (error) {
         if (isMounted) {
           console.error('[Dashboard] Failed to initialize tag store:', error);
@@ -199,10 +185,14 @@ const Dashboard: React.FC = () => {
     pageType
   });
   
-  // ArchivedTasksSection用の最小限のフィルタリング（一時的な解決策）
+  // ArchivedTasksSection用のタスクデータ（モックフォールバック削除）
   const archivedTasksForDisplay = useMemo(() => {
-    // 基本的にはtasksFromStoreをそのまま使用（KanbanBoardと同じデータソース）
-    return tasksFromStore.length > 0 ? tasksFromStore : mockTasks;
+    // サーバがcreatedAt DESCで返せない場合はクライアントでソートを強制
+    return [...tasksFromStore].sort((a, b) => {
+      const dateA = new Date(a.createdAt);
+      const dateB = new Date(b.createdAt);
+      return dateB.getTime() - dateA.getTime(); // DESC: 新しい順
+    });
   }, [tasksFromStore]);
   
   // ページタイトルを決定
@@ -230,8 +220,15 @@ const Dashboard: React.FC = () => {
     const isValidTaskId = taskId && (taskId.startsWith('task-') || /^\d+$/.test(taskId));
     
     if (isValidTaskId) {
-      const taskDetail = getTaskDetail(taskId);
-      if (taskDetail && !showTaskDetailModal && isMounted) {
+      const task = tasksFromStore.find(t => t.id === taskId);
+      if (task && !showTaskDetailModal && isMounted) {
+        // TaskからTaskDetailを作成
+        const taskDetail: TaskDetail = {
+          ...task,
+          subtasks: [], // 現在の実装ではサブタスクは空配列
+          comments: [], // 現在の実装ではコメントは空配列
+          attachments: [], // 現在の実装では添付ファイルは空配列
+        };
         setSelectedTask(taskDetail);
         setShowTaskDetailModal(true);
       }
@@ -256,51 +253,48 @@ const Dashboard: React.FC = () => {
     let isOperationActive = true;
     
     try {
-      console.log('Task clicked:', task.id, task.title);
       
       // 早期中断チェック
       if (abortController.signal.aborted || !isOperationActive) {
         return;
       }
       
-      let taskDetail = getTaskDetail(task.id);
+      // TaskからTaskDetailを作成
+      let taskDetail: TaskDetail = {
+        ...task,
+        subtasks: [], // 現在の実装ではサブタスクは空配列
+        comments: [], // 現在の実装ではコメントは空配列
+        attachments: [], // 現在の実装では添付ファイルは空配列
+      };
       
-      // フォールバック: TaskDetailが見つからない場合、Taskから基本的なTaskDetailを作成
-      if (!taskDetail && !abortController.signal.aborted) {
-        console.log('TaskDetail not found, converting from Task:', task);
-        
-        // SessionStorageから一時保存されたサブタスクを復元
-        const storageKey = `tempSubtasks_${task.id}`;
-        const savedSubtasks = sessionStorage.getItem(storageKey);
-        let existingChildTasks = [];
-        
-        if (savedSubtasks) {
-          try {
-            existingChildTasks = JSON.parse(savedSubtasks);
-            // 日付オブジェクトを復元
-            existingChildTasks = existingChildTasks.map((subtask: any) => ({
-              ...subtask,
-              createdAt: new Date(subtask.createdAt),
-              updatedAt: new Date(subtask.updatedAt)
-            }));
-          } catch (error) {
-            console.warn('Failed to parse saved subtasks:', error);
-            existingChildTasks = [];
-          }
+      // SessionStorageから一時保存されたサブタスクを復元
+      const storageKey = `tempSubtasks_${task.id}`;
+      const savedSubtasks = sessionStorage.getItem(storageKey);
+      let existingChildTasks = [];
+      
+      if (savedSubtasks) {
+        try {
+          existingChildTasks = JSON.parse(savedSubtasks);
+          // 日付オブジェクトを復元
+          existingChildTasks = existingChildTasks.map((subtask: any) => ({
+            ...subtask,
+            createdAt: new Date(subtask.createdAt),
+            updatedAt: new Date(subtask.updatedAt)
+          }));
+        } catch (error) {
+          console.warn('Failed to parse saved subtasks:', error);
+          existingChildTasks = [];
         }
-        
-        taskDetail = {
-          ...task,
-          comments: [],
-          attachments: [],
-          history: [],
-          childTasks: existingChildTasks
-        };
       }
+      
+      // 復元したサブタスクをtaskDetailに追加
+      taskDetail = {
+        ...taskDetail,
+        childTasks: existingChildTasks
+      };
       
       // 状態更新前の中断確認
       if (!abortController.signal.aborted && isOperationActive && taskDetail) {
-        console.log('Opening modal with TaskDetail:', taskDetail);
         setSelectedTask(taskDetail);
         setShowTaskDetailModal(true);
         
@@ -347,7 +341,6 @@ const Dashboard: React.FC = () => {
     let isMounted = true;
     
     try {
-      console.log('新しいタスクを作成:', task);
       
       // 実行前の状態確認
       if (!isMounted || abortController.signal.aborted) {
@@ -359,7 +352,6 @@ const Dashboard: React.FC = () => {
       // API呼び出し前の再確認
       if (isMounted && !abortController.signal.aborted) {
         await addTask(task);
-        console.log('タスク作成完了:', task);
         
         // 完了後の状態更新前確認
         if (isMounted && !abortController.signal.aborted) {
@@ -437,7 +429,6 @@ const Dashboard: React.FC = () => {
       try {
         // タスクストアへも反映（Mock環境のためタイムスタンプのみ更新）
         await updateTask(selectedTask.id, {});
-        console.log('[Dashboard] サブタスクステータス更新完了:', { subtaskId, completed, newStatus: completed ? 'done' : 'todo', totalSubtasks: updatedChildTasks.length });
       } catch (error) {
         console.error('[Dashboard] サブタスクステータス更新のストア更新エラー:', error);
         // エラー時もローカル状態は維持
@@ -485,7 +476,6 @@ const Dashboard: React.FC = () => {
       try {
         // タスクストアへも反映（Mock環境のためタイムスタンプのみ更新）
         await updateTask(selectedTask.id, {});
-        console.log('[Dashboard] サブタスク追加完了:', { title, subtaskId: newSubtask.id, totalSubtasks: updatedChildTasks.length });
       } catch (error) {
         console.error('[Dashboard] サブタスク追加のストア更新エラー:', error);
         // エラー時もローカル状態は維持
@@ -516,7 +506,6 @@ const Dashboard: React.FC = () => {
       try {
         // タスクストアへも反映（Mock環境のためタイムスタンプのみ更新）
         await updateTask(selectedTask.id, {});
-        console.log('[Dashboard] サブタスク削除完了:', { subtaskId, totalSubtasks: updatedChildTasks.length });
       } catch (error) {
         console.error('[Dashboard] サブタスク削除のストア更新エラー:', error);
         // エラー時もローカル状態は維持
@@ -525,27 +514,18 @@ const Dashboard: React.FC = () => {
   }, [selectedTask, updateTask]);
 
   const handleTaskDelete = useCallback(async (taskId: string) => {
-    console.log('[Dashboard] handleTaskDelete called with taskId:', taskId);
-    console.log('[Dashboard] removeTask function:', typeof removeTask);
-    
     try {
-      console.log('[Dashboard] Starting removeTask execution for taskId:', taskId);
       // API経由でタスクを削除
       await removeTask(taskId);
-      console.log('[Dashboard] removeTask completed successfully for taskId:', taskId);
       
       // 削除成功後にモーダルを閉じてダッシュボードにリダイレクト
-      console.log('[Dashboard] Closing modal and clearing selected task');
       setShowTaskDetailModal(false);
       setSelectedTask(null);
       
       // 削除されたタスクのURLから /dashboard にリダイレクト
-      console.log('[Dashboard] Navigating to /dashboard to clear deleted task URL');
       navigate('/dashboard', { replace: true });
-      console.log('[Dashboard] Task deletion process completed successfully');
     } catch (error) {
       console.error('[Dashboard] タスク削除に失敗:', error);
-      console.error('[Dashboard] Error details:', error);
       // エラーが発生しても一旦モーダルは閉じる（useTaskActionsでエラーハンドリング済み）
       setShowTaskDetailModal(false);
       setSelectedTask(null);
@@ -628,8 +608,8 @@ const Dashboard: React.FC = () => {
   
   // 選択中タグの表示用データ
   const selectedTagsData = useMemo(() => 
-    selectedTags.map(tagId => mockTags.find(tag => tag.id === tagId)).filter(Boolean) as Tag[],
-    [selectedTags]
+    selectedTags.map(tagId => availableTags.find(tag => tag.id === tagId)).filter(Boolean) as Tag[],
+    [selectedTags, availableTags]
   );
 
   return (
@@ -790,12 +770,33 @@ const Dashboard: React.FC = () => {
       <div className="flex-1 min-h-0">
         {viewMode === 'kanban' ? (
           <>
-            {filteredTasksForList.length === 0 && searchQuery.trim() && (
+            {/* ローディング状態 */}
+            {isLoading && !isInitialized && (
+              <div className="text-center text-muted-foreground py-8" role="status" aria-live="polite" data-testid="loading-message">
+                <div className="flex items-center justify-center space-x-2">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  <span>タスクを読み込み中...</span>
+                </div>
+              </div>
+            )}
+            
+            {/* 検索結果なし */}
+            {filteredTasksForList.length === 0 && searchQuery.trim() && !isLoading && (
               <div className="text-center text-muted-foreground py-8" role="status" aria-live="polite" data-testid="no-results-message">
                 検索結果が見つかりません
               </div>
             )}
-            <KanbanBoard
+            
+            {/* 空のタスクリスト */}
+            {filteredTasksForList.length === 0 && !searchQuery.trim() && !isLoading && isInitialized && (
+              <div className="text-center text-muted-foreground py-8" role="status" aria-live="polite" data-testid="empty-tasks-message">
+                タスクがありません。新しいタスクを作成してください。
+              </div>
+            )}
+            
+            {/* KanbanBoard - ローディング中でない場合のみ表示 */}
+            {!isLoading && (
+              <KanbanBoard
               onTaskClick={handleTaskClick}
               onAddTask={handleAddTask}
               onTagClick={handleTagSelect}
@@ -809,6 +810,7 @@ const Dashboard: React.FC = () => {
               }}
               data-testid="kanban-board"
             />
+            )}
             {/* 設計書2.1: カンバンビューにアーカイブセクションを追加 */}
             <div className="mt-6">
               <ArchivedTasksSection

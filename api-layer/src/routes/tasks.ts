@@ -352,6 +352,72 @@ router.delete('/:id', async (req: AuthRequest, res): Promise<void> => {
   }
 });
 
+// タスクステータス更新（ドラッグ&ドロップ用）
+router.patch('/:id', async (req: AuthRequest, res): Promise<void> => {
+  try {
+    // 認証チェック
+    if (!checkAuthentication(req, res)) return;
+
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    if (!status) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Status is required' });
+      return;
+    }
+    
+    // ステータスのバリデーション（大文字ENUM形式と小文字スネークケース形式の両方に対応）
+    const validStatuses = ['TODO', 'IN_PROGRESS', 'DONE', 'ARCHIVED'];
+    const normalizedStatus = status.toUpperCase().replace('-', '_');
+    
+    if (!validStatuses.includes(normalizedStatus)) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+        error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+      });
+      return;
+    }
+    
+    // 権限確認
+    const existingTask = await prisma.task.findFirst({
+      where: { 
+        id,
+        OR: [
+          { assigneeId: req.userId },
+          { createdBy: req.userId }
+        ]
+      }
+    });
+    
+    if (!existingTask) {
+      res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Task not found' });
+      return;
+    }
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: {
+        status: normalizedStatus,
+        updatedBy: req.userId!,
+        updatedAt: new Date()
+      },
+      include: TASK_INCLUDES
+    });
+    
+    console.log(`PATCH /api/v1/tasks/${id} - Updated status to: ${normalizedStatus}`);
+    res.status(HTTP_STATUS.OK).json(task);
+  } catch (error) {
+    console.error('Update task status error:', error);
+    if (error instanceof Error && 'code' in error) {
+      const prismaError = error as { code: string; meta?: any };
+      if (prismaError.code === 'P2025') {
+        res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Task not found' });
+        return;
+      }
+    }
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ error: 'Failed to update task status' });
+  }
+});
+
 // タスクアーカイブ（論理削除）
 router.patch('/:id/archive', async (req: AuthRequest, res): Promise<void> => {
   try {

@@ -1,38 +1,23 @@
 /**
  * TaskStore専用 軽量APIクライアント
- * 既存のAPIクライアントの複雑性を回避し、taskStoreに特化したシンプルな実装
+ * Issue #001 Mock Mode Fix: 最小構成でモック禁止・自動リトライなし
  */
 
 import { Task, CreateTaskInput, UpdateTaskInput } from '../../types/task';
-import { useConnectionStore } from '../connectionStore';
 
 // API基盤設定
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3003';
+const TIMEOUT_MS = 5000; // 共通5秒タイムアウト
 
-// リトライ設定
-interface RetryConfig {
-  maxRetries: number;
-  retryDelays: number[];
-  timeoutMs: number;
-}
-
-const DEFAULT_RETRY_CONFIG: RetryConfig = {
-  maxRetries: 3,
-  retryDelays: [1000, 2000, 4000], // 指数バックオフ: 1秒→2秒→4秒
-  timeoutMs: 5000
-};
-
-// 基本APIクライアント（リトライ機構付き）
+// 基本APIクライアント（シンプル構成）
 class SimpleApiClient {
   private baseURL: string;
-  private retryConfig: RetryConfig;
 
-  constructor(baseURL: string, retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG) {
+  constructor(baseURL: string) {
     this.baseURL = baseURL;
-    this.retryConfig = retryConfig;
   }
 
-  // リトライ機構付きリクエスト
+  // シンプルリクエスト（リトライなし）
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -47,66 +32,33 @@ class SimpleApiClient {
       ...options,
     };
 
-    let lastError: Error;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
     
-    // 初回 + リトライ回数分試行
-    for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.retryConfig.timeoutMs);
-        
-        const response = await fetch(url, {
-          ...config,
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`API Error ${response.status}: ${errorText}`);
-        }
-
-        // 204 No Content の場合は空を返す
-        if (response.status === 204) {
-          return undefined as T;
-        }
-
-        const result = await response.json();
-        
-        // 成功時は接続状態を更新
-        if (attempt > 0) {
-          useConnectionStore.getState().setConnected();
-        }
-        
-        return result;
-        
-      } catch (error) {
-        lastError = error as Error;
-        
-        // 最後の試行または中断エラーの場合はリトライしない
-        if (attempt === this.retryConfig.maxRetries || error instanceof DOMException) {
-          break;
-        }
-        
-        // リトライ前の待機
-        const delay = this.retryConfig.retryDelays[attempt] || this.retryConfig.retryDelays[this.retryConfig.retryDelays.length - 1];
-        console.warn(`API request failed (attempt ${attempt + 1}), retrying in ${delay}ms...`, error);
-        
-        // 接続状態を再接続中に更新
-        useConnectionStore.getState().setReconnecting(attempt + 1);
-        
-        await this.sleep(delay);
+    try {
+      const response = await fetch(url, {
+        ...config,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Error ${response.status}: ${errorText}`);
       }
-    }
-    
-    console.error('API request failed after all retries:', lastError);
-    throw lastError;
-  }
 
-  // ユーティリティ: Sleep関数
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+      // 204 No Content の場合は空を返す
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      return await response.json();
+      
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
   }
 
   async get<T>(endpoint: string): Promise<T> {
@@ -130,33 +82,79 @@ class SimpleApiClient {
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
+
+  async patch<T>(endpoint: string, data?: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
 }
 
 // TaskStore専用APIクライアント
 const taskApiClient = new SimpleApiClient(API_BASE_URL);
 
-// ヘルスチェック結果の型定義
-interface HealthCheckResult {
-  isHealthy: boolean;
-  responseTime: number;
-  status?: string;
-  timestamp: Date;
-  error?: Error;
-}
-
 // API エンドポイント定数
 const ENDPOINTS = {
   TASKS: '/api/v1/tasks',
   TASK_BY_ID: (id: string) => `/api/v1/tasks/${id}`,
-  HEALTH: '/health',
 } as const;
+
+// サーバーレスポンスの正規化関数
+const normalizeTask = (serverTask: any): Task => {
+  // ステータスの正規化（サーバーの様々な形式に対応）
+  const normalizeStatus = (status: string): 'todo' | 'in_progress' | 'done' | 'archived' => {
+    // 大文字ENUM形式と小文字スネークケース形式の両方に対応
+    switch (status) {
+      case 'TODO': 
+      case 'todo': 
+        return 'todo';
+      case 'IN_PROGRESS': 
+      case 'in_progress': 
+        return 'in_progress';
+      case 'DONE': 
+      case 'done': 
+        return 'done';
+      case 'ARCHIVED': 
+      case 'archived': 
+        return 'archived';
+      default: 
+        return 'todo'; // デフォルト値
+    }
+  };
+
+  // 日付フィールドの正規化（ISO文字列 → Date型）
+  const normalizeDate = (dateValue: any): Date | null => {
+    if (!dateValue) return null;
+    if (dateValue instanceof Date) return dateValue;
+    return new Date(dateValue);
+  };
+
+  return {
+    ...serverTask,
+    status: normalizeStatus(serverTask.status),
+    createdAt: normalizeDate(serverTask.createdAt)!,
+    updatedAt: normalizeDate(serverTask.updatedAt)!,
+    dueDate: normalizeDate(serverTask.dueDate)
+  };
+};
 
 // TaskAPI 関数群
 export const taskAPI = {
   // 全タスク取得
   fetchTasks: async (): Promise<Task[]> => {
     try {
-      return await taskApiClient.get<Task[]>(ENDPOINTS.TASKS);
+      const serverTasks = await taskApiClient.get<any[]>(ENDPOINTS.TASKS);
+      
+      // サーバーレスポンスを正規化
+      const normalizedTasks = serverTasks.map(normalizeTask);
+      
+      // サーバがcreatedAt DESCで返せない場合はクライアントでソートを強制
+      return normalizedTasks.sort((a, b) => {
+        const dateA = new Date(a.createdAt);
+        const dateB = new Date(b.createdAt);
+        return dateB.getTime() - dateA.getTime(); // DESC: 新しい順
+      });
     } catch (error) {
       console.error('Failed to fetch tasks:', error);
       throw new Error('タスクの取得に失敗しました');
@@ -179,7 +177,8 @@ export const taskAPI = {
         estimatedHours: taskInput.estimatedHours || null,
       };
       
-      return await taskApiClient.post<Task>(ENDPOINTS.TASKS, serverTaskInput);
+      const serverTask = await taskApiClient.post<any>(ENDPOINTS.TASKS, serverTaskInput);
+      return normalizeTask(serverTask);
     } catch (error) {
       console.error('Failed to create task:', error);
       throw new Error('タスクの作成に失敗しました');
@@ -189,10 +188,30 @@ export const taskAPI = {
   // タスク更新
   updateTask: async (id: string, taskInput: UpdateTaskInput): Promise<Task> => {
     try {
-      return await taskApiClient.put<Task>(ENDPOINTS.TASK_BY_ID(id), taskInput);
+      const serverTask = await taskApiClient.put<any>(ENDPOINTS.TASK_BY_ID(id), taskInput);
+      return normalizeTask(serverTask);
     } catch (error) {
       console.error('Failed to update task:', error);
       throw new Error('タスクの更新に失敗しました');
+    }
+  },
+
+  // タスクステータス更新（PATCH /api/v1/tasks/:id専用）
+  updateTaskStatus: async (id: string, status: 'todo' | 'in_progress' | 'done'): Promise<Task> => {
+    try {
+      // デバッグ: API呼び出しの詳細をログ出力
+      const endpoint = ENDPOINTS.TASK_BY_ID(id);
+      const payload = { status };
+      console.log('[taskAPI] Calling PATCH:', endpoint, payload);
+      
+      // 応答は少なくとも id, status, updatedAt を含む前提
+      const serverTask = await taskApiClient.patch<any>(endpoint, payload);
+      console.log('[taskAPI] PATCH response:', serverTask);
+      
+      return normalizeTask(serverTask);
+    } catch (error) {
+      console.error('[taskAPI] Failed to update task status:', error);
+      throw new Error('タスクステータスの更新に失敗しました');
     }
   },
 
@@ -204,65 +223,5 @@ export const taskAPI = {
       console.error('Failed to delete task:', error);
       throw new Error('タスクの削除に失敗しました');
     }
-  },
-
-  // ヘルスチェック機能
-  healthCheck: async (): Promise<HealthCheckResult> => {
-    const startTime = Date.now();
-    const timestamp = new Date();
-    
-    try {
-      const response = await taskApiClient.get<{ status: string; timestamp: string; service: string }>(ENDPOINTS.HEALTH);
-      const responseTime = Date.now() - startTime;
-      
-      const result: HealthCheckResult = {
-        isHealthy: response.status === 'ok',
-        responseTime,
-        status: response.status,
-        timestamp
-      };
-      
-      // 接続状態を更新
-      if (result.isHealthy) {
-        useConnectionStore.getState().setConnected();
-      } else {
-        useConnectionStore.getState().setOffline(new Error(`Unhealthy status: ${response.status}`));
-      }
-      
-      return result;
-      
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-      const result: HealthCheckResult = {
-        isHealthy: false,
-        responseTime,
-        timestamp,
-        error: error as Error
-      };
-      
-      // 接続状態をオフラインに更新
-      useConnectionStore.getState().setOffline(error as Error);
-      
-      return result;
-    }
-  },
-
-  // 定期ヘルスチェック管理
-  startHealthMonitoring: (intervalMs: number = 30000): () => void => {
-    const healthCheckInterval = setInterval(async () => {
-      try {
-        await taskAPI.healthCheck();
-      } catch (error) {
-        console.error('Health check monitoring error:', error);
-      }
-    }, intervalMs);
-    
-    // 初回ヘルスチェック実行
-    taskAPI.healthCheck().catch(console.error);
-    
-    // 停止関数を返す
-    return () => {
-      clearInterval(healthCheckInterval);
-    };
   },
 };

@@ -46,11 +46,16 @@ export const createAuthMiddleware = (prismaClient) => async (req, res, next) => 
 let defaultPrisma = null;
 const getDefaultPrisma = () => {
     if (!defaultPrisma) {
+        if (process.env.NODE_ENV === 'test') {
+            throw new Error('Default PrismaClient should not be used in test environment. Use createAuthMiddleware with mocked client instead.');
+        }
         defaultPrisma = new PrismaClient();
     }
     return defaultPrisma;
 };
-export const authMiddleware = createAuthMiddleware(getDefaultPrisma());
+export const authMiddleware = process.env.NODE_ENV === 'test'
+    ? (() => { throw new Error('Use createAuthMiddleware in tests'); })
+    : createAuthMiddleware(getDefaultPrisma());
 export const generateToken = (userId) => {
     if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
         throw new Error('Valid userId is required');
@@ -111,4 +116,6 @@ export const createOptionalAuth = (prismaClient) => async (req, _res, next) => {
         next();
     }
 };
-export const optionalAuth = createOptionalAuth(getDefaultPrisma());
+export const optionalAuth = process.env.NODE_ENV === 'test'
+    ? (() => { throw new Error('Use createOptionalAuth in tests'); })
+    : createOptionalAuth(getDefaultPrisma());

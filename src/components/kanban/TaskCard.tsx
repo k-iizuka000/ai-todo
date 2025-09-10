@@ -295,6 +295,16 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
     }
   });
 
+  // デバッグログ: ドラッグ設定の確認
+  console.log('[TaskCard] 🔧 Drag Config:', {
+    taskId: task.id,
+    taskIdType: typeof task.id,
+    taskStatus: task.status,
+    hasAttributes: !!attributes,
+    hasListeners: !!listeners,
+    isDragging
+  });
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,

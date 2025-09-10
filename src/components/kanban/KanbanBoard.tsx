@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { 
   DndContext, 
   DragEndEvent, 
@@ -98,8 +99,29 @@ const DRAG_PREVIEW_OPACITY = 0.9; // ドラッグプレビューの透明度
  * カラムへのドロップを優先し、確実にターゲットカラムを検出
  */
 const customCollisionDetection: CollisionDetection = (args) => {
-  // まずrectIntersectionで全ての衝突を検出
-  const collisions = rectIntersection(args);
+  // デバッグログ
+  console.log('[COLLISION] Detection called with:', {
+    activeId: args.active.id,
+    droppableContainers: Array.from(args.droppableContainers.keys())
+  });
+  
+  // まずpointerWithinで検出（より正確）
+  let collisions = pointerWithin(args);
+  
+  // pointerWithinで検出できない場合はclosestCenterを試す
+  if (collisions.length === 0) {
+    collisions = closestCenter(args);
+  }
+  
+  // それでも検出できない場合はrectIntersectionを使用
+  if (collisions.length === 0) {
+    collisions = rectIntersection(args);
+  }
+  
+  console.log('[COLLISION] Detected collisions:', collisions.map(c => ({
+    id: c.id,
+    data: c.data
+  })));
   
   if (collisions.length === 0) {
     return [];
@@ -110,13 +132,17 @@ const customCollisionDetection: CollisionDetection = (args) => {
   
   // カラムとの衝突を優先的に検出
   const columnCollisions = collisions.filter((collision) => {
-    return columnIds.includes(collision.id as string);
+    const isColumn = columnIds.includes(collision.id as string);
+    if (isColumn) {
+      console.log('[COLLISION] Found column collision:', collision.id);
+    }
+    return isColumn;
   });
   
   if (columnCollisions.length > 0) {
     // カラムとの衝突がある場合は、最初のカラムを返す
     const targetColumn = columnCollisions[0];
-    console.log(`Custom collision: Target column ${targetColumn.id}`);
+    console.log('[COLLISION] Returning column:', targetColumn.id);
     return [targetColumn];
   }
   
@@ -126,11 +152,12 @@ const customCollisionDetection: CollisionDetection = (args) => {
   });
   
   if (taskCollisions.length > 0) {
-    console.log(`Custom collision: Task collision for sorting`);
+    console.log('[COLLISION] Returning task:', taskCollisions[0].id);
     return [taskCollisions[0]];
   }
   
   // デフォルトで最初の衝突を返す
+  console.log('[COLLISION] Returning default:', collisions[0].id);
   return collisions.slice(0, 1);
 };
 
@@ -219,24 +246,7 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   
   // Issue 059対応: 状態更新時の強制再描画トリガー追加
   useEffect(() => {
-    if (lastUpdated) {
-      console.log(`[KanbanBoard] Tasks updated at: ${lastUpdated}`);
-      // デバッグ: タスク更新後の状態確認
-      console.log('[KanbanBoard] Debug - Tasks after update:', {
-        totalTasks: localTasksByStatus.todo.length + localTasksByStatus.in_progress.length + localTasksByStatus.done.length,
-        tasksByStatus: {
-          todo: localTasksByStatus.todo.length,
-          in_progress: localTasksByStatus.in_progress.length,
-          done: localTasksByStatus.done.length
-        },
-        taskIds: {
-          todo: localTasksByStatus.todo.map(t => ({ id: t.id, title: t.title })),
-          in_progress: localTasksByStatus.in_progress.map(t => ({ id: t.id, title: t.title })),
-          done: localTasksByStatus.done.map(t => ({ id: t.id, title: t.title }))
-        },
-        lastUpdated
-      });
-    }
+    // タスク更新時の再描画処理（デバッグログ削除済み）
   }, [lastUpdated, localTasksByStatus]);
   
   // エラー状態の表示
@@ -328,17 +338,6 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
     
     // ドラッグ中のタスクを設定
     setDraggedTask(draggedTask);
-    
-    // デバッグ情報を出力
-    console.log('Drag started:', {
-      taskId: draggedTask.id,
-      title: draggedTask.title,
-      originalStatus: draggedTask.status,
-      originalColumn: COLUMN_TITLES[draggedTask.status as Exclude<TaskStatus, 'archived'>]
-    });
-    
-    // 元のステータスを記録（ロールバック用）
-    // Note: draggedTaskに元のステータスが既に含まれているため、追加の状態管理は不要
   }, [allTasks]);
 
   // ⭐ ベストプラクティス: ドラッグ中はローカル状態のみ更新
@@ -351,59 +350,46 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
       return;
     }
     
-    // ドラッグ中のタスクを取得（ローカル状態から）
-    const activeTask = allTasks.find(task => task.id === active.id);
+    // ドラッグ中のタスクを取得（ローカル状態から）（ID型の一貫性確保）
+    const activeTaskId = String(active.id); // String変換でID型を統一
+    const activeTask = allTasks.find(task => task.id === activeTaskId);
     if (!activeTask) {
       return;
     }
     
-    // ドロップターゲットのステータスを判定
+    // ドロップターゲットのステータスを判定（ID型の一貫性確保）
+    const overTargetId = String(over.id); // String変換でID型を統一
     let targetStatus: TaskStatus | null = null;
     
     // カラムに直接ドロップする場合
-    if (over.id === 'todo' || over.id === 'in_progress' || over.id === 'done') {
-      targetStatus = over.id as TaskStatus;
+    if (overTargetId === 'todo' || overTargetId === 'in_progress' || overTargetId === 'done') {
+      targetStatus = overTargetId as TaskStatus;
     }
     // タスク上にドロップする場合
     else {
-      const overTask = allTasks.find(task => task.id === over.id);
+      const overTask = allTasks.find(task => task.id === overTargetId);
       if (overTask) {
         targetStatus = overTask.status;
       }
     }
     
-    // 有効なターゲットかつ異なるカラムの場合、ローカル状態を即座に更新
-    if (targetStatus && activeTask.status !== targetStatus) {
-      console.log(`[DragOver] Moving task locally from ${activeTask.status} to ${targetStatus}`);
-      
-      // ⭐ ローカル状態のみ更新（即座のUI反映）
-      setLocalTasksByStatus(prev => {
-        const newState = { ...prev };
-        
-        // 元のステータスから削除
-        newState[activeTask.status] = prev[activeTask.status]
-          .filter(t => t.id !== activeTask.id);
-        
-        // 新しいステータスに追加（ステータス更新付き）
-        newState[targetStatus] = [
-          ...prev[targetStatus],
-          { ...activeTask, status: targetStatus }
-        ];
-        
-        return newState;
-      });
-    }
-    
-    // デバッグ情報
-    if (targetStatus) {
-      console.log('[DragOver] Event:', {
-        activeTaskId: active.id,
-        overTargetId: over.id,
-        currentStatus: activeTask.status,
-        targetStatus: targetStatus,
-        isSameColumn: activeTask.status === targetStatus
-      });
-    }
+    // 【修正】楽観的更新を無効化 - handleDragEndでのみ状態を更新
+    // Issue #004: handleDragOverでの楽観的更新が原因で、
+    // handleDragEndで同一ステータス判定されてしまう問題を修正
+    // 
+    // 元のコード（問題あり）：
+    // if (targetStatus && activeTask.status !== targetStatus) {
+    //   setLocalTasksByStatus(prev => {
+    //     const newState = { ...prev };
+    //     newState[activeTask.status] = prev[activeTask.status]
+    //       .filter(t => t.id !== activeTask.id);
+    //     newState[targetStatus] = [
+    //       ...prev[targetStatus],
+    //       { ...activeTask, status: targetStatus }
+    //     ];
+    //     return newState;
+    //   });
+    // }
   }, [allTasks]);
 
   // ⭐ ベストプラクティス: ドラッグ終了時にZustandストアと同期
@@ -411,58 +397,95 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
     
+    // デバッグ: ドラッグ&ドロップのイベント詳細をログ出力
+    console.log('[DRAG_END] Event details:', {
+      activeId: active.id,
+      overId: over?.id,
+      overData: over?.data,
+      activeData: active.data
+    });
+    
     // ドラッグ状態を即座にクリア
     setDraggedTask(null);
     
     if (!over) {
-      console.warn('[DragEnd] Cancelled - no drop target');
       // キャンセルされた場合、Zustandからリセット
+      console.log('[DRAG_END] Cancelled - no drop target');
       setLocalTasksByStatus(tasksByStatus);
       return;
     }
     
-    // ドラッグ中のタスクを取得
-    const activeTask = allTasks.find(t => t.id === active.id);
+    // ドラッグ中のタスクを取得（ID型の一貫性確保）
+    const activeTaskId = String(active.id);
+    const activeTask = allTasks.find(t => t.id === activeTaskId);
     
     if (!activeTask) {
-      console.warn('[DragEnd] Cancelled - active task not found');
+      console.log('[DRAG_END] Active task not found:', activeTaskId);
       setLocalTasksByStatus(tasksByStatus);
       return;
     }
     
-    // ドロップターゲットのステータスを正しく判定
+    // ドロップターゲットのステータスを正しく判定（ID型の一貫性確保）
+    const overTargetId = String(over.id);
     let targetStatus: TaskStatus | null = null;
     
+    console.log('[DRAG_END] Determining target status for:', overTargetId);
+    
     // カラムに直接ドロップする場合
-    if (over.id === 'todo' || over.id === 'in_progress' || over.id === 'done') {
-      targetStatus = over.id as TaskStatus;
+    if (overTargetId === 'todo' || overTargetId === 'in_progress' || overTargetId === 'done') {
+      targetStatus = overTargetId as TaskStatus;
+      console.log('[DRAG_END] Dropped on column:', targetStatus);
     }
     // タスク上にドロップする場合
     else {
-      const overTask = allTasks.find(task => task.id === over.id);
+      const overTask = allTasks.find(task => task.id === overTargetId);
       if (overTask) {
         targetStatus = overTask.status;
+        console.log('[DRAG_END] Dropped on task, target status:', targetStatus);
       }
     }
     
     // 移動が発生しない場合（同一カラム）は何もしない
     if (!targetStatus || activeTask.status === targetStatus) {
-      console.log(`[DragEnd] No movement needed: ${activeTask.status} -> ${targetStatus}`);
+      console.log('[DRAG_END] No move needed. Current:', activeTask.status, 'Target:', targetStatus);
       return;
     }
     
+    // 楽観的更新（即座のUI更新）
+    setLocalTasksByStatus(prev => {
+      const newState = { ...prev };
+      
+      // 元のステータスから削除
+      newState[activeTask.status] = prev[activeTask.status]
+        .filter(t => t.id !== activeTask.id);
+      
+      // 新しいステータスに追加（ステータス更新付き）
+      newState[targetStatus] = [
+        ...prev[targetStatus],
+        { ...activeTask, status: targetStatus }
+      ];
+      
+      return newState;
+    });
+    
     try {
-      console.log(`[DragEnd] Moving task: ${activeTask.id} from ${activeTask.status} to ${targetStatus}`);
-      
       // ⭐ ZustandストアとAPIを更新（永続化）
-      await moveTask(activeTask.id, targetStatus);
+      console.log('[DRAG_END] Moving task:', activeTask.id, 'from', activeTask.status, 'to', targetStatus);
+      console.log('[DRAG_END] moveTask function:', typeof moveTask);
+      console.log('[DRAG_END] Calling moveTask NOW...');
       
-      console.log('[DragEnd] Task movement persisted successfully');
+      const result = await moveTask(activeTask.id, targetStatus);
+      
+      console.log('[DRAG_END] moveTask returned:', result);
+      console.log('[DRAG_END] Move successful!');
     } catch (error) {
-      console.error('[DragEnd] Error persisting task movement:', error);
+      console.error('[DRAG_END] Error persisting task movement:', error);
       
       // ⭐ エラー時はZustandからリセット（ロールバック）
       setLocalTasksByStatus(tasksByStatus);
+      
+      // ユーザーにエラーを通知（toast使用）
+      toast.error(`タスクの移動に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
     }
   }, [allTasks, tasksByStatus, moveTask]);
 
@@ -470,7 +493,7 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
     <div className={`h-full ${className}`} data-testid="kanban-board">
       <DndContext
         sensors={sensors}
-        collisionDetection={rectIntersection}
+        collisionDetection={customCollisionDetection}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
@@ -567,12 +590,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = (props) => {
   return (
     <TaskErrorBoundary
       onError={(error, errorInfo) => {
-        // Issue 027: 無限レンダリングループの特別ログ
-        console.log('🚨 KanbanBoard: TaskErrorBoundary activated', {
-          error: error.message,
-          component: 'KanbanBoard',
-          useKanbanTasks: true
-        });
+        console.error('KanbanBoard: Error caught by TaskErrorBoundary:', error.message);
         props.onError?.(error, errorInfo);
       }}
     >

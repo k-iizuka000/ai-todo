@@ -37,6 +37,7 @@ export const useTaskActions = () => {
     tasks,
     addTask,
     updateTask,
+    updateTaskStatus,
     deleteTask,
     setLoading,
     setError,
@@ -72,8 +73,13 @@ export const useTaskActions = () => {
   
   // Issue #028対応: クリーンアップ処理
   useEffect(() => {
+    // React.StrictMode対応: マウント時に明示的にtrueに設定
+    isMountedRef.current = true;
+    console.log('[useTaskActions] Component mounted, isMountedRef set to true');
+    
     return () => {
       isMountedRef.current = false;
+      console.log('[useTaskActions] Component unmounting, isMountedRef set to false');
       
       // 全ての進行中の操作を中断
       abortControllersRef.current.forEach((controller, operationId) => {
@@ -149,50 +155,6 @@ export const useTaskActions = () => {
     }
   }, [operationStates, addTask, updateTask, deleteTask, setError]);
   
-  /**
-   * リトライ機能付きAPI呼び出しシミュレーション
-   * 実際の実装ではAPI呼び出しを行う
-   */
-  const executeWithRetry = useCallback(async (
-    operation: () => Promise<void>, 
-    operationId: string,
-    maxRetries: number = 3
-  ): Promise<boolean> => {
-    const operationState = operationStates.get(operationId);
-    if (!operationState) return false;
-    
-    try {
-      // 実際のAPI呼び出し（設計書対応：API統合完全実装）
-      await operation();
-      return true;
-    } catch (error) {
-      const newRetryCount = operationState.retryCount + 1;
-      
-      if (newRetryCount <= maxRetries) {
-        // リトライ
-        setOperationStates(prev => {
-          const newMap = new Map(prev);
-          const current = newMap.get(operationId);
-          if (current) {
-            newMap.set(operationId, { ...current, retryCount: newRetryCount });
-          }
-          return newMap;
-        });
-        
-        // 指数バックオフでリトライ
-        const delay = Math.pow(2, newRetryCount) * 1000;
-        setTimeout(() => {
-          executeWithRetry(operation, operationId, maxRetries);
-        }, delay);
-        
-        return false;
-      } else {
-        // 最大リトライ回数に到達、ロールバック実行
-        rollbackOperation(operationId);
-        throw error;
-      }
-    }
-  }, [operationStates, rollbackOperation]);
   
   /**
    * タスクの移動（ステータス変更）
@@ -200,6 +162,10 @@ export const useTaskActions = () => {
    * Issue #028対応: アンマウント後の状態更新防止
    */
   const moveTask = useCallback(async (taskId: string, newStatus: TaskStatus) => {
+    console.log('[moveTask] FUNCTION CALLED with:', { taskId, newStatus });
+    console.log('[moveTask] isMountedRef.current:', isMountedRef.current);
+    console.log('[moveTask] abortController.signal.aborted:', false); // 新規作成なのでfalse
+    
     const operationId = `move-${taskId}-${Date.now()}`;
     const abortController = new AbortController();
     let isOperationActive = true;
@@ -207,6 +173,7 @@ export const useTaskActions = () => {
     try {
       // 中断確認
       if (abortController.signal.aborted || !isMountedRef.current) {
+        console.log('[moveTask] EARLY RETURN - aborted:', abortController.signal.aborted, 'unmounted:', !isMountedRef.current);
         return;
       }
       
@@ -217,6 +184,12 @@ export const useTaskActions = () => {
       
       // 元のタスク情報を取得（ロールバック用）
       const originalTask = getTaskById(taskId);
+      console.log('[moveTask] Original task:', {
+        id: taskId,
+        status: originalTask?.status,
+        exists: !!originalTask
+      });
+      
       if (!originalTask) {
         throw new Error('タスクが見つかりません');
       }
@@ -235,72 +208,32 @@ export const useTaskActions = () => {
       }
       
       // 楽観的更新（即座のUI更新）- 生存確認付き
-      if (isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
-        try {
-          await updateTask(taskId, { status: newStatus });
-          
-          // 修正: UI同期のための明示的な状態更新通知
-          const currentStore = useTaskStore.getState();
-          currentStore.setTasks([...currentStore.tasks]); // 強制再描画トリガー
-        } catch (updateError) {
-          console.error('Optimistic update failed:', updateError);
-          // 楽観的更新に失敗した場合はロールバックを準備
-          if (isMountedRef.current) {
-            setError('タスクの状態更新に失敗しました');
-          }
-        }
+      // 同じステータスの場合はスキップ（ガード機能）
+      if (originalTask.status === newStatus) {
+        console.log(`[moveTask] No movement needed: ${originalTask.status} -> ${newStatus}`);
+        return;
       }
       
-      // 非同期処理ハンドラーを使用してAPI呼び出し
-      await asyncHandler.execute(async (signal) => {
-        // 実行前の中断確認
-        if (signal.aborted || abortController.signal.aborted || !isOperationActive || !isMountedRef.current) {
-          throw new Error('Operation aborted');
-        }
-        
-        try {
-          // 実際のAPI呼び出し
-          const response = await taskApi.updateTask(taskId, { status: newStatus });
-          
-          // レスポンス確認（生存確認付き）
-          if (response.data && response.data.success && isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
-            console.log('Task status updated successfully:', response.data);
-          }
-        } catch (error) {
-          if (!abortController.signal.aborted && isOperationActive && isMountedRef.current) {
-            console.error('Failed to update task status:', error);
-            throw error;
-          }
-        }
-        
-        // 操作成功時は状態をクリア（生存確認付き）
-        if (isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
-          setOperationStates(prev => {
-            const newMap = new Map(prev);
-            newMap.delete(operationId);
-            return newMap;
-          });
-        }
-        
-        return { taskId, newStatus };
-      }, false); // 状態更新は手動で管理
+      console.log('[moveTask] Moving task:', {
+        taskId,
+        from: originalTask.status,
+        to: newStatus
+      });
       
+      if (isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
+        // 新しいupdateTaskStatusメソッドを使用（楽観的UI更新とロールバック機能付き）
+        await updateTaskStatus(taskId, newStatus);
+      }
     } catch (error) {
-      if (isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
-        console.error('Failed to move task:', error);
-        
-        // エラー時のロールバック
-        rollbackOperation(operationId);
-        
-        const errorMessage = error instanceof Error ? error.message : '不明なエラー';
-        setError(`タスクの移動に失敗しました: ${errorMessage}`);
-      }
+      console.error('Task status update failed:', error);
+      // updateTaskStatus内でロールバックとトーストが処理される
+      throw error; // 外部にエラーを伝播
     } finally {
       isOperationActive = false;
       // AbortControllerをクリーンアップ
       abortControllersRef.current.delete(operationId);
     }
-  }, [getTaskById, updateTask, setError, clearError, asyncHandler, rollbackOperation, setOperationStates]);
+  }, [getTaskById, updateTaskStatus]);
   
   /**
    * 新規タスク作成
@@ -355,34 +288,28 @@ export const useTaskActions = () => {
         }
       }
       
-      // 非同期でAPIを呼び出し、失敗時は自動ロールバック
-      if (createdTaskId) {
-        const success = await executeWithRetry(
-          async () => {
-            // 中断確認
-            if (abortController.signal.aborted || !isOperationActive || !isMountedRef.current) {
-              throw new Error('Operation aborted');
-            }
+      // 非同期でAPIを呼び出し
+      if (createdTaskId && isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
+        try {
+          // 実際のAPI呼び出し（設計書対応：API統合完全実装）
+          const response = await taskApi.createTask(taskData);
+          
+          // 成功時の処理 - 生存確認付き
+          if (response.data && response.data.success && isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
+            console.log('Task created successfully:', response.data);
+            // 必要に応じて、サーバーから返されたタスクでローカル状態を更新
             
-            // 実際のAPI呼び出し（設計書対応：API統合完全実装）
-            const response = await taskApi.createTask(taskData);
-            
-            // 成功時の処理 - 生存確認付き
-            if (response.data && response.data.success && isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
-              console.log('Task created successfully:', response.data);
-              // 必要に応じて、サーバーから返されたタスクでローカル状態を更新
-            }
-          },
-          operationId
-        );
-        
-        if (success && isOperationActive && !abortController.signal.aborted && isMountedRef.current) {
-          // 操作成功時は状態をクリア
-          setOperationStates(prev => {
-            const newMap = new Map(prev);
-            newMap.delete(operationId);
-            return newMap;
-          });
+            // 操作成功時は状態をクリア
+            setOperationStates(prev => {
+              const newMap = new Map(prev);
+              newMap.delete(operationId);
+              return newMap;
+            });
+          }
+        } catch (apiError) {
+          // API失敗時はロールバック
+          rollbackOperation(operationId);
+          throw apiError;
         }
       }
       
@@ -399,7 +326,7 @@ export const useTaskActions = () => {
       // AbortControllerをクリーンアップ
       abortControllersRef.current.delete(operationId);
     }
-  }, [tasks, addTask, setLoading, setError, clearError, executeWithRetry, setOperationStates]);
+  }, [tasks, addTask, setLoading, setError, clearError, rollbackOperation, setOperationStates]);
   
   /**
    * タスク更新
@@ -457,34 +384,15 @@ export const useTaskActions = () => {
    * Issue #028対応: アンマウント後の状態更新防止
    */
   const removeTask = useCallback(async (taskId: string) => {
-    console.log('[removeTask] ===== FUNCTION ENTRY POINT =====');
-    console.log('[removeTask] Function called with taskId:', taskId);
-    console.log('[removeTask] Current mount status:', isMountedRef.current);
-    
     const operationId = `delete-${taskId}-${Date.now()}`;
     const abortController = new AbortController();
     let isOperationActive = true;
     
-    console.log('[removeTask] Operation setup completed:', {
-      operationId,
-      isOperationActive,
-      abortSignal: abortController.signal.aborted
-    });
-    
     try {
-      // 早期中断確認（削除操作は実行を継続、abortSignalのみチェック）
-      console.log('[removeTask] Checking early abort conditions:', {
-        abortSignal: abortController.signal.aborted,
-        isMounted: isMountedRef.current,
-        willReturn: abortController.signal.aborted
-      });
-      
+      // 早期中断確認
       if (abortController.signal.aborted) {
-        console.log('[removeTask] Early return triggered - operation aborted');
         return;
       }
-      
-      console.log('[removeTask] Early abort check passed, continuing...');
       
       // AbortControllerを記録
       abortControllersRef.current.set(operationId, abortController);
@@ -493,71 +401,28 @@ export const useTaskActions = () => {
         clearError();
       }
       
-      // 楽観的更新 - 削除操作は常に実行
-      console.log('[removeTask] About to perform optimistic update - Conditions check:', {
-        isOperationActive,
-        aborted: abortController.signal.aborted,
-        mounted: isMountedRef.current,
-        taskId
-      });
-      
+      // 楽観的更新
       if (isOperationActive && !abortController.signal.aborted) {
-        console.log('[removeTask] Performing optimistic update: deleteTask(', taskId, ')');
         deleteTask(taskId);
-        console.log('[removeTask] Optimistic update completed');
-      } else {
-        console.log('[removeTask] Optimistic update skipped due to conditions');
       }
       
       // 実際のAPI呼び出し（設計書対応：API統合完全実装）
-      console.log('[removeTask] About to make API call - Conditions check:', {
-        isOperationActive,
-        aborted: abortController.signal.aborted,
-        mounted: isMountedRef.current,
-        taskId
-      });
-      
       if (isOperationActive && !abortController.signal.aborted) {
-        console.log('[removeTask] Making API call to taskApi.deleteTask:', taskId);
         const response = await taskApi.deleteTask(taskId);
-        console.log('[removeTask] API call completed, response:', response);
         
-        // 成功時の処理 - 削除操作は常に確認
+        // 成功時の処理
         if (response.data && response.data.success && isOperationActive && !abortController.signal.aborted) {
-          console.log('[removeTask] Task deleted successfully:', response.data);
-        } else {
-          console.log('[removeTask] Success condition not met:', {
-            hasResponseData: !!response.data,
-            success: response.data?.success,
-            isOperationActive,
-            aborted: abortController.signal.aborted,
-            mounted: isMountedRef.current
-          });
+          console.log('Task deleted successfully:', response.data);
         }
-      } else {
-        console.log('[removeTask] API call skipped due to conditions:', {
-          isOperationActive,
-          aborted: abortController.signal.aborted,
-          mounted: isMountedRef.current
-        });
       }
       
     } catch (error) {
-      console.log('[removeTask] Caught error:', error);
-      console.log('[removeTask] Error handling conditions:', {
-        isOperationActive,
-        aborted: abortController.signal.aborted,
-        mounted: isMountedRef.current
-      });
-      
       if (isOperationActive && !abortController.signal.aborted) {
-        console.error('[removeTask] Processing error - Failed to delete task:', error);
+        console.error('Failed to delete task:', error);
         // エラー状態の更新はマウント状態の場合のみ
         if (isMountedRef.current) {
           setError('タスクの削除に失敗しました');
         }
-      } else {
-        console.log('[removeTask] Error ignored due to conditions');
       }
     } finally {
       isOperationActive = false;

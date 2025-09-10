@@ -11,7 +11,7 @@ const HTTP_STATUS = {
     CONFLICT: 409,
     INTERNAL_SERVER_ERROR: 500
 };
-const getTaskIncludes = () => ({
+const TASK_INCLUDES = {
     project: true,
     tags: {
         include: {
@@ -41,9 +41,9 @@ const getTaskIncludes = () => ({
             }
         }
     }
-});
-const getTaskIncludesWithComments = () => ({
-    ...getTaskIncludes(),
+};
+const TASK_INCLUDES_WITH_COMMENTS = {
+    ...TASK_INCLUDES,
     comments: {
         include: {
             user: {
@@ -60,7 +60,7 @@ const getTaskIncludesWithComments = () => ({
         },
         orderBy: { createdAt: 'desc' }
     }
-});
+};
 const checkAuthentication = (req, res) => {
     if (!req.userId) {
         res.status(HTTP_STATUS.UNAUTHORIZED).json({ error: 'Authentication required' });
@@ -81,7 +81,7 @@ router.get('/', async (req, res) => {
                     { createdBy: req.userId }
                 ]
             },
-            include: getTaskIncludes(),
+            include: TASK_INCLUDES,
             orderBy: { updatedAt: 'desc' }
         });
         res.status(HTTP_STATUS.OK).json(tasks);
@@ -104,7 +104,7 @@ router.get('/:id', async (req, res) => {
                     { createdBy: req.userId }
                 ]
             },
-            include: getTaskIncludesWithComments()
+            include: TASK_INCLUDES_WITH_COMMENTS
         });
         if (!task) {
             res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Task not found' });
@@ -157,7 +157,7 @@ router.post('/', async (req, res) => {
         };
         const task = await prisma.task.create({
             data: taskData,
-            include: getTaskIncludes()
+            include: TASK_INCLUDES
         });
         res.status(HTTP_STATUS.CREATED).json(task);
     }
@@ -228,7 +228,7 @@ router.put('/:id', async (req, res) => {
         const task = await prisma.task.update({
             where: { id },
             data: updateData,
-            include: getTaskIncludes()
+            include: TASK_INCLUDES
         });
         res.status(HTTP_STATUS.OK).json(task);
     }
@@ -278,6 +278,61 @@ router.delete('/:id', async (req, res) => {
         res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ error: 'Failed to delete task' });
     }
 });
+router.patch('/:id', async (req, res) => {
+    try {
+        if (!checkAuthentication(req, res))
+            return;
+        const { id } = req.params;
+        const { status } = req.body;
+        if (!status) {
+            res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Status is required' });
+            return;
+        }
+        const validStatuses = ['TODO', 'IN_PROGRESS', 'DONE', 'ARCHIVED'];
+        const normalizedStatus = status.toUpperCase().replace('-', '_');
+        if (!validStatuses.includes(normalizedStatus)) {
+            res.status(HTTP_STATUS.BAD_REQUEST).json({
+                error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+            });
+            return;
+        }
+        const existingTask = await prisma.task.findFirst({
+            where: {
+                id,
+                OR: [
+                    { assigneeId: req.userId },
+                    { createdBy: req.userId }
+                ]
+            }
+        });
+        if (!existingTask) {
+            res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Task not found' });
+            return;
+        }
+        const task = await prisma.task.update({
+            where: { id },
+            data: {
+                status: normalizedStatus,
+                updatedBy: req.userId,
+                updatedAt: new Date()
+            },
+            include: TASK_INCLUDES
+        });
+        console.log(`PATCH /api/v1/tasks/${id} - Updated status to: ${normalizedStatus}`);
+        res.status(HTTP_STATUS.OK).json(task);
+    }
+    catch (error) {
+        console.error('Update task status error:', error);
+        if (error instanceof Error && 'code' in error) {
+            const prismaError = error;
+            if (prismaError.code === 'P2025') {
+                res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Task not found' });
+                return;
+            }
+        }
+        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ error: 'Failed to update task status' });
+    }
+});
 router.patch('/:id/archive', async (req, res) => {
     try {
         if (!checkAuthentication(req, res))
@@ -303,7 +358,7 @@ router.patch('/:id/archive', async (req, res) => {
                 updatedBy: req.userId,
                 updatedAt: new Date()
             },
-            include: getTaskIncludes()
+            include: TASK_INCLUDES
         });
         res.status(HTTP_STATUS.OK).json(task);
     }
@@ -344,7 +399,7 @@ router.patch('/:id/unarchive', async (req, res) => {
                 updatedBy: req.userId,
                 updatedAt: new Date()
             },
-            include: getTaskIncludes()
+            include: TASK_INCLUDES
         });
         res.status(HTTP_STATUS.OK).json(task);
     }

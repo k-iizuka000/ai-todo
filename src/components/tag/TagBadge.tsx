@@ -34,7 +34,10 @@ export interface TagBadgeProps {
  * 色の明度を計算してテキスト色を決定
  * 設計書準拠: 背景色の明度に応じて白/黒のテキスト色を自動選択
  */
-const getTextColor = (backgroundColor: string): string => {
+const getTextColor = (backgroundColor?: string): string => {
+  // デフォルトカラーまたはundefinedの場合
+  if (!backgroundColor) return '#000000';
+  
   // #RRGGBB形式のカラーコードから明度を計算
   const hex = backgroundColor.replace('#', '');
   if (hex.length !== 6) return '#000000'; // 不正な形式の場合は黒
@@ -65,8 +68,9 @@ export const TagBadge: React.FC<TagBadgeProps> = React.memo(({
   };
 
   // 色の計算（設計書準拠: 背景色をタグのcolorプロパティから動的に設定）
-  const textColor = getTextColor(tag.color);
-  const backgroundColor = tag.color;
+  // デフォルトカラーを設定（タグのcolorがundefinedの場合）
+  const backgroundColor = tag.color || '#9CA3AF'; // gray-400
+  const textColor = getTextColor(backgroundColor);
 
   // ベースクラス
   const baseClasses = `

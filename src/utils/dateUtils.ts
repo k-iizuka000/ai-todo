@@ -180,3 +180,95 @@ export function createDateFromFormInput(formDateValue: string): Date | undefined
 
   return undefined;
 }
+
+/**
+ * Converts ISO8601 string from API response to Date object
+ * @param iso8601String - ISO8601 formatted string from server
+ * @returns Date object or null if invalid
+ */
+export function parseISO8601ToDate(iso8601String: string | undefined | null): Date | null {
+  if (!iso8601String || typeof iso8601String !== 'string') {
+    return null;
+  }
+
+  try {
+    const date = new Date(iso8601String);
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid ISO8601 date string:', iso8601String);
+      return null;
+    }
+    return date;
+  } catch (error) {
+    console.error('Error parsing ISO8601 date:', iso8601String, error);
+    return null;
+  }
+}
+
+/**
+ * Formats Date object to ISO8601 string for API requests
+ * @param date - Date object to format
+ * @returns ISO8601 string or null if invalid
+ */
+export function formatDateToISO8601(date: Date | undefined | null): string | null {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    return null;
+  }
+
+  try {
+    return date.toISOString();
+  } catch (error) {
+    console.error('Error formatting date to ISO8601:', date, error);
+    return null;
+  }
+}
+
+/**
+ * Formats ISO8601 string to user-friendly display format
+ * @param iso8601String - ISO8601 formatted string
+ * @param locale - Locale for formatting (default: 'ja-JP')
+ * @returns Formatted date string or empty string if invalid
+ */
+export function formatISO8601ForDisplay(
+  iso8601String: string | undefined | null,
+  locale: string = 'ja-JP'
+): string {
+  const date = parseISO8601ToDate(iso8601String);
+  if (!date) {
+    return '';
+  }
+
+  try {
+    return date.toLocaleDateString(locale, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+  } catch (error) {
+    console.error('Error formatting ISO8601 for display:', iso8601String, error);
+    return '';
+  }
+}
+
+/**
+ * Ensures consistent date handling across the application
+ * Converts various date inputs to standardized Date objects
+ * @param dateInput - Date input in various formats
+ * @returns Standardized Date object or null
+ */
+export function standardizeDateInput(
+  dateInput: string | Date | undefined | null
+): Date | null {
+  if (!dateInput) {
+    return null;
+  }
+
+  if (dateInput instanceof Date) {
+    return isNaN(dateInput.getTime()) ? null : dateInput;
+  }
+
+  if (typeof dateInput === 'string') {
+    return parseISO8601ToDate(dateInput);
+  }
+
+  return null;
+}

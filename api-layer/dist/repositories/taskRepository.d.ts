@@ -1,0 +1,348 @@
+export interface CreateTaskInput {
+    title: string;
+    description?: string;
+    status?: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'ARCHIVED';
+    priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    dueDate?: Date;
+    estimatedHours?: number;
+    projectId?: string;
+    assigneeId?: string;
+    tags?: string[];
+}
+export interface UpdateTaskInput {
+    title?: string;
+    description?: string;
+    status?: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'ARCHIVED';
+    priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    dueDate?: Date;
+    estimatedHours?: number;
+    projectId?: string;
+    assigneeId?: string;
+    tags?: string[];
+}
+export declare const taskRepository: {
+    findAll(): Promise<({
+        project: {
+            id: string;
+            description: string | null;
+            status: import(".prisma/client").$Enums.ProjectStatus;
+            priority: import(".prisma/client").$Enums.ProjectPriority;
+            createdAt: Date;
+            updatedAt: Date;
+            createdBy: string;
+            updatedBy: string;
+            name: string;
+            color: string;
+            icon: string | null;
+            ownerId: string;
+            startDate: Date | null;
+            endDate: Date | null;
+            deadline: Date | null;
+            budget: number | null;
+            isArchived: boolean;
+        } | null;
+        assignee: {
+            id: string;
+            status: import(".prisma/client").$Enums.UserStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            email: string;
+            role: import(".prisma/client").$Enums.UserRole;
+            authProvider: import(".prisma/client").$Enums.AuthProvider;
+            emailVerified: boolean;
+            lastLoginAt: Date | null;
+        } | null;
+        tags: {
+            id: string;
+            taskId: string;
+            tagId: string;
+        }[];
+    } & {
+        id: string;
+        title: string;
+        description: string | null;
+        status: import(".prisma/client").$Enums.TaskStatus;
+        priority: import(".prisma/client").$Enums.Priority;
+        projectId: string | null;
+        assigneeId: string | null;
+        parentId: string | null;
+        dueDate: Date | null;
+        estimatedHours: number | null;
+        actualHours: number | null;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        createdBy: string;
+        updatedBy: string;
+    })[]>;
+    findById(id: string): Promise<({
+        project: {
+            id: string;
+            description: string | null;
+            status: import(".prisma/client").$Enums.ProjectStatus;
+            priority: import(".prisma/client").$Enums.ProjectPriority;
+            createdAt: Date;
+            updatedAt: Date;
+            createdBy: string;
+            updatedBy: string;
+            name: string;
+            color: string;
+            icon: string | null;
+            ownerId: string;
+            startDate: Date | null;
+            endDate: Date | null;
+            deadline: Date | null;
+            budget: number | null;
+            isArchived: boolean;
+        } | null;
+        assignee: {
+            id: string;
+            status: import(".prisma/client").$Enums.UserStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            email: string;
+            role: import(".prisma/client").$Enums.UserRole;
+            authProvider: import(".prisma/client").$Enums.AuthProvider;
+            emailVerified: boolean;
+            lastLoginAt: Date | null;
+        } | null;
+        tags: {
+            id: string;
+            taskId: string;
+            tagId: string;
+        }[];
+    } & {
+        id: string;
+        title: string;
+        description: string | null;
+        status: import(".prisma/client").$Enums.TaskStatus;
+        priority: import(".prisma/client").$Enums.Priority;
+        projectId: string | null;
+        assigneeId: string | null;
+        parentId: string | null;
+        dueDate: Date | null;
+        estimatedHours: number | null;
+        actualHours: number | null;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        createdBy: string;
+        updatedBy: string;
+    }) | null>;
+    create(data: CreateTaskInput): Promise<{
+        id: string;
+        title: string;
+        description: string | null;
+        status: import(".prisma/client").$Enums.TaskStatus;
+        priority: import(".prisma/client").$Enums.Priority;
+        projectId: string | null;
+        assigneeId: string | null;
+        parentId: string | null;
+        dueDate: Date | null;
+        estimatedHours: number | null;
+        actualHours: number | null;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        createdBy: string;
+        updatedBy: string;
+    }>;
+    update(id: string, data: UpdateTaskInput): Promise<{
+        id: string;
+        title: string;
+        description: string | null;
+        status: import(".prisma/client").$Enums.TaskStatus;
+        priority: import(".prisma/client").$Enums.Priority;
+        projectId: string | null;
+        assigneeId: string | null;
+        parentId: string | null;
+        dueDate: Date | null;
+        estimatedHours: number | null;
+        actualHours: number | null;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        createdBy: string;
+        updatedBy: string;
+    }>;
+    updateStatus(id: string, status: "TODO" | "IN_PROGRESS" | "DONE" | "ARCHIVED"): Promise<{
+        project: {
+            id: string;
+            description: string | null;
+            status: import(".prisma/client").$Enums.ProjectStatus;
+            priority: import(".prisma/client").$Enums.ProjectPriority;
+            createdAt: Date;
+            updatedAt: Date;
+            createdBy: string;
+            updatedBy: string;
+            name: string;
+            color: string;
+            icon: string | null;
+            ownerId: string;
+            startDate: Date | null;
+            endDate: Date | null;
+            deadline: Date | null;
+            budget: number | null;
+            isArchived: boolean;
+        } | null;
+        assignee: {
+            id: string;
+            status: import(".prisma/client").$Enums.UserStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            email: string;
+            role: import(".prisma/client").$Enums.UserRole;
+            authProvider: import(".prisma/client").$Enums.AuthProvider;
+            emailVerified: boolean;
+            lastLoginAt: Date | null;
+        } | null;
+        tags: {
+            id: string;
+            taskId: string;
+            tagId: string;
+        }[];
+    } & {
+        id: string;
+        title: string;
+        description: string | null;
+        status: import(".prisma/client").$Enums.TaskStatus;
+        priority: import(".prisma/client").$Enums.Priority;
+        projectId: string | null;
+        assigneeId: string | null;
+        parentId: string | null;
+        dueDate: Date | null;
+        estimatedHours: number | null;
+        actualHours: number | null;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        createdBy: string;
+        updatedBy: string;
+    }>;
+    delete(id: string): Promise<{
+        id: string;
+        title: string;
+        description: string | null;
+        status: import(".prisma/client").$Enums.TaskStatus;
+        priority: import(".prisma/client").$Enums.Priority;
+        projectId: string | null;
+        assigneeId: string | null;
+        parentId: string | null;
+        dueDate: Date | null;
+        estimatedHours: number | null;
+        actualHours: number | null;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        createdBy: string;
+        updatedBy: string;
+    }>;
+    findByProject(projectId: string): Promise<({
+        project: {
+            id: string;
+            description: string | null;
+            status: import(".prisma/client").$Enums.ProjectStatus;
+            priority: import(".prisma/client").$Enums.ProjectPriority;
+            createdAt: Date;
+            updatedAt: Date;
+            createdBy: string;
+            updatedBy: string;
+            name: string;
+            color: string;
+            icon: string | null;
+            ownerId: string;
+            startDate: Date | null;
+            endDate: Date | null;
+            deadline: Date | null;
+            budget: number | null;
+            isArchived: boolean;
+        } | null;
+        assignee: {
+            id: string;
+            status: import(".prisma/client").$Enums.UserStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            email: string;
+            role: import(".prisma/client").$Enums.UserRole;
+            authProvider: import(".prisma/client").$Enums.AuthProvider;
+            emailVerified: boolean;
+            lastLoginAt: Date | null;
+        } | null;
+        tags: {
+            id: string;
+            taskId: string;
+            tagId: string;
+        }[];
+    } & {
+        id: string;
+        title: string;
+        description: string | null;
+        status: import(".prisma/client").$Enums.TaskStatus;
+        priority: import(".prisma/client").$Enums.Priority;
+        projectId: string | null;
+        assigneeId: string | null;
+        parentId: string | null;
+        dueDate: Date | null;
+        estimatedHours: number | null;
+        actualHours: number | null;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        createdBy: string;
+        updatedBy: string;
+    })[]>;
+    findByAssignee(assigneeId: string): Promise<({
+        project: {
+            id: string;
+            description: string | null;
+            status: import(".prisma/client").$Enums.ProjectStatus;
+            priority: import(".prisma/client").$Enums.ProjectPriority;
+            createdAt: Date;
+            updatedAt: Date;
+            createdBy: string;
+            updatedBy: string;
+            name: string;
+            color: string;
+            icon: string | null;
+            ownerId: string;
+            startDate: Date | null;
+            endDate: Date | null;
+            deadline: Date | null;
+            budget: number | null;
+            isArchived: boolean;
+        } | null;
+        assignee: {
+            id: string;
+            status: import(".prisma/client").$Enums.UserStatus;
+            createdAt: Date;
+            updatedAt: Date;
+            email: string;
+            role: import(".prisma/client").$Enums.UserRole;
+            authProvider: import(".prisma/client").$Enums.AuthProvider;
+            emailVerified: boolean;
+            lastLoginAt: Date | null;
+        } | null;
+        tags: {
+            id: string;
+            taskId: string;
+            tagId: string;
+        }[];
+    } & {
+        id: string;
+        title: string;
+        description: string | null;
+        status: import(".prisma/client").$Enums.TaskStatus;
+        priority: import(".prisma/client").$Enums.Priority;
+        projectId: string | null;
+        assigneeId: string | null;
+        parentId: string | null;
+        dueDate: Date | null;
+        estimatedHours: number | null;
+        actualHours: number | null;
+        archivedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+        createdBy: string;
+        updatedBy: string;
+    })[]>;
+};

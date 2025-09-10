@@ -103,7 +103,7 @@ export const taskApi = {
     // Convert frontend types to API types
     const apiInput = {
       ...input,
-      status: input.status?.toUpperCase(),
+      status: input.status,
       priority: input.priority?.toUpperCase(),
       dueDate: input.dueDate?.toISOString(),
       tagIds: input.tags?.map(tag => tag.id)

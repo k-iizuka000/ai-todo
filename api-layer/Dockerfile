@@ -21,8 +21,8 @@ RUN npm install
 # ソースコードをコピー
 COPY . .
 
-# TypeScript のコンパイル
-RUN npm run build
+# TypeScript のコンパイル（開発環境ではスキップ - tsxで直接実行）
+# RUN npm run build
 
 # ポート3003を公開（統一API）
 EXPOSE 3003

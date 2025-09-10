@@ -24,7 +24,7 @@ const HTTP_STATUS = {
 const TAG_INCLUDES = {
   _count: {
     select: {
-      tasks: true
+      taskTags: true  // TagモデルはtaskTagsリレーションを持つ
     }
   }
 };
@@ -32,7 +32,7 @@ const TAG_INCLUDES = {
 // 詳細用のinclude設定
 const TAG_INCLUDES_DETAIL = {
   ...TAG_INCLUDES,
-  tasks: {
+  taskTags: {
     include: {
       task: {
         include: {
@@ -73,14 +73,33 @@ router.get('/', async (req: AuthRequest, res): Promise<void> => {
     // 認証チェック
     if (!checkAuthentication(req, res)) return;
 
+    console.log('Fetching tags with include:', TAG_INCLUDES);
+
     const tags = await prisma.tag.findMany({
-      include: TAG_INCLUDES,
+      include: {
+        _count: {
+          select: {
+            taskTags: true  // tasks ではなく taskTags を使用
+          }
+        }
+      },
       orderBy: { name: 'asc' }
     });
 
-    res.status(HTTP_STATUS.OK).json(tags);
+    // usageCountを計算して追加
+    const tagsWithUsageCount = tags.map(tag => ({
+      ...tag,
+      usageCount: tag._count?.taskTags || 0
+    }));
+
+    console.log(`GET /api/v1/tags - Returning ${tagsWithUsageCount.length} tags`);
+
+    res.status(HTTP_STATUS.OK).json({
+      data: tagsWithUsageCount,
+      success: true
+    });
   } catch (error) {
-    console.error('Get tags error:', error);
+    console.error('Get tags error details:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ error: 'Failed to fetch tags' });
   }
 });
@@ -103,7 +122,16 @@ router.get('/:id', async (req: AuthRequest, res): Promise<void> => {
       return;
     }
 
-    res.status(HTTP_STATUS.OK).json(tag);
+    // usageCountを計算して追加
+    const tagWithUsageCount = {
+      ...tag,
+      usageCount: tag._count?.taskTags || 0
+    };
+
+    res.status(HTTP_STATUS.OK).json({
+      data: tagWithUsageCount,
+      success: true
+    });
   } catch (error) {
     console.error('Get tag by id error:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ error: 'Failed to fetch tag' });
@@ -133,7 +161,16 @@ router.post('/', async (req: AuthRequest, res): Promise<void> => {
       include: TAG_INCLUDES
     });
 
-    res.status(HTTP_STATUS.CREATED).json(tag);
+    // usageCountを追加
+    const tagWithUsageCount = {
+      ...tag,
+      usageCount: tag._count?.taskTags || 0
+    };
+
+    res.status(HTTP_STATUS.CREATED).json({
+      data: tagWithUsageCount,
+      success: true
+    });
   } catch (error) {
     console.error('Create tag error:', error);
     if (error instanceof Error && 'code' in error) {
@@ -174,7 +211,16 @@ router.post('/bulk', async (req: AuthRequest, res): Promise<void> => {
       })
     );
 
-    res.status(HTTP_STATUS.OK).json(tags);
+    // usageCountを追加
+    const tagsWithUsageCount = tags.map(tag => ({
+      ...tag,
+      usageCount: tag._count?.taskTags || 0
+    }));
+
+    res.status(HTTP_STATUS.OK).json({
+      data: tagsWithUsageCount,
+      success: true
+    });
   } catch (error) {
     console.error('Bulk create tags error:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ error: 'Failed to create tags' });
@@ -201,7 +247,16 @@ router.put('/:id', async (req: AuthRequest, res): Promise<void> => {
       include: TAG_INCLUDES
     });
 
-    res.status(HTTP_STATUS.OK).json(tag);
+    // usageCountを追加
+    const tagWithUsageCount = {
+      ...tag,
+      usageCount: tag._count?.taskTags || 0
+    };
+
+    res.status(HTTP_STATUS.OK).json({
+      data: tagWithUsageCount,
+      success: true
+    });
   } catch (error) {
     console.error('Update tag error:', error);
     if (error instanceof Error && 'code' in error) {
@@ -255,14 +310,23 @@ router.get('/popular/:limit?', async (req: AuthRequest, res): Promise<void> => {
     const tags = await prisma.tag.findMany({
       include: TAG_INCLUDES,
       orderBy: {
-        tasks: {
+        taskTags: {
           _count: 'desc'
         }
       },
       take: limit
     });
 
-    res.status(HTTP_STATUS.OK).json(tags);
+    // usageCountを計算して追加
+    const tagsWithUsageCount = tags.map(tag => ({
+      ...tag,
+      usageCount: tag._count?.taskTags || 0
+    }));
+
+    res.status(HTTP_STATUS.OK).json({
+      data: tagsWithUsageCount,
+      success: true
+    });
   } catch (error) {
     console.error('Get popular tags error:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ error: 'Failed to fetch popular tags' });

@@ -6,7 +6,7 @@
 import { Tag, CreateTagInput, UpdateTagInput } from '../types/tag';
 
 // API基本設定
-const API_BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL) || 'http://localhost:3001/api/v1';
+const API_BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_BASE_URL) || 'http://localhost:3003/api/v1';
 const API_TIMEOUT = 10000; // 10秒
 
 // APIエラー型定義

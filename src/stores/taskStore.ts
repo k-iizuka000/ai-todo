@@ -661,13 +661,38 @@ export const useTaskStore = create<TaskState>()(
               isOperationActive = false;
             });
             
-            const tasks = await taskAPI.fetchTasks();
+            const rawTasks = await taskAPI.fetchTasks();
             
             // Issue #028: API完了後の中断確認
             if (!isOperationActive || abortController.signal.aborted) {
               logInfo('[Issue #028] loadTasks completed but operation was aborted');
               return;
             }
+            
+            // APIレスポンスのタグ構造に合わせて変換
+            // API構造: task.tags = [{ tag: { id, name, color, ... } }, ...]
+            const tasks = rawTasks.map(task => {
+              if (!task.tags || task.tags.length === 0) {
+                return { ...task, tags: [] };
+              }
+              
+              // タグリレーションオブジェクトからタグオブジェクトを抽出
+              const resolvedTags = task.tags.map((tagRelation: any) => {
+                // APIレスポンスでは { tag: { id, name, color, ... } } 形式
+                if (tagRelation?.tag && typeof tagRelation.tag === 'object') {
+                  return tagRelation.tag;
+                }
+                
+                // 既にタグオブジェクトの場合（フォールバック）
+                if (typeof tagRelation === 'object' && tagRelation.name) {
+                  return tagRelation;
+                }
+                
+                return null;
+              }).filter(Boolean);
+              
+              return { ...task, tags: resolvedTags };
+            });
             
             // Issue #028: 成功時の状態更新（中断確認付き）
             if (isOperationActive && !abortController.signal.aborted) {

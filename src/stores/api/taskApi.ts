@@ -172,7 +172,7 @@ export const taskAPI = {
         priority: taskInput.priority || 'MEDIUM', // デフォルト値を大文字に統一
         projectId: taskInput.projectId || null,
         assigneeId: taskInput.assigneeId || null,
-        tags: taskInput.tags || [],
+        tagIds: taskInput.tags?.map(tag => tag.id) || [], // タグオブジェクトからIDを抽出
         dueDate: taskInput.dueDate || null,
         estimatedHours: taskInput.estimatedHours || null,
       };
@@ -188,7 +188,14 @@ export const taskAPI = {
   // タスク更新
   updateTask: async (id: string, taskInput: UpdateTaskInput): Promise<Task> => {
     try {
-      const serverTask = await taskApiClient.put<any>(ENDPOINTS.TASK_BY_ID(id), taskInput);
+      // タグが含まれている場合は、IDに変換
+      const serverTaskInput = taskInput.tags ? {
+        ...taskInput,
+        tagIds: taskInput.tags.map(tag => tag.id),
+        tags: undefined // tagsフィールドを削除
+      } : taskInput;
+
+      const serverTask = await taskApiClient.put<any>(ENDPOINTS.TASK_BY_ID(id), serverTaskInput);
       return normalizeTask(serverTask);
     } catch (error) {
       console.error('Failed to update task:', error);

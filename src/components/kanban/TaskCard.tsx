@@ -12,6 +12,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { TagBadge } from '@/components/tag/TagBadge';
 import { ProjectBadge } from '@/components/project/ProjectBadge';
 import { safeGetTime, safeParseDate } from '@/utils/dateUtils';
+import { useTagStore } from '@/stores/tagStore';
 
 /**
  * TaskCardコンポーネントのProps
@@ -268,6 +269,39 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
 }) => {
   const [localCollapsed, setLocalCollapsed] = useState(isCollapsed);
   
+  // タグストアから全タグを取得
+  const { tags: allTags } = useTagStore();
+  
+  // タスクのタグIDから実際のTagオブジェクトを取得（タグ表示問題の修正）
+  const resolvedTags = useMemo(() => {
+    if (!task.tags || task.tags.length === 0) return [];
+    
+    return task.tags.map((tag) => {
+      // もしtagオブジェクトにnameプロパティがあれば、そのまま使用
+      if (tag && typeof tag === 'object' && 'name' in tag && tag.name) {
+        return tag;
+      }
+      
+      // タグIDまたは不完全なオブジェクトの場合、allTagsから検索
+      const tagId = typeof tag === 'string' ? tag : tag?.id;
+      if (!tagId) return null;
+      
+      const foundTag = allTags.find(t => t.id === tagId);
+      if (foundTag) {
+        return foundTag;
+      }
+      
+      // フォールバック：IDのみの場合は基本的な表示用オブジェクトを作成
+      return {
+        id: tagId,
+        name: 'Unknown Tag',
+        color: '#9CA3AF', // gray-400
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    }).filter(Boolean); // null を除外
+  }, [task.tags, allTags]);
+  
   // メモ化された計算値
   const taskData = useMemo(() => {
     const hasSubtasks = task.subtasks && task.subtasks.length > 0;
@@ -444,7 +478,7 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
           )}
 
           {/* タグ（コンパクト時は表示制限） */}
-          {task.tags.slice(0, compact ? 1 : MAX_VISIBLE_TAGS).map((tag) => (
+          {resolvedTags.slice(0, compact ? 1 : MAX_VISIBLE_TAGS).map((tag) => (
             <TagBadge
               key={tag.id}
               tag={tag}
@@ -454,13 +488,13 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
           ))}
           
           {/* 追加タグ数の表示（コンパクト時も対応） */}
-          {task.tags.length > (compact ? 1 : MAX_VISIBLE_TAGS) && (
+          {resolvedTags.length > (compact ? 1 : MAX_VISIBLE_TAGS) && (
             <Badge
               variant="outline"
               className="text-xs text-gray-500"
-              title={`他に${task.tags.length - (compact ? 1 : MAX_VISIBLE_TAGS)}個のタグがあります: ${task.tags.slice(compact ? 1 : MAX_VISIBLE_TAGS).map(t => t.name).join(', ')}`}
+              title={`他に${resolvedTags.length - (compact ? 1 : MAX_VISIBLE_TAGS)}個のタグがあります: ${resolvedTags.slice(compact ? 1 : MAX_VISIBLE_TAGS).map(t => t.name).join(', ')}`}
             >
-              +{task.tags.length - (compact ? 1 : MAX_VISIBLE_TAGS)}
+              +{resolvedTags.length - (compact ? 1 : MAX_VISIBLE_TAGS)}
             </Badge>
           )}
         </div>

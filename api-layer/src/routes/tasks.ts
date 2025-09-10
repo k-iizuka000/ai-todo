@@ -163,7 +163,7 @@ router.post('/', async (req: AuthRequest, res): Promise<void> => {
     if (!checkAuthentication(req, res)) return;
 
     // バリデーション
-    const { title, description, status, priority, projectId, dueDate, estimatedHours } = req.body;
+    const { title, description, status, priority, projectId, dueDate, estimatedHours, tagIds } = req.body;
     
     if (!title) {
       res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Title is required' });
@@ -203,20 +203,72 @@ router.post('/', async (req: AuthRequest, res): Promise<void> => {
       updatedAt: new Date()
     };
 
-    const task = await prisma.task.create({
-      data: taskData,
-      include: TASK_INCLUDES
+    // トランザクションでタスク作成とタグ関連付けを実行
+    const result = await prisma.$transaction(async (prisma) => {
+      // タスクを作成
+      const task = await prisma.task.create({
+        data: taskData,
+        include: TASK_INCLUDES
+      });
+
+      // tagIdsが存在する場合、TaskTag中間テーブルに関連付けを作成
+      if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
+        // タグの存在確認
+        const existingTags = await prisma.tag.findMany({
+          where: { id: { in: tagIds } }
+        });
+
+        const existingTagIds = existingTags.map(tag => tag.id);
+        const invalidTagIds = tagIds.filter(id => !existingTagIds.includes(id));
+        
+        if (invalidTagIds.length > 0) {
+          throw new Error(`Invalid tag IDs: ${invalidTagIds.join(', ')}`);
+        }
+
+        // TaskTag関連付けを作成
+        await Promise.all(
+          tagIds.map(tagId => 
+            prisma.taskTag.create({
+              data: {
+                taskId: task.id,
+                tagId: tagId
+              }
+            })
+          )
+        );
+
+        // 関連付け後のタスクデータを取得して返す
+        return await prisma.task.findUnique({
+          where: { id: task.id },
+          include: TASK_INCLUDES
+        });
+      }
+      
+      return task;
     });
 
-    res.status(HTTP_STATUS.CREATED).json(task);
+    res.status(HTTP_STATUS.CREATED).json(result);
   } catch (error) {
     console.error('Create task error:', error);
     // より具体的なエラーハンドリング
-    if (error instanceof Error && 'code' in error) {
-      const prismaError = error as { code: string; meta?: any };
-      if (prismaError.code === 'P2002') {
-        res.status(HTTP_STATUS.CONFLICT).json({ error: 'Task with this title already exists for this project' });
+    if (error instanceof Error) {
+      // タグ関連のカスタムエラー
+      if (error.message.includes('Invalid tag IDs')) {
+        res.status(HTTP_STATUS.BAD_REQUEST).json({ error: error.message });
         return;
+      }
+      
+      // Prismaエラー
+      if ('code' in error) {
+        const prismaError = error as { code: string; meta?: any };
+        if (prismaError.code === 'P2002') {
+          res.status(HTTP_STATUS.CONFLICT).json({ error: 'Task with this title already exists for this project' });
+          return;
+        }
+        if (prismaError.code === 'P2003') {
+          res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Invalid reference data provided' });
+          return;
+        }
       }
     }
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ error: 'Failed to create task' });
@@ -248,7 +300,7 @@ router.put('/:id', async (req: AuthRequest, res): Promise<void> => {
     }
 
     // プロジェクトの権限確認（変更がある場合）
-    const { projectId } = req.body;
+    const { projectId, tagIds } = req.body;
     if (projectId && projectId !== existingTask.projectId) {
       const project = await prisma.project.findFirst({
         where: {
@@ -288,25 +340,86 @@ router.put('/:id', async (req: AuthRequest, res): Promise<void> => {
       }
     });
 
-    const task = await prisma.task.update({
-      where: { id },
-      data: updateData,
-      include: TASK_INCLUDES
+    // トランザクションでタスク更新とタグ関連付けを実行
+    const result = await prisma.$transaction(async (prisma) => {
+      // タスクを更新
+      const task = await prisma.task.update({
+        where: { id },
+        data: updateData,
+        include: TASK_INCLUDES
+      });
+
+      // tagIdsが指定されている場合、タグ関連付けを更新
+      if (tagIds !== undefined) {
+        if (Array.isArray(tagIds) && tagIds.length > 0) {
+          // タグの存在確認
+          const existingTags = await prisma.tag.findMany({
+            where: { id: { in: tagIds } }
+          });
+
+          const existingTagIds = existingTags.map(tag => tag.id);
+          const invalidTagIds = tagIds.filter(id => !existingTagIds.includes(id));
+          
+          if (invalidTagIds.length > 0) {
+            throw new Error(`Invalid tag IDs: ${invalidTagIds.join(', ')}`);
+          }
+        }
+
+        // 既存のTaskTag関連付けを削除
+        await prisma.taskTag.deleteMany({
+          where: { taskId: id }
+        });
+
+        // 新しいTaskTag関連付けを作成
+        if (Array.isArray(tagIds) && tagIds.length > 0) {
+          await Promise.all(
+            tagIds.map(tagId => 
+              prisma.taskTag.create({
+                data: {
+                  taskId: id,
+                  tagId: tagId
+                }
+              })
+            )
+          );
+        }
+
+        // 関連付け後のタスクデータを取得して返す
+        return await prisma.task.findUnique({
+          where: { id },
+          include: TASK_INCLUDES
+        });
+      }
+      
+      return task;
     });
 
-    res.status(HTTP_STATUS.OK).json(task);
+    res.status(HTTP_STATUS.OK).json(result);
   } catch (error) {
     console.error('Update task error:', error);
     // より具体的なエラーハンドリング
-    if (error instanceof Error && 'code' in error) {
-      const prismaError = error as { code: string; meta?: any };
-      if (prismaError.code === 'P2025') {
-        res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Task not found' });
+    if (error instanceof Error) {
+      // タグ関連のカスタムエラー
+      if (error.message.includes('Invalid tag IDs')) {
+        res.status(HTTP_STATUS.BAD_REQUEST).json({ error: error.message });
         return;
       }
-      if (prismaError.code === 'P2002') {
-        res.status(HTTP_STATUS.CONFLICT).json({ error: 'Task update conflict' });
-        return;
+      
+      // Prismaエラー
+      if ('code' in error) {
+        const prismaError = error as { code: string; meta?: any };
+        if (prismaError.code === 'P2025') {
+          res.status(HTTP_STATUS.NOT_FOUND).json({ error: 'Task not found' });
+          return;
+        }
+        if (prismaError.code === 'P2002') {
+          res.status(HTTP_STATUS.CONFLICT).json({ error: 'Task update conflict' });
+          return;
+        }
+        if (prismaError.code === 'P2003') {
+          res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'Invalid reference data provided' });
+          return;
+        }
       }
     }
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ error: 'Failed to update task' });

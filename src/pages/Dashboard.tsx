@@ -216,8 +216,11 @@ const Dashboard: React.FC = () => {
     const pathParts = location.pathname.split('/');
     const taskId = pathParts[pathParts.length - 1];
     
-    // taskIdが有効な場合（UUID形式、または数値）、タスク詳細を表示
-    const isValidTaskId = taskId && (taskId.startsWith('task-') || /^\d+$/.test(taskId));
+    // taskIdが有効な場合（CUID/ULID形式など）、タスク詳細を表示
+    const fixedPaths = ['today', 'important', 'completed', 'demo', 'dashboard'];
+    const isValidTaskId = taskId && 
+      /^[a-zA-Z0-9]{10,}$/.test(taskId) && 
+      !fixedPaths.includes(taskId);
     
     if (isValidTaskId) {
       const task = tasksFromStore.find(t => t.id === taskId);
@@ -310,7 +313,9 @@ const Dashboard: React.FC = () => {
         } else if (pathParts.length === 2 && pathParts[0] === 'dashboard') {
           // /dashboard/{something} を判定
           const secondPart = pathParts[1];
-          if (/^\d+$/.test(secondPart) || secondPart.startsWith('task-')) {
+          const fixedPaths = ['today', 'important', 'completed', 'demo'];
+          const isTaskId = /^[a-zA-Z0-9]{10,}$/.test(secondPart) && !fixedPaths.includes(secondPart);
+          if (isTaskId) {
             // /dashboard/{taskId} -> /dashboard/{newTaskId} (置き換え)
             newPath = `/dashboard/${task.id}`;
           } else {

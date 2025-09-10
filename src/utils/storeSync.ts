@@ -6,6 +6,7 @@
 import React from 'react';
 import { useProjectStore } from '../stores/projectStore';
 import { useTaskStore } from '../stores/taskStore';
+import { useTagStore } from '../stores/tagStore';
 import { logger } from '../lib/logger';
 
 /**
@@ -16,10 +17,15 @@ export const initializeStoreSync = async () => {
   try {
     logger.info('Initializing store synchronization', { category: 'store_sync' });
     
-    // 両方のストアを初期化
+    // 全ストアを初期化
     const projectStore = useProjectStore.getState();
     const taskStore = useTaskStore.getState();
+    const tagStore = useTagStore.getState();
     
+    // TagStoreを先に初期化（TaskStoreがタグIDを解決するために必要）
+    await tagStore.initialize();
+    
+    // ProjectStoreとTaskStoreを並行初期化
     await Promise.all([
       projectStore.loadProjects(),
       taskStore.initializeStore()

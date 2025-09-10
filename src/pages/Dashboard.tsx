@@ -209,18 +209,16 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // URLパラメータからタスク詳細を表示する効果
+  // URLクエリパラメータからタスク詳細を表示する効果
   useEffect(() => {
     let isMounted = true; // メモリリーク防止用のフラグ
     
-    const pathParts = location.pathname.split('/');
-    const taskId = pathParts[pathParts.length - 1];
+    const searchParams = new URLSearchParams(location.search);
+    const taskId = searchParams.get('task');
     
     // taskIdが有効な場合（CUID/ULID形式など）、タスク詳細を表示
-    const fixedPaths = ['today', 'important', 'completed', 'demo', 'dashboard'];
     const isValidTaskId = taskId && 
-      /^[a-zA-Z0-9]{10,}$/.test(taskId) && 
-      !fixedPaths.includes(taskId);
+      /^[a-zA-Z0-9]{10,}$/.test(taskId);
     
     if (isValidTaskId) {
       const task = tasksFromStore.find(t => t.id === taskId);
@@ -236,7 +234,7 @@ const Dashboard: React.FC = () => {
         setShowTaskDetailModal(true);
       }
     } else if (showTaskDetailModal && !isValidTaskId && isMounted) {
-      // URLにタスクIDがない場合はモーダルを閉じる
+      // URLにタスクパラメータがない場合はモーダルを閉じる
       setShowTaskDetailModal(false);
       setSelectedTask(null);
     }
@@ -245,7 +243,7 @@ const Dashboard: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [location.pathname, tasksFromStore]);
+  }, [location.search, tasksFromStore]);
 
   // 設計書対応: KanbanBoardが直接状態管理するため、handleTaskMoveは不要
   // タスク移動処理はuseTaskActions内のmoveTaskで処理される
@@ -301,36 +299,13 @@ const Dashboard: React.FC = () => {
         setSelectedTask(taskDetail);
         setShowTaskDetailModal(true);
         
-        // URLを更新してタスク詳細表示を反映
-        const pathParts = location.pathname.split('/').filter(p => p); // 空文字列を除去
+        // URLクエリパラメータにタスクIDを追加
+        const searchParams = new URLSearchParams(location.search);
+        searchParams.set('task', task.id);
+        const newSearch = searchParams.toString();
+        const newUrl = `${location.pathname}?${newSearch}`;
         
-        // パスの構造を判定
-        let newPath: string;
-        
-        if (pathParts.length === 1 && pathParts[0] === 'dashboard') {
-          // /dashboard -> /dashboard/{taskId}
-          newPath = `/dashboard/${task.id}`;
-        } else if (pathParts.length === 2 && pathParts[0] === 'dashboard') {
-          // /dashboard/{something} を判定
-          const secondPart = pathParts[1];
-          const fixedPaths = ['today', 'important', 'completed', 'demo'];
-          const isTaskId = /^[a-zA-Z0-9]{10,}$/.test(secondPart) && !fixedPaths.includes(secondPart);
-          if (isTaskId) {
-            // /dashboard/{taskId} -> /dashboard/{newTaskId} (置き換え)
-            newPath = `/dashboard/${task.id}`;
-          } else {
-            // /dashboard/today, /dashboard/demo など -> そのまま追加
-            newPath = `/dashboard/${secondPart}/${task.id}`;
-          }
-        } else if (pathParts.length === 3 && pathParts[0] === 'dashboard') {
-          // /dashboard/today/{taskId} -> /dashboard/today/{newTaskId} (置き換え)
-          newPath = `/dashboard/${pathParts[1]}/${task.id}`;
-        } else {
-          // その他の場合は /dashboard/{taskId} にフォールバック
-          newPath = `/dashboard/${task.id}`;
-        }
-        
-        navigate(newPath, { replace: true });
+        navigate(newUrl, { replace: true });
       }
     } catch (error) {
       if (!abortController.signal.aborted && isOperationActive) {
@@ -339,7 +314,7 @@ const Dashboard: React.FC = () => {
     } finally {
       isOperationActive = false;
     }
-  }, [location.pathname, navigate]);
+  }, [location, navigate]);
 
   const handleTaskCreate = useCallback(async (task: CreateTaskInput) => {
     const abortController = new AbortController();
@@ -547,17 +522,16 @@ const Dashboard: React.FC = () => {
     
     console.log('🔧 Debug: setShowTaskDetailModal(false) を実行しました');
     
-    // URLからタスクIDを削除して元のページに戻る
-    const pathParts = location.pathname.split('/');
-    const lastPathPart = pathParts[pathParts.length - 1];
-    const isTaskIdInUrl = lastPathPart && (lastPathPart.startsWith('task-') || /^\d+$/.test(lastPathPart));
-    
-    if (isTaskIdInUrl) {
-      const newPath = pathParts.slice(0, -1).join('/');
-      console.log('🔧 Debug: URL navigation:', newPath);
-      navigate(newPath, { replace: true });
+    // URLクエリパラメータからタスクIDを削除
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.has('task')) {
+      searchParams.delete('task');
+      const newSearch = searchParams.toString();
+      const newUrl = `${location.pathname}${newSearch ? `?${newSearch}` : ''}`;
+      console.log('🔧 Debug: URL navigation:', newUrl);
+      navigate(newUrl, { replace: true });
     }
-  }, [location.pathname, navigate]);
+  }, [location, navigate]);
   
   // タグフィルター関連のハンドラー
   const handleTagSelect = useCallback((tagId: string) => {

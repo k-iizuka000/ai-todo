@@ -263,7 +263,7 @@ export const useTaskActions = () => {
       // デフォルトステータスの設定
       const taskData = {
         ...taskInput,
-        status: taskInput.status || defaultStatus || 'todo'
+        status: taskInput.status || defaultStatus || 'TODO'
       };
       
       // 楽観的更新（即座の表示） - 生存確認付き

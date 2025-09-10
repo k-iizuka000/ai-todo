@@ -19,9 +19,9 @@ import { Task, TaskStatus } from '../types/task';
  */
 const selectKanbanTasks = (state: { tasks: Task[]; isLoading: boolean; error: string | null }) => {
   return state.tasks.filter((task: Task) => {
-    // statusが存在しない場合はデフォルトでtodoとして扱う
-    const taskStatus = task.status || 'todo';
-    return taskStatus !== 'archived';
+    // statusが存在しない場合はデフォルトでTODOとして扱う
+    const taskStatus = task.status || 'TODO';
+    return taskStatus !== 'ARCHIVED';
   });
 };
 
@@ -49,21 +49,21 @@ interface TaskFilters {
  */
 const selectTasksByStatus = (tasks: Task[]) => {
   const grouped = {
-    todo: [] as Task[],
-    in_progress: [] as Task[],
-    done: [] as Task[]
+    TODO: [] as Task[],
+    IN_PROGRESS: [] as Task[],
+    DONE: [] as Task[]
   };
   
   tasks.forEach(task => {
-    // statusが存在しない場合はデフォルトでtodoとして扱う
-    const taskStatus = task.status || 'todo';
+    // statusが存在しない場合はデフォルトでTODOとして扱う
+    const taskStatus = task.status || 'TODO';
     
-    if (taskStatus === 'todo') {
-      grouped.todo.push(task);
-    } else if (taskStatus === 'in_progress') {
-      grouped.in_progress.push(task);
-    } else if (taskStatus === 'done') {
-      grouped.done.push(task);
+    if (taskStatus === 'TODO') {
+      grouped.TODO.push(task);
+    } else if (taskStatus === 'IN_PROGRESS') {
+      grouped.IN_PROGRESS.push(task);
+    } else if (taskStatus === 'DONE') {
+      grouped.DONE.push(task);
     }
   });
   
@@ -93,10 +93,10 @@ const applyFilters = (tasks: Task[], filters?: TaskFilters) => {
         });
         break;
       case 'important':
-        result = result.filter(task => task.priority === 'urgent' || task.priority === 'high');
+        result = result.filter(task => task.priority === 'URGENT' || task.priority === 'HIGH');
         break;
       case 'completed':
-        result = result.filter(task => task.status === 'done');
+        result = result.filter(task => task.status === 'DONE');
         break;
     }
   }

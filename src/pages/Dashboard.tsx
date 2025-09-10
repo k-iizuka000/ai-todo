@@ -407,7 +407,7 @@ const Dashboard: React.FC = () => {
     if (selectedTask) {
       const updatedChildTasks = selectedTask.childTasks?.map(subtask => 
         subtask.id === subtaskId 
-          ? { ...subtask, status: (completed ? 'done' : 'todo') as TaskStatus, updatedAt: new Date() }
+          ? { ...subtask, status: (completed ? 'DONE' : 'TODO') as TaskStatus, updatedAt: new Date() }
           : subtask
       ) || [];
       
@@ -443,8 +443,8 @@ const Dashboard: React.FC = () => {
         id: `subtask-${Date.now()}`,
         title: title.trim(),
         description: '',
-        status: 'todo' as const,
-        priority: 'medium' as const,
+        status: 'TODO' as const,
+        priority: 'MEDIUM' as const,
         projectId: selectedTask.projectId || 'no-project',
         assigneeId: selectedTask.assigneeId || 'current-user',
         tags: [],

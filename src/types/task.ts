@@ -7,18 +7,18 @@ import { Project, ProjectWithTaskCount } from './project';
 
 // タスクの状態を表すenum
 export type TaskStatus = 
-  | 'todo'       // 未着手
-  | 'in_progress' // 進行中
-  | 'done'       // 完了
-  | 'archived';  // アーカイブ済み
+  | 'TODO'       // 未着手
+  | 'IN_PROGRESS' // 進行中
+  | 'DONE'       // 完了
+  | 'ARCHIVED';  // アーカイブ済み
 
 // タスクの優先度を表すenum
 export type Priority = 
-  | 'low'        // 低
-  | 'medium'     // 中
-  | 'high'       // 高
-  | 'urgent'     // 緊急
-  | 'critical';  // 最重要
+  | 'LOW'        // 低
+  | 'MEDIUM'     // 中
+  | 'HIGH'       // 高
+  | 'URGENT'     // 緊急
+  | 'CRITICAL';  // 最重要
 
 // サブタスクの型定義
 export interface Subtask {

@@ -267,7 +267,7 @@ export const QuickTaskCreate: React.FC<QuickTaskCreateProps> = ({
       const taskData: CreateTaskInput = {
         title: title.trim(),
         projectId,
-        priority: 'medium',
+        priority: 'MEDIUM',
       }
 
       await onTaskCreate(taskData)

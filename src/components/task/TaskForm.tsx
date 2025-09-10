@@ -27,10 +27,10 @@ export interface TaskFormProps {
 
 // 優先度オプション
 const PRIORITY_OPTIONS: Array<{ value: Priority; label: string; color: string }> = [
-  { value: 'low', label: '低', color: 'bg-priority-low' },
-  { value: 'medium', label: '中', color: 'bg-priority-medium' },
-  { value: 'high', label: '高', color: 'bg-priority-high' },
-  { value: 'urgent', label: '緊急', color: 'bg-priority-urgent' },
+  { value: 'LOW', label: '低', color: 'bg-priority-low' },
+  { value: 'MEDIUM', label: '中', color: 'bg-priority-medium' },
+  { value: 'HIGH', label: '高', color: 'bg-priority-high' },
+  { value: 'URGENT', label: '緊急', color: 'bg-priority-urgent' },
 ]
 
 export const TaskForm: React.FC<TaskFormProps> = ({
@@ -49,7 +49,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
   const [formData, setFormData] = useState<TaskFormData>({
     title: '',
     description: '',
-    priority: 'medium',
+    priority: 'MEDIUM',
     dueDate: '',
     estimatedHours: '',
     tags: [],
@@ -68,7 +68,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       setFormData({
         title: initialData.title || '',
         description: initialData.description || '',
-        priority: initialData.priority || 'medium',
+        priority: initialData.priority || 'MEDIUM',
         dueDate: initialData.dueDate ? new Date(initialData.dueDate).toISOString().split('T')[0] : '',
         estimatedHours: initialData.estimatedHours?.toString() || '',
         tags: initialData.tags || [],

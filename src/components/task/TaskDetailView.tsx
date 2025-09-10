@@ -75,14 +75,16 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   // ヘルパー関数を先に定義
   const getPriorityColor = useCallback((priority: Priority) => {
     switch (priority) {
-      case 'urgent':
+      case 'URGENT':
         return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 border-red-200';
-      case 'high':
+      case 'HIGH':
         return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400 border-orange-200';
-      case 'medium':
+      case 'MEDIUM':
         return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 border-yellow-200';
-      case 'low':
+      case 'LOW':
         return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 border-green-200';
+      case 'CRITICAL':
+        return 'bg-red-200 text-red-900 dark:bg-red-800/30 dark:text-red-200 border-red-300';
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
     }
@@ -274,10 +276,11 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
 
   const getPriorityLabel = useCallback((priority: Priority) => {
     switch (priority) {
-      case 'urgent': return '緊急';
-      case 'high': return '高';
-      case 'medium': return '中';
-      case 'low': return '低';
+      case 'URGENT': return '緊急';
+      case 'HIGH': return '高';
+      case 'MEDIUM': return '中';
+      case 'LOW': return '低';
+      case 'CRITICAL': return '最重要';
       default: return '不明';
     }
   }, []);

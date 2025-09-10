@@ -18,7 +18,7 @@ import {
  */
 export const isTaskStatus = (value: unknown): value is TaskStatus => {
   return typeof value === 'string' && 
-    ['todo', 'in_progress', 'done', 'archived'].includes(value);
+    ['TODO', 'IN_PROGRESS', 'DONE', 'ARCHIVED'].includes(value);
 };
 
 /**
@@ -26,7 +26,7 @@ export const isTaskStatus = (value: unknown): value is TaskStatus => {
  */
 export const isPriority = (value: unknown): value is Priority => {
   return typeof value === 'string' && 
-    ['low', 'medium', 'high', 'urgent', 'critical'].includes(value);
+    ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'].includes(value);
 };
 
 /**

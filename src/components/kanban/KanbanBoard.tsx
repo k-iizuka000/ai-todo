@@ -81,13 +81,13 @@ interface KanbanBoardProps {
 }
 
 // ステータスの表示順序（アーカイブカラム削除）
-const COLUMN_ORDER: TaskStatus[] = ['todo', 'in_progress', 'done'];
+const COLUMN_ORDER: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'DONE'];
 
 // カラムタイトル設定（アーカイブを除外した型定義）
-const COLUMN_TITLES: Record<Exclude<TaskStatus, 'archived'>, string> = {
-  todo: 'To Do',
-  in_progress: 'In Progress', 
-  done: 'Done'
+const COLUMN_TITLES: Record<Exclude<TaskStatus, 'ARCHIVED'>, string> = {
+  TODO: 'To Do',
+  IN_PROGRESS: 'In Progress', 
+  DONE: 'Done'
 };
 
 // ドラッグ＆ドロップ設定
@@ -270,9 +270,9 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
   // ドラッグ中の即座UI更新に対応
   const allTasks = useMemo(() => {
     return [
-      ...localTasksByStatus.todo,
-      ...localTasksByStatus.in_progress,
-      ...localTasksByStatus.done
+      ...localTasksByStatus.TODO,
+      ...localTasksByStatus.IN_PROGRESS,
+      ...localTasksByStatus.DONE
     ];
   }, [localTasksByStatus]);
   
@@ -432,7 +432,7 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
     console.log('[DRAG_END] Determining target status for:', overTargetId);
     
     // カラムに直接ドロップする場合
-    if (overTargetId === 'todo' || overTargetId === 'in_progress' || overTargetId === 'done') {
+    if (overTargetId === 'TODO' || overTargetId === 'IN_PROGRESS' || overTargetId === 'DONE') {
       targetStatus = overTargetId as TaskStatus;
       console.log('[DRAG_END] Dropped on column:', targetStatus);
     }
@@ -557,10 +557,11 @@ const KanbanBoardInternal: React.FC<KanbanBoardProps> = ({
                   </div>
                 </div>
                 <div className="text-xs text-gray-400 font-mono">
-                  {draggedTask.priority === 'urgent' && '🔴'}
-                  {draggedTask.priority === 'high' && '🟠'}
-                  {draggedTask.priority === 'medium' && '🟡'}
-                  {draggedTask.priority === 'low' && '🟢'}
+                  {draggedTask.priority === 'CRITICAL' && '⚫'}
+                  {draggedTask.priority === 'URGENT' && '🔴'}
+                  {draggedTask.priority === 'HIGH' && '🟠'}
+                  {draggedTask.priority === 'MEDIUM' && '🟡'}
+                  {draggedTask.priority === 'LOW' && '🟢'}
                 </div>
               </div>
             </div>

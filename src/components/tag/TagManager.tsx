@@ -9,7 +9,6 @@ import { TagList } from './TagList';
 import { TagCreateModal } from './TagCreateModal';
 import { TagEditModal } from './TagEditModal';
 import { TagDeleteConfirmModal } from './TagDeleteConfirmModal';
-import { getTagStats } from '@/mock/tags';
 import { useTagStore } from '@/stores/tagStore';
 import type { Tag, TagFilter } from '@/types/tag';
 
@@ -54,13 +53,23 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
   // 統計情報の計算（エラーハンドリング対応）
   const stats = useMemo(() => {
     try {
-      const tagStats = getTagStats(safeTags);
+      // タグ統計を直接計算
+      const totalTags = safeTags.length;
+      const totalUsage = safeTags.reduce((sum, tag) => sum + (tag.usageCount || 0), 0);
       const unusedTags = safeTags.filter(tag => (tag.usageCount || 0) === 0).length;
       
+      // 最も使用されているタグを見つける
+      const mostUsedTag = safeTags.reduce((max, tag) => {
+        if (!max || (tag.usageCount || 0) > (max.usageCount || 0)) {
+          return tag;
+        }
+        return max;
+      }, null as Tag | null);
+      
       return {
-        totalTags: tagStats.total,
-        totalUsage: tagStats.totalUsage,
-        mostUsedTag: tagStats.mostUsedTag?.name || 'なし',
+        totalTags,
+        totalUsage,
+        mostUsedTag: mostUsedTag?.name || 'なし',
         unusedTags,
       };
     } catch (error) {

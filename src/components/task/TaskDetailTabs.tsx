@@ -51,7 +51,7 @@ export const TaskDetailTabs: React.FC<TaskDetailTabsProps> = ({
       title: newSubtaskTitle,
       description: '',
       status: 'todo' as const,
-      priority: 'medium' as const,
+      priority: 'MEDIUM' as const,
       projectId: task.projectId,
       assigneeId: task.assigneeId,
       tags: [],

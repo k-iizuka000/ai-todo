@@ -173,7 +173,7 @@ const DailyScheduleView: React.FC = () => {
       title: data.title,
       startTime: data.startTime,
       endTime: endTime,
-      priority: 'medium'
+      priority: 'MEDIUM'
     };
 
     await createScheduleItem(createRequest);

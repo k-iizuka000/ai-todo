@@ -30,7 +30,7 @@ interface TaskState {
   setTasks: (tasks: Task[]) => void;
   addTask: (taskInput: CreateTaskInput) => Promise<Task>;
   updateTask: (id: string, taskInput: UpdateTaskInput) => Promise<Task>;
-  updateTaskStatus: (id: string, status: 'todo' | 'in_progress' | 'done') => Promise<Task>;
+  updateTaskStatus: (id: string, status: 'TODO' | 'IN_PROGRESS' | 'DONE') => Promise<Task>;
   deleteTask: (id: string) => Promise<void>;
   loadTasks: () => Promise<void>;
   selectTask: (id: string | null) => void;
@@ -162,8 +162,8 @@ export const useTaskStore = create<TaskState>()(
             id: tempId,
             title: taskInput.title,
             description: taskInput.description,
-            status: 'todo',
-            priority: taskInput.priority || 'medium',
+            status: 'TODO',
+            priority: taskInput.priority || 'MEDIUM',
             projectId: taskInput.projectId || null, // undefinedをnullに正規化
             assigneeId: taskInput.assigneeId || null, // undefinedをnullに正規化
             tags: taskInput.tags || [],
@@ -415,7 +415,7 @@ export const useTaskStore = create<TaskState>()(
         },
 
         // タスクステータス更新（楽観的UI更新とロールバック）
-        updateTaskStatus: async (id: string, status: 'todo' | 'in_progress' | 'done') => {
+        updateTaskStatus: async (id: string, status: 'TODO' | 'IN_PROGRESS' | 'DONE') => {
           const abortController = new AbortController();
           let isOperationActive = true;
           
@@ -1611,7 +1611,7 @@ export const useTaskStats = () => {
     const total = tasks.length;
     const completed = tasks.filter(task => task.status === 'done').length;
     const inProgress = tasks.filter(task => task.status === 'in_progress').length;
-    const todo = tasks.filter(task => task.status === 'todo').length;
+    const todo = tasks.filter(task => task.status === 'TODO').length;
     
     return {
       total,
@@ -1663,16 +1663,16 @@ export const useAnalyticsStats = (includeArchived: boolean = false) => {
     const total = tasks.length;
     const completed = tasks.filter(task => task.status === 'done').length;
     const inProgress = tasks.filter(task => task.status === 'in_progress').length;
-    const todo = tasks.filter(task => task.status === 'todo').length;
+    const todo = tasks.filter(task => task.status === 'TODO').length;
     const archived = archivedTasks.length;
     
     // 優先度別統計
     const priorityStats = {
-      critical: tasks.filter(task => task.priority === 'critical').length,
-      urgent: tasks.filter(task => task.priority === 'urgent').length,
-      high: tasks.filter(task => task.priority === 'high').length,
-      medium: tasks.filter(task => task.priority === 'medium').length,
-      low: tasks.filter(task => task.priority === 'low').length
+      critical: tasks.filter(task => task.priority === 'CRITICAL').length,
+      urgent: tasks.filter(task => task.priority === 'URGENT').length,
+      high: tasks.filter(task => task.priority === 'HIGH').length,
+      medium: tasks.filter(task => task.priority === 'MEDIUM').length,
+      low: tasks.filter(task => task.priority === 'LOW').length
     };
     
     // 期限関連統計

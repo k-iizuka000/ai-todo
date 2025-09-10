@@ -103,23 +103,23 @@ const ENDPOINTS = {
 // サーバーレスポンスの正規化関数
 const normalizeTask = (serverTask: any): Task => {
   // ステータスの正規化（サーバーの様々な形式に対応）
-  const normalizeStatus = (status: string): 'todo' | 'in_progress' | 'done' | 'archived' => {
+  const normalizeStatus = (status: string): 'TODO' | 'IN_PROGRESS' | 'DONE' | 'ARCHIVED' => {
     // 大文字ENUM形式と小文字スネークケース形式の両方に対応
     switch (status) {
       case 'TODO': 
       case 'todo': 
-        return 'todo';
+        return 'TODO';
       case 'IN_PROGRESS': 
       case 'in_progress': 
-        return 'in_progress';
+        return 'IN_PROGRESS';
       case 'DONE': 
       case 'done': 
-        return 'done';
+        return 'DONE';
       case 'ARCHIVED': 
       case 'archived': 
-        return 'archived';
+        return 'ARCHIVED';
       default: 
-        return 'todo'; // デフォルト値
+        return 'TODO'; // デフォルト値
     }
   };
 
@@ -168,8 +168,8 @@ export const taskAPI = {
       const serverTaskInput = {
         title: taskInput.title,
         description: taskInput.description || '',
-        status: 'todo', // デフォルトでtodoに設定
-        priority: taskInput.priority || 'medium', // デフォルト値を小文字に統一
+        status: 'TODO', // デフォルトでTODOに設定
+        priority: taskInput.priority || 'MEDIUM', // デフォルト値を大文字に統一
         projectId: taskInput.projectId || null,
         assigneeId: taskInput.assigneeId || null,
         tags: taskInput.tags || [],
@@ -197,7 +197,7 @@ export const taskAPI = {
   },
 
   // タスクステータス更新（PATCH /api/v1/tasks/:id専用）
-  updateTaskStatus: async (id: string, status: 'todo' | 'in_progress' | 'done'): Promise<Task> => {
+  updateTaskStatus: async (id: string, status: 'TODO' | 'IN_PROGRESS' | 'DONE'): Promise<Task> => {
     try {
       // デバッグ: API呼び出しの詳細をログ出力
       const endpoint = ENDPOINTS.TASK_BY_ID(id);

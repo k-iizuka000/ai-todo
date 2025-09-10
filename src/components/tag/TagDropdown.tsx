@@ -156,7 +156,12 @@ export const TagDropdown: React.FC<TagDropdownProps> = ({
               </div>
               {selectedTags.length > 0 && (
                 <button
-                  onClick={handleClearAll}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleClearAll();
+                  }}
                   className="text-gray-400 hover:text-gray-600 p-0.5 rounded"
                   title="すべてクリア"
                 >
@@ -184,8 +189,23 @@ export const TagDropdown: React.FC<TagDropdownProps> = ({
           />
           <div className="absolute z-20 w-full mt-1 bg-white border border-border rounded-md shadow-lg max-h-80 overflow-hidden" data-combobox>
             
-            {/* 検索入力 */}
+            {/* ヘッダー部分（検索と閉じるボタン） */}
             <div className="p-3 border-b border-border">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-foreground">タグを選択</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsOpen(false);
+                  }}
+                  className="text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
+                  title="閉じる"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -204,7 +224,12 @@ export const TagDropdown: React.FC<TagDropdownProps> = ({
               {allowCreate && searchQuery.trim() && 
                !filteredTags.some(tag => tag.name.toLowerCase() === searchQuery.trim().toLowerCase()) && (
                 <button
-                  onClick={handleCreateNewTag}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleCreateNewTag();
+                  }}
                   className="w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors flex items-center space-x-2 border-b border-border"
                 >
                   <Plus className="h-4 w-4 text-primary" />
@@ -223,7 +248,12 @@ export const TagDropdown: React.FC<TagDropdownProps> = ({
                   return (
                     <button
                       key={tag.id}
-                      onClick={() => !isDisabled && handleTagSelect(tag)}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!isDisabled) handleTagSelect(tag);
+                      }}
                       disabled={isDisabled}
                       className={cn(
                         'w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors flex items-center space-x-2',
@@ -264,7 +294,12 @@ export const TagDropdown: React.FC<TagDropdownProps> = ({
                   <span>{selectedTags.length}/{maxTags}個選択中</span>
                   {selectedTags.length > 0 && (
                     <button
-                      onClick={handleClearAll}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleClearAll();
+                      }}
                       className="text-red-600 hover:text-red-800 font-medium"
                     >
                       すべてクリア

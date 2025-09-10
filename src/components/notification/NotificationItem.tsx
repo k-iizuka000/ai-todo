@@ -10,13 +10,13 @@ import {
 } from 'lucide-react';
 import { Notification, NotificationType } from '../../types/notification';
 // getPriorityColor関数をローカルで定義
-const getPriorityColor = (priority: 'high' | 'medium' | 'low'): string => {
+const getPriorityColor = (priority: 'HIGH' | 'MEDIUM' | 'LOW'): string => {
   switch (priority) {
-    case 'high':
+    case 'HIGH':
       return 'text-red-600';
-    case 'medium':
+    case 'MEDIUM':
       return 'text-yellow-600';
-    case 'low':
+    case 'LOW':
       return 'text-gray-600';
     default:
       return 'text-gray-600';

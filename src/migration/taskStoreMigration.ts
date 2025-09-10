@@ -179,7 +179,7 @@ export class MigrationTester {
       const testData: CreateTaskInput = {
         title: 'Test Task',
         description: 'Migration test',
-        priority: 'medium'
+        priority: 'MEDIUM'
       };
 
       // Test create
@@ -216,7 +216,7 @@ export class MigrationTester {
       id: `task-${i}`,
       title: `Task ${i}`,
       status: 'todo' as const,
-      priority: 'medium' as const,
+      priority: 'MEDIUM' as const,
       createdAt: new Date(),
       updatedAt: new Date()
     }));

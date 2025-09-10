@@ -8,7 +8,7 @@ export type NotificationType =
   | 'system';           // システム通知
 
 // 通知の優先度
-export type NotificationPriority = 'high' | 'medium' | 'low';
+export type NotificationPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
 // 各通知タイプ固有のメタデータ型
 export interface TaskDeadlineMetadata {

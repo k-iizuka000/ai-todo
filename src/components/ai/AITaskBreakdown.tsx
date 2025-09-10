@@ -23,7 +23,7 @@ interface SubtaskSuggestion {
   title: string
   description?: string
   estimatedHours?: number
-  priority: 'low' | 'medium' | 'high'
+  priority: 'LOW' | 'MEDIUM' | 'HIGH'
   order: number
 }
 
@@ -58,7 +58,7 @@ const generateMockSuggestion = (taskTitle: string): TaskBreakdownSuggestion => (
       title: "要件整理と設計",
       description: "必要な機能を明確化し、技術的な設計を行う",
       estimatedHours: 2,
-      priority: "high",
+      priority: "HIGH",
       order: 1
     },
     {
@@ -66,7 +66,7 @@ const generateMockSuggestion = (taskTitle: string): TaskBreakdownSuggestion => (
       title: "コア機能の実装",
       description: "主要な機能を実装する",
       estimatedHours: 4,
-      priority: "high",
+      priority: "HIGH",
       order: 2
     },
     {
@@ -74,7 +74,7 @@ const generateMockSuggestion = (taskTitle: string): TaskBreakdownSuggestion => (
       title: "テストコード作成",
       description: "単体テストと統合テストを作成",
       estimatedHours: 2,
-      priority: "medium",
+      priority: "MEDIUM",
       order: 3
     },
     {
@@ -82,7 +82,7 @@ const generateMockSuggestion = (taskTitle: string): TaskBreakdownSuggestion => (
       title: "ドキュメント作成",
       description: "使用方法とAPIドキュメントを作成",
       estimatedHours: 1,
-      priority: "low",
+      priority: "LOW",
       order: 4
     }
   ],

@@ -183,7 +183,7 @@ export function validateProjectId(
  */
 export function validatePriority(priority: Priority): string[] | undefined {
   const errors: string[] = [];
-  const validPriorities: Priority[] = ['low', 'medium', 'high', 'urgent', 'critical'];
+  const validPriorities: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'];
 
   if (!validPriorities.includes(priority)) {
     errors.push('無効な優先度が指定されています');

@@ -26,7 +26,7 @@ export const dragTestTasks: Task[] = [
     title: '🚀 高優先度タスク（ドラッグテスト用）',
     description: 'ドラッグ&ドロップ機能のテスト用に作成された高優先度タスクです。視覚的に分かりやすい絵文字とカラフルなタグを含みます。',
     status: 'todo',
-    priority: 'urgent',
+    priority: 'URGENT',
     projectId: 'test-project-1',
     assigneeId: 'test-user-1',
     tags: [testTags[0]!, testTags[4]!], // テスト + 緊急
@@ -43,7 +43,7 @@ export const dragTestTasks: Task[] = [
     title: '📝 中優先度タスク（サブタスクあり）',
     description: 'サブタスクを含むテストタスクです。サブタスクの完了状況も含めてドラッグ&ドロップの動作を確認できます。',
     status: 'todo',
-    priority: 'medium',
+    priority: 'MEDIUM',
     projectId: 'test-project-2',
     assigneeId: 'test-user-2',
     tags: [testTags[0]!, testTags[3]!], // テスト + 開発
@@ -75,7 +75,7 @@ export const dragTestTasks: Task[] = [
     title: '🔧 低優先度タスク（長い説明テキスト付き）',
     description: '長いテキストの表示とドラッグ動作の確認用タスクです。テキストが長い場合でもドラッグ操作が正常に動作することを確認します。このテキストは意図的に長くしており、タスクカードの表示領域を超える可能性があります。ドラッグ&ドロップ時にレイアウトが崩れないことや、長文が適切に省略表示されることを確認する目的があります。また、スクロール可能な領域でのドラッグ操作も同時に検証します。',
     status: 'todo',
-    priority: 'low',
+    priority: 'LOW',
     projectId: undefined, // プロジェクト未設定のケース
     assigneeId: undefined, // 担当者未設定のケース
     tags: [testTags[0]!], // テストタグのみ
@@ -95,7 +95,7 @@ export const dragTestTasks: Task[] = [
     title: '⚡ 進行中タスク（プロジェクト付き）',
     description: 'プロジェクトが割り当てられた進行中のタスクです。プロジェクトバッジの表示とドラッグ操作の組み合わせを確認できます。',
     status: 'in_progress',
-    priority: 'high',
+    priority: 'HIGH',
     projectId: 'test-project-1',
     assigneeId: 'test-user-3',
     tags: [testTags[0]!, testTags[3]!], // テスト + 開発
@@ -128,7 +128,7 @@ export const dragTestTasks: Task[] = [
     title: '🎨 デザインタスク（複数タグ）',
     description: '複数のタグが付いたデザインタスクです。タグ表示の多様性とドラッグ操作時の見た目を確認できます。',
     status: 'in_progress',
-    priority: 'medium',
+    priority: 'MEDIUM',
     projectId: 'test-project-2',
     assigneeId: 'test-user-1',
     tags: [testTags[1]!, testTags[2]!, testTags[0]!], // デザイン + UI + テスト
@@ -148,7 +148,7 @@ export const dragTestTasks: Task[] = [
     title: '✅ 完了タスク（実績時間付き）',
     description: '実績時間が記録された完了タスクです。見積もり時間と実績時間の比較も表示されます。',
     status: 'done',
-    priority: 'high',
+    priority: 'HIGH',
     projectId: 'test-project-1',
     assigneeId: 'test-user-2',
     tags: [testTags[0]!, testTags[3]!], // テスト + 開発
@@ -188,7 +188,7 @@ export const dragTestTasks: Task[] = [
     title: '🎯 テストケース完了',
     description: 'テストケースの作成と実行が完了したタスクです。品質保証活動の一環として実施されました。',
     status: 'done',
-    priority: 'medium',
+    priority: 'MEDIUM',
     projectId: 'test-project-2',
     assigneeId: 'test-user-3',
     tags: [testTags[0]!], // テストタグのみ
@@ -221,7 +221,7 @@ export const dragTestTasks: Task[] = [
     title: '📊 レポート作成完了',
     description: 'プロジェクトの進捗レポート作成が完了しました。ステークホルダーへの報告準備も整いました。',
     status: 'done',
-    priority: 'low',
+    priority: 'LOW',
     projectId: undefined, // プロジェクト未設定のケース
     assigneeId: 'test-user-1',
     tags: [testTags[0]!], // テストタグのみ
@@ -355,7 +355,7 @@ export const generateTestTask = (overrides?: Partial<Task>): Task => {
     title: `生成されたテストタスク ${timestamp}`,
     description: 'generateTestTask関数で動的に生成されたタスクです。',
     status: 'todo',
-    priority: 'medium',
+    priority: 'MEDIUM',
     projectId: undefined,
     assigneeId: undefined,
     tags: [testTags[0]!], // デフォルトでテストタグを付与

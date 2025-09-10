@@ -277,12 +277,12 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({
     if (!task.tags || task.tags.length === 0) return [];
     
     return task.tags.map((tag) => {
-      // もしtagオブジェクトにnameプロパティがあれば、そのまま使用
-      if (tag && typeof tag === 'object' && 'name' in tag && tag.name) {
+      // もしtagオブジェクトにnameプロパティがあり、空でない場合はそのまま使用
+      if (tag && typeof tag === 'object' && 'name' in tag && tag.name && tag.name.trim()) {
         return tag;
       }
       
-      // タグIDまたは不完全なオブジェクトの場合、allTagsから検索
+      // タグIDまたは不完全なオブジェクト（nameが空含む）の場合、allTagsから検索
       const tagId = typeof tag === 'string' ? tag : tag?.id;
       if (!tagId) return null;
       

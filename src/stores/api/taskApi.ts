@@ -130,12 +130,38 @@ const normalizeTask = (serverTask: any): Task => {
     return new Date(dateValue);
   };
 
+  // タグの正規化（IDのみの場合は基本オブジェクト形式に変換）
+  const normalizeTags = (tags: any): any[] => {
+    if (!tags || !Array.isArray(tags)) return [];
+    
+    return tags.map(tag => {
+      // 既にTag形式のオブジェクトの場合はそのまま返す
+      if (tag && typeof tag === 'object' && 'name' in tag) {
+        return tag;
+      }
+      
+      // IDのみの場合は基本的なオブジェクト形式に変換
+      if (typeof tag === 'string') {
+        return {
+          id: tag,
+          name: '', // 空文字列でTaskCard側でタグストアから解決させる
+          color: '#9CA3AF',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      }
+      
+      return tag;
+    });
+  };
+
   return {
     ...serverTask,
     status: normalizeStatus(serverTask.status),
     createdAt: normalizeDate(serverTask.createdAt)!,
     updatedAt: normalizeDate(serverTask.updatedAt)!,
-    dueDate: normalizeDate(serverTask.dueDate)
+    dueDate: normalizeDate(serverTask.dueDate),
+    tags: normalizeTags(serverTask.tags)
   };
 };
 

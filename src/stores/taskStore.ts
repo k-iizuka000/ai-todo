@@ -474,9 +474,22 @@ export const useTaskStore = create<TaskState>()(
             
             // 応答は少なくとも id, status, updatedAt を含む前提でストア更新
             if (isOperationActive && !abortController.signal.aborted) {
-              const finalTasks = get().tasks.map(task =>
-                task.id === id ? { ...task, ...updatedTask } : task
-              );
+              const finalTasks = get().tasks.map(task => {
+                if (task.id === id) {
+                  // APIレスポンスをマージ
+                  const mergedTask = { ...task, ...updatedTask };
+                  
+                  // APIレスポンスのタグに空のnameが含まれる場合、既存のタグを保持
+                  if (mergedTask.tags && task.tags && 
+                      mergedTask.tags.some(tag => !tag.name || tag.name.trim() === '')) {
+                    mergedTask.tags = task.tags; // 既存のタグを保持
+                    console.log('[taskStore] Preserved existing tags during status update to prevent #Unknown Tag');
+                  }
+                  
+                  return mergedTask;
+                }
+                return task;
+              });
               
               set(
                 { tasks: finalTasks, isLoading: false, error: null },

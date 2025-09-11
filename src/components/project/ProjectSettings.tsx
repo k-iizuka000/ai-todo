@@ -37,7 +37,7 @@ const colorOptions = [
 
 const iconOptions = [
   '📋', '🛒', '📱', '📊', '🔄', '💻', '🎨', '📚', '🏠', '🔧',
-  '📈', '💡', '🎯', '🚀', '📝', '🎮', '📊', '⚡', '🌟', '🔥',
+  '📈', '💡', '🎯', '🚀', '📝', '🎮', '📉', '⚡', '🌟', '🔥',
 ];
 
 /**
@@ -61,7 +61,11 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({
     endDate: project.endDate,
     deadline: project.deadline,
     budget: project.budget,
-    tags: [...project.tags],
+    tags: project.tags ? 
+      (Array.isArray(project.tags) ? 
+        project.tags.map(tag => typeof tag === 'string' ? tag : tag.name) 
+        : []) 
+      : [],
   });
 
   const [currentTag, setCurrentTag] = useState('');
@@ -410,17 +414,17 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({
               <div className="flex items-center space-x-2 mb-2">
                 <Users className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium">メンバー数:</span>
-                <span>{project.members.length}名</span>
+                <span>{project.members?.length || 0}名</span>
               </div>
               <div className="flex items-center space-x-2 mb-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium">作成日:</span>
-                <span>{project.createdAt.toLocaleDateString('ja-JP')}</span>
+                <span>{new Date(project.createdAt).toLocaleDateString('ja-JP')}</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium">更新日:</span>
-                <span>{project.updatedAt.toLocaleDateString('ja-JP')}</span>
+                <span>{new Date(project.updatedAt).toLocaleDateString('ja-JP')}</span>
               </div>
             </div>
             <div>

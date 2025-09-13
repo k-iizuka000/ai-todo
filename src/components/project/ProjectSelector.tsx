@@ -16,7 +16,7 @@ interface ProjectSelectorProps {
   projects: Project[];  // 新規追加：プロジェクト一覧を外部から注入
   selectedProject?: Project;
   selectedProjectId?: string | null;  // 新規追加：ID直接指定
-  onProjectSelect: (project: Project | null) => void;
+  onProjectSelect?: (project: Project | null) => void;  // optional に変更
   onProjectIdSelect?: (projectId: string | null) => void;  // 新規追加
   onCreateProject?: () => void;
   allowNone?: boolean;  // 新規追加：「プロジェクトなし」許可
@@ -192,6 +192,19 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     return colorMap[priority as keyof typeof colorMap] || 'border-l-gray-400';
   };
 
+  // タグ配列を安全に文字列配列へ正規化（string[] も {name:string}[] も許容）
+  const getProjectTagNames = (proj: any): string[] => {
+    try {
+      const raw = proj?.tags;
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .map((t: any) => (typeof t === 'string' ? t : t?.name))
+        .filter((v: any): v is string => typeof v === 'string' && v.length > 0);
+    } catch {
+      return [];
+    }
+  };
+
   const handleProjectSelect = useCallback((project: Project, event?: React.MouseEvent) => {
     // 修正: イベント伝播の明示的制御（Issue 036対応）
     if (event) {
@@ -201,7 +214,9 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     
     // 状態の同期順序を改善
     // 1. まずプロップス経由でコールバックを呼び出し
-    onProjectSelect(project);
+    if (onProjectSelect) {
+      onProjectSelect(project);
+    }
     if (onProjectIdSelect) {
       onProjectIdSelect(project.id);
     }
@@ -242,7 +257,9 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     
     // 状態の同期順序を改善
     // 1. まずプロップス経由でコールバックを呼び出し
-    onProjectSelect(null);
+    if (onProjectSelect) {
+      onProjectSelect(null);
+    }
     if (onProjectIdSelect) {
       onProjectIdSelect(null);
     }
@@ -416,7 +433,9 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                   // 修正: イベント伝播の明示的制御（Issue 036対応）
                   e.preventDefault();
                   e.stopPropagation();
-                  onProjectSelect(null);
+                  if (onProjectSelect) {
+                    onProjectSelect(null);
+                  }
                   setIsOpen(false);
                 }}
                 className="w-full px-3 py-3 text-left hover:bg-muted/50 transition-colors flex items-center justify-between border-b border-border"
@@ -485,12 +504,15 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
                         >
                           {getStatusDisplay(project.status)}
                         </span>
-                        {project.tags.length > 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            {project.tags.slice(0, 2).join(', ')}
-                            {project.tags.length > 2 && '...'}
-                          </span>
-                        )}
+                        {(() => {
+                          const tagNames = getProjectTagNames(project);
+                          return tagNames.length > 0 ? (
+                            <span className="text-xs text-muted-foreground">
+                              {tagNames.slice(0, 2).join(', ')}
+                              {tagNames.length > 2 && '...'}
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
                     </div>
                   </div>

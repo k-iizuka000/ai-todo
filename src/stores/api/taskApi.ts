@@ -119,6 +119,7 @@ const normalizeTask = (serverTask: any): Task => {
       case 'archived': 
         return 'ARCHIVED';
       default: 
+        console.warn(`Unexpected task status value: "${status}". Defaulting to TODO.`);
         return 'TODO'; // デフォルト値
     }
   };
@@ -130,34 +131,49 @@ const normalizeTask = (serverTask: any): Task => {
     return new Date(dateValue);
   };
 
-  // タグの正規化（IDのみの場合は基本オブジェクト形式に変換）
+  // タグの正規化（サーバーのリレーション形状にも対応）
   const normalizeTags = (tags: any): any[] => {
     if (!tags || !Array.isArray(tags)) return [];
-    
-    return tags.map(tag => {
-      // 既にTag形式のオブジェクトの場合はそのまま返す
-      if (tag && typeof tag === 'object' && 'name' in tag) {
-        return tag;
-      }
-      
-      // IDのみの場合は基本的なオブジェクト形式に変換
-      if (typeof tag === 'string') {
-        return {
-          id: tag,
-          name: '', // 空文字列でTaskCard側でタグストアから解決させる
-          color: '#9CA3AF',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-      }
-      
-      return tag;
-    });
+
+    return tags
+      .map(item => {
+        // 1) 既にTag形式のオブジェクト { id, name, color, ... }
+        if (item && typeof item === 'object' && 'name' in item && 'id' in item) {
+          return item;
+        }
+
+        // 2) Prismaの中間テーブル形状: { id: TaskTagId, tagId: string, tag: { id, name, ... } }
+        if (item && typeof item === 'object' && 'tag' in item && item.tag && typeof item.tag === 'object') {
+          return item.tag;
+        }
+
+        // 3) IDのみの場合は最小限のTagオブジェクトに変換（後段でTagStoreから名称解決）
+        if (typeof item === 'string') {
+          return {
+            id: item,
+            name: `Loading Tag...`, // 一時的な表示、後段のenrichTasksWithTagsで解決される
+            color: '#9CA3AF',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+        }
+
+        // 4) それ以外は無視
+        return null;
+      })
+      .filter(Boolean);
   };
+
+  const normalizedStatus = normalizeStatus(serverTask.status);
+  
+  // デバッグログ: ステータス正規化結果
+  if (normalizedStatus === 'TODO' && serverTask.status !== 'TODO' && serverTask.status !== 'todo') {
+    console.warn(`Task ${serverTask.id} status normalized from "${serverTask.status}" to "TODO"`);
+  }
 
   return {
     ...serverTask,
-    status: normalizeStatus(serverTask.status),
+    status: normalizedStatus,
     createdAt: normalizeDate(serverTask.createdAt)!,
     updatedAt: normalizeDate(serverTask.updatedAt)!,
     dueDate: normalizeDate(serverTask.dueDate),

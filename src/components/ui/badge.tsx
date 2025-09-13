@@ -69,13 +69,23 @@ const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
       >
         {children}
         {removable && onRemove && (
-          <button
+          <div
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
               onRemove()
             }}
-            className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2 hover:bg-white/20"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                e.stopPropagation()
+                onRemove()
+              }
+            }}
+            className="ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2 hover:bg-white/20 cursor-pointer"
+            aria-label="Remove badge"
           >
             <svg
               className="h-3 w-3"
@@ -92,7 +102,7 @@ const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
               />
             </svg>
             <span className="sr-only">Remove</span>
-          </button>
+          </div>
         )}
       </div>
     )

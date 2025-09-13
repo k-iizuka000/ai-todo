@@ -232,7 +232,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       >
         <ProjectSelector
           projects={projects}
-          selectedProject={formData.projectId ? getProjectById(formData.projectId) : undefined}
           selectedProjectId={formData.projectId}
           onProjectSelect={(project: Project | null) => 
             handleFieldChange('projectId', project ? project.id : undefined)

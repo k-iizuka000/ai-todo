@@ -155,18 +155,26 @@ export const TagDropdown: React.FC<TagDropdownProps> = ({
                 )}
               </div>
               {selectedTags.length > 0 && (
-                <button
-                  type="button"
+                <span
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     handleClearAll();
                   }}
-                  className="text-gray-400 hover:text-gray-600 p-0.5 rounded"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleClearAll();
+                    }
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-0.5 rounded focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   title="すべてクリア"
                 >
                   <X className="h-3 w-3" />
-                </button>
+                </span>
               )}
             </>
           ) : (

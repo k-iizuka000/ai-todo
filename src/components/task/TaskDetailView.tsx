@@ -92,13 +92,13 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
 
   const getStatusColor = useCallback((status: TaskStatus) => {
     switch (status) {
-      case 'todo':
+      case 'TODO':
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
-      case 'in_progress':
+      case 'IN_PROGRESS':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 border-blue-200';
-      case 'done':
+      case 'DONE':
         return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 border-green-200';
-      case 'archived':
+      case 'ARCHIVED':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 border-purple-200';
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border-gray-200';
@@ -266,10 +266,10 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
   // ステータス・優先度ラベル
   const getStatusLabel = useCallback((status: TaskStatus) => {
     switch (status) {
-      case 'todo': return '未着手';
-      case 'in_progress': return '進行中';
-      case 'done': return '完了';
-      case 'archived': return 'アーカイブ';
+      case 'TODO': return '未着手';
+      case 'IN_PROGRESS': return '進行中';
+      case 'DONE': return '完了';
+      case 'ARCHIVED': return 'アーカイブ';
       default: return '不明';
     }
   }, []);
@@ -628,9 +628,7 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
               {isEditingProject ? (
                 <div>
                   <ProjectSelector
-                    selectedProject={validatedTask.projectId ? getProjectById(validatedTask.projectId) : undefined}
                     selectedProjectId={validatedTask.projectId}
-                    onProjectSelect={handleProjectChange}
                     onProjectIdSelect={(projectId: string | null) => {
                       const project = projectId ? getProjectById(projectId) : null;
                       handleProjectChange(project);
@@ -704,9 +702,18 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                 <TagSelector
                   selectedTags={editingTags}
                   onTagsChange={(newTags) => {
-                    setEditingTags(newTags)
-                    // 即座に保存するのではなく、内部状態のみ更新
-                    onTaskUpdate?.(validatedTask.id, { tags: newTags });
+                    // タグデータの検証とサニタイゼーション
+                    const validTags = newTags.filter(tag => tag && tag.id && tag.name && tag.name.trim());
+                    
+                    console.log('[TaskDetailView] Tag validation:', {
+                      original: newTags.length,
+                      valid: validTags.length,
+                      invalidTags: newTags.filter(tag => !tag || !tag.id || !tag.name || !tag.name.trim())
+                    });
+                    
+                    setEditingTags(validTags);
+                    // 有効なタグのみで更新
+                    onTaskUpdate?.(validatedTask.id, { tags: validTags });
                   }}
                   availableTags={availableTags}
                   editing={true}

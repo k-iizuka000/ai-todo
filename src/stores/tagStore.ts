@@ -323,8 +323,7 @@ export const useTagStore = create<TagState>()(
         // TaskStoreに変更を通知
         notifyTaskStore: (operation: 'tag-updated' | 'tag-deleted', tagId: string, newTag?: Tag) => {
           try {
-            // 循環参照回避のため動的import
-            const { useTaskStore } = require('./taskStore');
+            // 循環参照回避のため動的import（ESモジュール対応）
             const taskStore = useTaskStore.getState();
             
             // TaskStoreにTagStoreの変更を通知
@@ -369,7 +368,6 @@ export const useTagStore = create<TagState>()(
         updateTagUsageStatistics: async () => {
           try {
             const { tags } = get();
-            const { useTaskStore } = require('./taskStore');
             const taskStore = useTaskStore.getState();
             
             // 各タグの使用回数を計算

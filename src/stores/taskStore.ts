@@ -14,6 +14,63 @@ import { taskAPI } from './api/taskApi';
 import { useProjectStore } from './projectStore';
 import { useTagStore } from './tagStore';
 
+// TagStore からタグ情報を取得してタスクのタグ名を補完する関数
+const enrichTasksWithTags = async (tasks: Task[]): Promise<Task[]> => {
+  try {
+    // TagStore から全タグを取得
+    const tagStore = useTagStore.getState();
+    const allTags = tagStore.tags;
+    
+    if (allTags.length === 0) {
+      // TagStore にタグが読み込まれていない場合は再読み込みを試行
+      await tagStore.loadTags();
+    }
+    
+    const updatedAllTags = useTagStore.getState().tags;
+    
+    // 各タスクのタグ情報を補完
+    return tasks.map(task => {
+      if (!task.tags || task.tags.length === 0) {
+        return task;
+      }
+      
+      const enrichedTags = task.tags.map(taskTag => {
+        // 既に名前がある場合はそのまま返す（Prismaのリレーション経由の場合）
+        if (taskTag.name && taskTag.name !== 'Loading Tag...') {
+          return taskTag;
+        }
+        
+        // TagStore から対応するタグを探す
+        const fullTag = updatedAllTags.find(tag => tag.id === taskTag.id);
+        if (fullTag) {
+          return {
+            ...taskTag,
+            name: fullTag.name,
+            color: fullTag.color,
+            createdAt: fullTag.createdAt,
+            updatedAt: fullTag.updatedAt
+          };
+        }
+        
+        // TagStore にも見つからない場合はフォールバック表示
+        return {
+          ...taskTag,
+          name: `Unknown Tag (${taskTag.id.slice(-8)})`,
+          color: '#9CA3AF'
+        };
+      });
+      
+      return {
+        ...task,
+        tags: enrichedTags
+      };
+    });
+  } catch (error) {
+    console.error('Failed to enrich tasks with tags:', error);
+    return tasks; // エラーの場合は元のタスクをそのまま返す
+  }
+};
+
 // タスクストアの状態型定義 - API統合版（Issue #038対応）
 interface TaskState {
   // 状態
@@ -688,38 +745,16 @@ export const useTaskStore = create<TaskState>()(
             });
             
             const rawTasks = await taskAPI.fetchTasks();
-            
+
             // Issue #028: API完了後の中断確認
             if (!isOperationActive || abortController.signal.aborted) {
               logInfo('[Issue #028] loadTasks completed but operation was aborted');
               return;
             }
-            
-            // APIレスポンスのタグ構造に合わせて変換
-            // API構造: task.tags = [{ tag: { id, name, color, ... } }, ...]
-            const tasks = rawTasks.map(task => {
-              if (!task.tags || task.tags.length === 0) {
-                return { ...task, tags: [] };
-              }
-              
-              // タグリレーションオブジェクトからタグオブジェクトを抽出
-              const resolvedTags = task.tags.map((tagRelation: any) => {
-                // APIレスポンスでは { tag: { id, name, color, ... } } 形式
-                if (tagRelation?.tag && typeof tagRelation.tag === 'object') {
-                  return tagRelation.tag;
-                }
-                
-                // 既にタグオブジェクトの場合（フォールバック）
-                if (typeof tagRelation === 'object' && tagRelation.name) {
-                  return tagRelation;
-                }
-                
-                return null;
-              }).filter(Boolean);
-              
-              return { ...task, tags: resolvedTags };
-            });
-            
+
+            // タグ正規化は taskAPI 側で実施済み。TagStoreからタグ名を補完する。
+            const tasks = await enrichTasksWithTags(rawTasks);
+
             // Issue #028: 成功時の状態更新（中断確認付き）
             if (isOperationActive && !abortController.signal.aborted) {
               set({

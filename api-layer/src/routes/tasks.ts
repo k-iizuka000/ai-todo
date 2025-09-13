@@ -214,12 +214,21 @@ router.post('/', async (req: AuthRequest, res): Promise<void> => {
       // tagIdsが存在する場合、TaskTag中間テーブルに関連付けを作成
       if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
         // タグの存在確認
+        console.log('[Task Update] Validating tag IDs:', { tagIds, requestBody: req.body });
+        
         const existingTags = await prisma.tag.findMany({
           where: { id: { in: tagIds } }
         });
 
         const existingTagIds = existingTags.map(tag => tag.id);
         const invalidTagIds = tagIds.filter(id => !existingTagIds.includes(id));
+        
+        console.log('[Task Update] Tag validation result:', {
+          tagIds,
+          existingTagIds,
+          invalidTagIds,
+          existingTags: existingTags.map(t => ({ id: t.id, name: t.name }))
+        });
         
         if (invalidTagIds.length > 0) {
           throw new Error(`Invalid tag IDs: ${invalidTagIds.join(', ')}`);
@@ -353,12 +362,21 @@ router.put('/:id', async (req: AuthRequest, res): Promise<void> => {
       if (tagIds !== undefined) {
         if (Array.isArray(tagIds) && tagIds.length > 0) {
           // タグの存在確認
+          console.log('[Task Update] Validating tag IDs for update:', { tagIds, taskId: id });
+          
           const existingTags = await prisma.tag.findMany({
             where: { id: { in: tagIds } }
           });
 
           const existingTagIds = existingTags.map(tag => tag.id);
           const invalidTagIds = tagIds.filter(id => !existingTagIds.includes(id));
+          
+          console.log('[Task Update] Tag validation result for update:', {
+            tagIds,
+            existingTagIds,
+            invalidTagIds,
+            existingTags: existingTags.map(t => ({ id: t.id, name: t.name }))
+          });
           
           if (invalidTagIds.length > 0) {
             throw new Error(`Invalid tag IDs: ${invalidTagIds.join(', ')}`);

@@ -112,7 +112,7 @@ export const TagBadge: React.FC<TagBadgeProps> = React.memo(({
       tabIndex={clickable && onClick ? 0 : undefined}
       aria-label={`タグ ${tag.name}${tag.usageCount ? `, ${tag.usageCount}回使用` : ''}`}
     >
-      #{tag.name}
+      #{tag.name || 'Unknown Tag'}
       {showRemove && onRemove && (
         <button
           onClick={(e) => {

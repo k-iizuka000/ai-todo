@@ -198,6 +198,7 @@ export const TagEditModal = React.memo<TagEditModalProps>(({
             variant="outline"
             onClick={handleCancel}
             disabled={isLoading}
+            data-testid="tag-edit-cancel"
           >
             キャンセル
           </Button>
@@ -206,13 +207,14 @@ export const TagEditModal = React.memo<TagEditModalProps>(({
             onClick={handleSubmit}
             disabled={!isFormValid || isLoading}
             loading={isLoading}
+            data-testid="tag-edit-submit"
           >
             更新
           </Button>
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" data-testid="tag-edit-form">
         {/* 使用中タグの警告 */}
         {isTagInUse && (
           <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
@@ -245,6 +247,7 @@ export const TagEditModal = React.memo<TagEditModalProps>(({
             maxLength={30}
             disabled={isLoading}
             variant={validationErrors.some(err => err.includes('タグ名')) ? 'error' : 'default'}
+            data-testid="tag-edit-name-input"
           />
           <p className="text-xs text-muted-foreground mt-1">
             {(formData.name || '').length}/30 文字

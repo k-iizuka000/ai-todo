@@ -179,6 +179,7 @@ export const TagCreateModal = React.memo<TagCreateModalProps>(({
             variant="outline"
             onClick={handleCancel}
             disabled={isLoading}
+            data-testid="tag-create-cancel"
           >
             キャンセル
           </Button>
@@ -187,13 +188,14 @@ export const TagCreateModal = React.memo<TagCreateModalProps>(({
             onClick={handleSubmit}
             disabled={!isFormValid || isLoading}
             loading={isLoading}
+            data-testid="tag-create-submit"
           >
             作成
           </Button>
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" data-testid="tag-create-form">
         {/* タグ名入力 */}
         <FormField
           label="タグ名"
@@ -208,6 +210,7 @@ export const TagCreateModal = React.memo<TagCreateModalProps>(({
             maxLength={30}
             disabled={isLoading}
             variant={validationErrors.some(err => err.includes('タグ名')) ? 'error' : 'default'}
+            data-testid="tag-create-name-input"
           />
           <p className="text-xs text-muted-foreground mt-1">
             {formData.name.length}/30 文字

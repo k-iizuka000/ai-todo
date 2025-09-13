@@ -176,7 +176,6 @@ export const ProjectEditModal: React.FC<ProjectEditModalProps> = ({
   const handleClose = () => {
     if (isSubmitting) return; // 送信中は閉じられない
     
-    setCurrentTag('');
     setErrors({});
     setServerError(null);
     setNetworkError(false);

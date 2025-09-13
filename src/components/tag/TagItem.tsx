@@ -87,6 +87,7 @@ const TagItem = React.memo<TagItemProps>(({
       onClick={handleClick}
       role="button"
       tabIndex={0}
+      data-testid={`tag-item-${tag.id}`}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -127,6 +128,7 @@ const TagItem = React.memo<TagItemProps>(({
               onClick={handleEdit}
               className="h-8 w-8 p-0 hover:bg-muted"
               aria-label={`${tag.name}を編集`}
+              data-testid={`tag-edit-button-${tag.id}`}
             >
               <svg
                 className="h-4 w-4"
@@ -152,6 +154,7 @@ const TagItem = React.memo<TagItemProps>(({
               onClick={handleDeleteClick}
               className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
               aria-label={`${tag.name}を削除`}
+              data-testid={`tag-delete-button-${tag.id}`}
             >
               <svg
                 className="h-4 w-4"

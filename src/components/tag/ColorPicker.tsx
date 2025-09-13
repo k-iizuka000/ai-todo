@@ -55,6 +55,7 @@ const PresetColorButton = React.memo<{
       disabled={disabled}
       aria-label={`カラー ${color} を選択`}
       title={color}
+      data-testid={`color-preset-${color.replace('#','').toLowerCase()}`}
     >
       {isSelected && (
         <svg
@@ -138,7 +139,7 @@ export const ColorPicker = React.memo<ColorPickerProps>(({
   }, [hexInput]);
   
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("space-y-4", className)} data-testid="color-picker">
       <FormField
         label={label}
         required={required}
@@ -193,6 +194,7 @@ export const ColorPicker = React.memo<ColorPickerProps>(({
                   variant={hexValidation.isValid ? "default" : "error"}
                   className="font-mono uppercase"
                   maxLength={7}
+                  data-testid="color-hex-input"
                 />
                 {!hexValidation.isValid && hexValidation.errors.length > 0 && (
                   <p className="text-xs text-destructive mt-1">

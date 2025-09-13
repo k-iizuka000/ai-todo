@@ -69,6 +69,7 @@ export const TagDeleteConfirmModal: React.FC<TagDeleteConfirmModalProps> = ({
             variant="outline" 
             onClick={handleClose}
             disabled={isDeleting}
+            data-testid="tag-delete-cancel"
           >
             キャンセル
           </Button>
@@ -77,6 +78,7 @@ export const TagDeleteConfirmModal: React.FC<TagDeleteConfirmModalProps> = ({
             onClick={handleConfirm} 
             disabled={isDeleting || !canDelete}
             className="flex items-center space-x-2"
+            data-testid="tag-delete-confirm"
           >
             {isDeleting ? (
               <Loader2 className="h-4 w-4 animate-spin" />

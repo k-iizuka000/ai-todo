@@ -189,7 +189,7 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
               一括操作 ({selectedTags.length})
             </Button>
           )}
-          <Button onClick={handleCreateTag}>
+          <Button onClick={handleCreateTag} data-testid="tag-create-open">
             <Plus className="h-4 w-4 mr-2" />
             新しいタグ
           </Button>
@@ -250,6 +250,7 @@ export const TagManager = React.memo<TagManagerProps>(({ className }) => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
+              data-testid="tag-manager-search-input"
             />
           </div>
         </div>

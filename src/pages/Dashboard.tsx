@@ -613,11 +613,12 @@ const Dashboard: React.FC = () => {
     navigate(newUrl, { replace: true });
   }, [location.pathname, location.search, navigate]);
   
-  // プロジェクトクリック時のハンドラー（グループ4: Phase 3指摘事項対応）
-  const handleProjectClick = useCallback((projectId: string) => {
-    // プロジェクトページに遷移するか、プロジェクト詳細を表示する
-    // 現在の実装では、プロジェクト管理ページに遷移
-    navigate(`/projects/${projectId}`);
+  // プロジェクトクリック時のハンドラー
+  // ダッシュボードやアーカイブ一覧などではプロジェクト管理ページへ遷移
+  // タスク詳細モーダル内のプロジェクトバッジはTaskDetailView側で選択UIを開くため、ここでは共通の遷移のみ保持
+  const handleProjectClick = useCallback((_projectId: string) => {
+    // 既存ルートに合わせて一覧ページへ遷移（/projects/:id は未定義のため回避）
+    navigate('/projects');
   }, [navigate]);
   
   // 選択中タグの表示用データ

@@ -531,6 +531,12 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
             projectId={currentProjectId}
             size="sm"
             onClick={currentProjectId ? () => {
+              // モーダル（編集可能）ではバッジクリックでプロジェクト選択UIを開く
+              if (editable) {
+                setIsEditingProject(true);
+                return;
+              }
+              // 読み取り専用の文脈のみ外部ハンドラを呼ぶ
               if (currentProjectId) {
                 onProjectClick?.(currentProjectId);
               }
@@ -677,6 +683,12 @@ const TaskDetailView: React.FC<TaskDetailViewProps> = React.memo(({
                         projectId={currentProjectId}
                         size="sm"
                         onClick={currentProjectId ? () => {
+                          // モーダル（編集可能）ではバッジクリックでプロジェクト選択UIを開く
+                          if (editable) {
+                            setIsEditingProject(true);
+                            return;
+                          }
+                          // 読み取り専用の文脈のみ外部ハンドラを呼ぶ
                           if (currentProjectId) {
                             onProjectClick?.(currentProjectId);
                           }
